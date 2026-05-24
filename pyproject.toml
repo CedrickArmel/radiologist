@@ -1,0 +1,33 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.28,<0.10.0"]
+
+[dependency-groups]
+lint = [
+    "black>=25.12.0",
+    "flake8>=7.3.0",
+    "isort>=7.0.0",
+    "pre-commit>=4.5.1",
+]
+typing = ["mypy>=1.19.1"]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.0.0",
+]
+[project]
+name = "radiologist"
+version = "0.1.0"
+description = "Fully reproducible machine-learning pipeline for Chest X-ray classification"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "radiologist-utils",
+]
+
+[tool.uv.workspace]
+members = ["radiologist-utils"]
+
+[tool.uv.sources]
+radiologist-utils = { workspace = true }
