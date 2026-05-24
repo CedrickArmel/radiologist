@@ -1,0 +1,23 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.28,<0.10.0"]
+
+[project]
+name = "radiologist-utils"
+version = "0.1.0"
+description = "Utility helpers for the radiologist pipeline"
+license = { file = "../LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "fsspec>=2025.3.0",
+    "gcsfs>=2025.3.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+]
+
+[tool.uv.build-backend]
+namespace = true
+source-include = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
