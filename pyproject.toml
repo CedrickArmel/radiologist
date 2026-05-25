@@ -24,6 +24,10 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = ["radiologist-utils"]
 
+[tool.isort]
+profile = "black"
+known_first_party = ["radiologist"]
+
 [tool.mypy]
 ignore_missing_imports = true
 
