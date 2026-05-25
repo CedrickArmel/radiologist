@@ -1,0 +1,45 @@
+repos:
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.6
+    hooks:
+      - id: insert-license
+        types:
+          - python
+        args:
+          - --license-filepath
+          - LICENSE
+  - repo: https://github.com/pycqa/isort
+    rev: "9.0.0a3"
+    hooks:
+      - id: isort
+        name: isort (python)
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: "26.3.1"
+    hooks:
+      - id: black
+        args: [--target-version, py310]
+      - id: black-jupyter
+  - repo: https://github.com/pycqa/flake8
+    rev: "7.3.0"
+    hooks:
+      - id: flake8
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        exclude: "pdf$|ipynb$|parquet$|lock$"
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-executables-have-shebangs
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: "v1.20.2"
+    hooks:
+      - id: mypy
+        args: [--config-file, pyproject.toml]
