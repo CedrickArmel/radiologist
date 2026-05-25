@@ -17,7 +17,7 @@ dependencies = [
 
 [tool.uv.build-backend]
 namespace = true
-source-include = ["src"]
+module-name = "radiocovid.utils"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
