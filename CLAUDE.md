@@ -80,6 +80,8 @@ Five members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`, `radio
 
 Each package uses `namespace = true` (no `__init__.py` at the `radiologist/` level). Add new members to `[tool.uv.workspace] members` and `[tool.uv.sources]` in the root `pyproject.toml`.
 
+Each package sets `module-name = "radiocovid.*"` in its `pyproject.toml` (intentional — do not change). Sources live under `src/radiologist/`; tests import via a `sys.path.insert(0, src/)` shim in each package's `tests/conftest.py`. Mirror this pattern when adding new packages.
+
 ### Requirements
 
 - Python 3.10 (pinned via `.python-version`). All generated code must be 3.10-compatible — use `X | Y` unions only where `from __future__ import annotations` is present; otherwise use `Optional[X]`, `Union[X, Y]`, `List[X]`, etc. from `typing`.
@@ -115,8 +117,14 @@ Common fixes needed before a clean commit:
 
 - GPG signing is enabled; ensure `.venv` is active so pre-commit tools are on `PATH`.
 - Commitizen convention enforced (`cz check`). Valid prefix types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `revert`, `style`.
+- Stacked PRs: branches that depend on other feature branches (e.g., `feat/radiologist-etl` → `feat/utils-logger`) must target the dependency branch, not `main`. Adjust `gh pr create --base` accordingly.
+- After a `pre-commit.ci` remote auto-fix commit, run `git fetch origin <branch> && git rebase origin/<branch>` before the next push to avoid diverged-branch rejection.
 
 ## Gotchas
 
 - **[PyTorch]** The sandbox security hook false-positives on the `.eval()` method name. Use `model.train(mode=False)` instead of `model.eval()` in any PyTorch code.
 - **[LICENSE]** No need to add the license header in your code yourself. `pre-commit` we do that.
+- **[GitHub API]** `gh` CLI hits TLS errors in the sandbox. Read issues via `curl -sS https://api.github.com/repos/CedrickArmel/radiologist/issues/<n>`.
+- **[macOS multiprocessing]** `ProcessPoolExecutor` uses `spawn` on macOS — submitted callables must be picklable. Use `functools.partial` of a **top-level** function; closures are not picklable.
+- **[WebDataset]** `wds.ShardWriter` requires a `%d` format token in the path pattern. Use `wds.TarWriter` when writing shards with explicit file paths.
+- **[Prefect]** `prefect` is an optional `[pipeline]` extra. Always wrap `from prefect import ...` in `try/except ImportError` with stub no-ops so modules import cleanly without the extra installed.
