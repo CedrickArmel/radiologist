@@ -22,7 +22,7 @@ description = "Fully reproducible machine-learning pipeline for Chest X-ray clas
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-dependencies = ["radiologist-utils"]
+dependencies = ["radiologist-utils", "radiologist-etl"]
 
 [tool.isort]
 profile = "black"
@@ -32,14 +32,15 @@ known_first_party = ["radiologist"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["radiologist-utils/tests"]
+testpaths = ["radiologist-utils/tests", "radiologist-etl/tests"]
 addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 
 [tool.uv.build-backend]
 namespace = true
 
 [tool.uv.workspace]
-members = ["radiologist-utils"]
+members = ["radiologist-utils", "radiologist-etl"]
 
 [tool.uv.sources]
 radiologist-utils = { workspace = true }
+radiologist-etl = { workspace = true }
