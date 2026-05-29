@@ -87,8 +87,8 @@ Each package uses `namespace = true` (no `__init__.py` at the `radiologist/` lev
 ### Environment setup
 
 ```bash
-uv sync --extra all --all-groups   # creates .venv and installs all workspace members
-source .venv/bin/activate           # activate before running any project commands
+pyenv activate radiologist
+uv sync --active [--extra all] --all-groups  # verify extra all or install all optional individually
 pre-commit install                  # install git hooks (required once per clone)
 ```
 
@@ -119,3 +119,4 @@ Common fixes needed before a clean commit:
 ## Gotchas
 
 - **[PyTorch]** The sandbox security hook false-positives on the `.eval()` method name. Use `model.train(mode=False)` instead of `model.eval()` in any PyTorch code.
+- **[LICENSE]** No need to add the license header in your code yourself. `pre-commit` we do that.
