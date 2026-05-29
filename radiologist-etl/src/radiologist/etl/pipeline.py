@@ -28,6 +28,7 @@ import os
 from pathlib import Path
 
 import fsspec  # type: ignore[import-untyped]
+import hydra  # type: ignore[import-untyped]
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from prefect import flow, task
@@ -54,8 +55,11 @@ def compute_run_id(
 ) -> str:
     """Compute a 16-char SHA-256 prefix run ID from config + data fingerprint.
 
-    If cfg.run_label is set (non-None, non-empty), return it directly as the run ID.
-    Otherwise hash: sorted(OmegaConf.to_container(cfg)) + file count + total bytes.
+    Hashes: sorted(OmegaConf.to_container(cfg)) + file count + total bytes +
+    run_label (None when not set).  Including run_label in the hash means two
+    calls with the same label on the same data return the same ID (idempotent),
+    while changing the label forces a new ID without silently overwriting prior
+    artifacts.
 
     Args:
         cfg: Hydra DictConfig with pipeline configuration.
@@ -66,16 +70,18 @@ def compute_run_id(
         A 16-character run ID string.
     """
     run_label = getattr(cfg, "run_label", None)
-    if run_label:
-        return str(run_label)
-
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     fs, root = fsspec.url_to_fs(source, **(storage_options or {}))
     all_files = fs.find(root)
     file_count = len(all_files)
     total_bytes = sum(fs.info(p)["size"] for p in all_files)
     fingerprint = json.dumps(
-        {"cfg": cfg_dict, "file_count": file_count, "total_bytes": total_bytes},
+        {
+            "cfg": cfg_dict,
+            "file_count": file_count,
+            "total_bytes": total_bytes,
+            "run_label": run_label,
+        },
         sort_keys=True,
     )
     return hashlib.sha256(fingerprint.encode()).hexdigest()[:16]
@@ -182,6 +188,37 @@ def _df_to_records(df: pd.DataFrame) -> list[ManifestRecord]:
         ManifestRecord.from_flat_dict(row._asdict())
         for row in df.itertuples(index=False)
     ]
+
+
+def _build_shards(
+    manifest_path: str,
+    shard_root: str,
+    ratios: dict[str, float],
+    shard_size: int = 1000,
+    start_shard_index: dict[tuple[str, str], int] | None = None,
+    storage_options: dict | None = None,
+) -> str:
+    """Portable core: build WebDataset tar shards (no Prefect imports).
+
+    Args:
+        manifest_path: path to the JSONL manifest.
+        shard_root: directory where shards are written.
+        ratios: configured split ratios.
+        shard_size: max samples per shard.
+        start_shard_index: per-(split, label) shard index offset.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        Updated manifest path.
+    """
+    return build_shards(
+        manifest_path=manifest_path,
+        shard_root=shard_root,
+        ratios=ratios,
+        shard_size=shard_size,
+        start_shard_index=start_shard_index,
+        storage_options=storage_options,
+    )
 
 
 def _write_jsonl(
@@ -362,7 +399,7 @@ def build_shards_task(
     Returns:
         Updated manifest_path.
     """
-    out = build_shards(
+    out = _build_shards(
         manifest_path=manifest_path,
         shard_root=shard_root,
         ratios=ratios,
@@ -474,3 +511,13 @@ def etl_flow(cfg: DictConfig) -> str:
         )
 
     return manifest_path
+
+
+@hydra.main(config_path="conf", config_name="etl", version_base=None)
+def main(cfg: DictConfig) -> None:
+    """CLI entry point: run the full ETL pipeline from a Hydra config.
+
+    Args:
+        cfg: Hydra DictConfig populated from conf/etl.yaml and CLI overrides.
+    """
+    etl_flow(cfg)

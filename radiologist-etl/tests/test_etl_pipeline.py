@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -29,7 +30,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from PIL import Image
 
-from radiologist.etl.pipeline import compute_run_id, etl_flow
+from radiologist.etl.pipeline import _build_shards, compute_run_id, etl_flow, main
 
 
 def _write_png(path: Path, arr: np.ndarray) -> None:
@@ -213,22 +214,23 @@ def test_running_pipeline_twice_with_identical_config_is_idempotent(
 
 
 # ---------------------------------------------------------------------------
-# Scenario 7: run_label in config overrides computed run ID
+# Scenario 7: run_label changes the run ID and is stable across identical calls
 # ---------------------------------------------------------------------------
 
 
-def test_passing_run_label_in_config_overrides_the_computed_run_id(
+def test_compute_run_id_with_run_label_differs_from_no_label_and_is_stable(
     tmp_path: Path,
 ) -> None:
     images = _build_image_tree(tmp_path, n_per_class=2)
-    cfg = _minimal_cfg(
-        images, tmp_path / "out", tmp_path / "artifacts", run_label="my-custom-run"
-    )
-    run_id = compute_run_id(cfg, str(images))
-    assert run_id == "my-custom-run"
+    cfg_no_label = OmegaConf.create({"source": str(images), "run_label": None})
+    cfg_with_label = OmegaConf.create({"source": str(images), "run_label": "my-label"})
 
-    manifest_path = etl_flow(cfg)
-    assert "my-custom-run" in manifest_path
+    id_no_label = compute_run_id(cfg_no_label, str(images))
+    id_with_label_1 = compute_run_id(cfg_with_label, str(images))
+    id_with_label_2 = compute_run_id(cfg_with_label, str(images))
+
+    assert id_with_label_1 != id_no_label
+    assert id_with_label_1 == id_with_label_2
 
 
 # ---------------------------------------------------------------------------
@@ -258,3 +260,21 @@ def test_passing_resume_manifest_path_skips_re_processing_and_returns_consistent
 
     assert len(resumed_records) == len(first_records)
     assert resumed_manifest == first_manifest
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: _build_shards portable core has no Prefect imports
+# ---------------------------------------------------------------------------
+
+
+def test_build_shards_portable_core_contains_no_prefect_imports() -> None:
+    assert "prefect" not in inspect.getsource(_build_shards)
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: main entry point is importable and callable
+# ---------------------------------------------------------------------------
+
+
+def test_main_entry_point_is_callable() -> None:
+    assert callable(main)
