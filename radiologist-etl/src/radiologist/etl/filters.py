@@ -85,7 +85,7 @@ def filter_lung_out_of_frame(df: pd.DataFrame) -> pd.DataFrame:
     if "lung_out_of_frame" not in df.columns:
         return df
 
-    mask = df["lung_out_of_frame"] == True  # noqa: E712
+    mask = df["lung_out_of_frame"].eq(True)
     _flag_excluded(df, mask, "lung_out_of_frame")
 
     return df

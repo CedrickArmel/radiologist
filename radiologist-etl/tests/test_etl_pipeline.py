@@ -278,3 +278,39 @@ def test_build_shards_portable_core_contains_no_prefect_imports() -> None:
 
 def test_main_entry_point_is_callable() -> None:
     assert callable(main)
+
+
+# ---------------------------------------------------------------------------
+# FIX C1: pipeline module exposes compute_run_id even when Prefect is absent
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_module_exposes_compute_run_id_without_prefect_at_call_time() -> None:
+    from radiologist.etl.pipeline import (  # noqa: F401 — import is the test
+        compute_run_id,
+    )
+
+    assert callable(compute_run_id)
+
+
+# ---------------------------------------------------------------------------
+# FIX C2: build_shards_task accepts storage_options kwarg
+# ---------------------------------------------------------------------------
+
+_RATIOS = {"train": 0.70, "val": 0.15, "test": 0.15}
+
+
+def test_build_shards_task_accepts_storage_options(tmp_path: Path) -> None:
+    from radiologist.etl.pipeline import build_shards_task
+
+    images = _build_image_tree(tmp_path, n_per_class=2)
+    cfg = _minimal_cfg(images, tmp_path / "out", tmp_path / "artifacts", run_label="c2")
+    manifest_path = etl_flow(cfg)
+
+    result = build_shards_task(
+        manifest_path,
+        str(tmp_path / "shards"),
+        _RATIOS,
+        storage_options={},
+    )
+    assert result == manifest_path

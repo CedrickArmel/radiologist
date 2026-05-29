@@ -150,3 +150,13 @@ def test_stat_features_are_inlined_at_top_level_of_each_jsonl_object(
     assert "haralick_contrast" in obj
     assert "asymmetry_ratio" in obj
     assert "stats" not in obj
+
+
+# ---------------------------------------------------------------------------
+# FIX C3: ParquetWriter raises ValueError on empty records list
+# ---------------------------------------------------------------------------
+
+
+def test_parquet_writer_raises_on_empty_records(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="empty"):
+        ParquetWriter().write([], str(tmp_path / "empty.parquet"))

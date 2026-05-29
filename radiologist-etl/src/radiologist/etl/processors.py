@@ -130,10 +130,10 @@ class StatsProcessor:
     def __init__(
         self,
         extractors: list[StatExtractor],
-        workers: int = os.cpu_count() or 1,
+        workers: int | None = None,
     ) -> None:
         self._extractors = extractors
-        self._workers = workers
+        self._workers = workers or os.cpu_count() or 1
 
     def run(
         self,

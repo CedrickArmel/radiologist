@@ -147,10 +147,13 @@ class ParquetWriter:
             destination: local path or remote URI.
             storage_options: extra kwargs for fsspec.
         """
+        if not records:
+            raise ValueError("Cannot write an empty manifest — no records to persist.")
+
         flat_rows = [r._to_flat_dict() for r in records]
 
         # Collect stat columns from the first record (all records share the same keys)
-        stat_columns = list(records[0].stats.keys()) if records else []
+        stat_columns = list(records[0].stats.keys())
 
         # Build schema to ensure nullable columns are typed correctly
         base_fields = [

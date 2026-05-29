@@ -31,9 +31,29 @@ import fsspec  # type: ignore[import-untyped]
 import hydra  # type: ignore[import-untyped]
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
-from prefect import flow, task
-from prefect.artifacts import create_link_artifact, create_table_artifact
-from prefect.cache_policies import INPUTS
+
+try:
+    from prefect import flow, task
+    from prefect.artifacts import create_link_artifact, create_table_artifact
+    from prefect.cache_policies import INPUTS
+
+    _PREFECT_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _PREFECT_AVAILABLE = False
+
+    def flow(fn=None, **_):  # type: ignore[misc, no-redef]
+        return fn if fn is not None else (lambda f: f)
+
+    def task(fn=None, **_):  # type: ignore[misc, no-redef]
+        return fn if fn is not None else (lambda f: f)
+
+    def create_link_artifact(**_):  # type: ignore[misc, no-redef]
+        pass
+
+    def create_table_artifact(**_):  # type: ignore[misc, no-redef]
+        pass
+
+    INPUTS = None  # type: ignore[assignment]
 
 from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
 from radiologist.etl.manifest import (
@@ -386,6 +406,7 @@ def build_shards_task(
     ratios: dict[str, float],
     shard_size: int = 1000,
     start_shard_index: dict[tuple[str, str], int] | None = None,
+    storage_options: dict | None = None,
 ) -> str:
     """Prefect task: build WebDataset tar shards.
 
@@ -395,6 +416,7 @@ def build_shards_task(
         ratios: configured split ratios.
         shard_size: max samples per shard.
         start_shard_index: per-(split, label) shard index offset.
+        storage_options: extra kwargs forwarded to fsspec.
 
     Returns:
         Updated manifest_path.
@@ -405,6 +427,7 @@ def build_shards_task(
         ratios=ratios,
         shard_size=shard_size,
         start_shard_index=start_shard_index,
+        storage_options=storage_options,
     )
     run_id = Path(manifest_path).stem.split("-", 1)[1]
     report_path = str(Path(manifest_path).parent / f"split-report-{run_id}.json")
@@ -439,7 +462,7 @@ def _haralick_list(cfg_node: object, key: str) -> list | None:
         val = cfg_node.get(key)
     else:
         val = OmegaConf.select(cfg_node, key)  # type: ignore[arg-type]
-    return list(val) or None if val else None
+    return (list(val) or None) if val else None
 
 
 @flow
@@ -508,6 +531,7 @@ def etl_flow(cfg: DictConfig) -> str:
             shard_root=cfg.shard_root,
             ratios=OmegaConf.to_container(cfg.split_ratios),  # type: ignore[arg-type]
             shard_size=int(cfg.shard_size),
+            storage_options=storage_options,
         )
 
     return manifest_path
