@@ -107,6 +107,7 @@ def _compute_stats(
     Returns:
         Path to the written Parquet file: ``{artifact_dir}/stats-{run_id}.parquet``.
     """
+    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
     reader = ImageReader(source, storage_options=storage_options)
     processor = StatsProcessor(extractors=extractors, workers=workers)
     records = processor.run(reader, manifest_id=run_id, masks_root=masks_root)
@@ -433,6 +434,7 @@ def etl_flow(cfg: DictConfig) -> str:
     workers: int = int(cfg.workers) if cfg.workers else (os.cpu_count() or 1)
 
     manifest_dest = f"{cfg.destination}/manifest-{run_id}.jsonl"
+    Path(cfg.destination).mkdir(parents=True, exist_ok=True)
 
     resume_parquet = OmegaConf.select(cfg, "resume_from_parquet")
     resume_filtered = OmegaConf.select(cfg, "resume_from_filtered")

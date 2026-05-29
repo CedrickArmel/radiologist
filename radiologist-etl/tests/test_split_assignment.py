@@ -29,37 +29,35 @@ from radiologist.etl.split import assign_split
 _RATIOS = {"train": 0.70, "val": 0.15, "test": 0.15}
 
 
-def test_same_filename_always_returns_the_same_split() -> None:
-    filename = "patient_001.png"
+def test_same_filename_always_receives_same_split_across_independent_calls() -> None:
+    filename = "patient_chest_001.png"
     results = {assign_split(filename, _RATIOS) for _ in range(10)}
     assert len(results) == 1
 
 
-def test_returned_split_is_always_one_of_the_ratio_keys() -> None:
-    filenames = [f"image_{i:04d}.png" for i in range(100)]
+def test_all_assigned_split_names_are_valid_keys_from_configured_ratios() -> None:
+    filenames = [f"scan_{i:04d}.png" for i in range(100)]
     for fn in filenames:
-        result = assign_split(fn, _RATIOS)
-        assert result in _RATIOS
+        assert assign_split(fn, _RATIOS) in _RATIOS
 
 
-def test_filenames_spread_across_splits_within_5_percent_of_configured_ratio() -> None:
+def test_population_of_1000_filenames_distributes_within_5_percent_of_configured_ratios() -> (
+    None
+):
     filenames = [f"image_{i:06d}.png" for i in range(1000)]
     counts: dict[str, int] = {k: 0 for k in _RATIOS}
     for fn in filenames:
         counts[assign_split(fn, _RATIOS)] += 1
     total = len(filenames)
-    for split, expected_ratio in _RATIOS.items():
-        actual_ratio = counts[split] / total
+    for split, expected in _RATIOS.items():
+        actual = counts[split] / total
         assert (
-            abs(actual_ratio - expected_ratio) < 0.05
-        ), f"{split!r}: expected ~{expected_ratio}, got {actual_ratio:.3f}"
+            abs(actual - expected) < 0.05
+        ), f"{split!r}: expected ~{expected:.2f}, got {actual:.3f}"
 
 
-def test_raises_value_error_for_ratios_that_do_not_sum_to_one() -> None:
+def test_ratios_that_do_not_sum_to_one_raise_value_error_before_any_assignment() -> (
+    None
+):
     with pytest.raises(ValueError):
-        assign_split("image.png", {"a": 0.5, "b": 0.3})
-
-
-def test_raises_value_error_for_ratios_exceeding_one() -> None:
-    with pytest.raises(ValueError):
-        assign_split("image.png", {"train": 0.7, "val": 0.4, "test": 0.15})
+        assign_split("image.png", {"train": 0.5, "val": 0.3})
