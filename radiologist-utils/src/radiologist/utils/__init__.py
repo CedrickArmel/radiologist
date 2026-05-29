@@ -1,6 +1,6 @@
 # MIT License
 #
-# Copyright (c) 2026 @CedrickArmel, @TaxelleT, @Yeyecodes
+# Copyright (c) 2025 @CedrickArmel, @samarita22, @TaxelleT & @Yeyecodes
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,18 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from radiologist.utils.readers import (
-    BaseImageReader,
-    ImageReader,
-    LocalImageReader,
-    RemoteImageReader,
-    read_image,
-)
+from .loggers import Logger
 
 __all__ = [
-    "BaseImageReader",
-    "ImageReader",
-    "LocalImageReader",
-    "RemoteImageReader",
-    "read_image",
+    "Logger",
 ]
