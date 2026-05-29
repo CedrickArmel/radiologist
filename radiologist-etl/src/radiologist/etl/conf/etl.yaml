@@ -1,0 +1,25 @@
+# @package _global_
+source: ???
+masks_root: null
+destination: ???
+artifact_dir: ???
+iqr_columns: []
+iqr_factor: 1.5
+split_ratios:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+workers: null
+storage_options: null
+build_shards: false
+shard_root: null
+shard_size: 1000
+run_label: null
+resume_from_parquet: null
+resume_from_filtered: null
+resume_from_split: null
+resume_from_manifest: null
+haralick:
+  features: null
+  distances: null
+  angles: null

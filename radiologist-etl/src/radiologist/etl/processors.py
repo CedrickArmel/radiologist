@@ -1,0 +1,191 @@
+# MIT License
+#
+# Copyright (c) 2026 @CedrickArmel, @TaxelleT, @Yeyecodes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+from __future__ import annotations
+
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+
+import fsspec  # type: ignore[import-untyped]
+import numpy as np
+from rich.progress import Progress
+
+from radiologist.etl.manifest import ManifestRecord
+from radiologist.etl.ops import lung_out_of_frame
+from radiologist.etl.stats import StatExtractor
+from radiologist.utils.loggers import Logger
+from radiologist.utils.readers import SUPPORTED_FORMATS, BaseImageReader, read_image
+
+
+def _resolve_mask(
+    image_path: str,
+    images_root: str,
+    masks_root: str | None,
+    storage_options: dict | None,
+) -> np.ndarray | None:
+    """Resolve the mask array for an image by mirroring its path under masks_root.
+
+    Args:
+        image_path: full URI or path to the source image.
+        images_root: root directory of all images; used to compute relative path.
+        masks_root: root directory of masks; None when masks are unavailable.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        Mask array, or None if masks_root is None or the mask file is missing.
+    """
+    if masks_root is None:
+        return None
+
+    # Normalize both paths to bare filesystem paths (strips file:// if present)
+    _, norm_image = fsspec.url_to_fs(image_path, **(storage_options or {}))
+    _, norm_root = fsspec.url_to_fs(images_root, **(storage_options or {}))
+
+    rel_raw = norm_image[len(norm_root) :]
+    if rel_raw and not rel_raw.startswith("/"):
+        # norm_root is a string prefix of norm_image but not a parent directory
+        return None
+    rel = rel_raw.lstrip("/")
+    mask_path = masks_root.rstrip("/") + "/" + rel
+    try:
+        arr, _ = read_image(mask_path, storage_options=storage_options)
+        return arr
+    except FileNotFoundError:
+        return None
+
+
+def _process_one(
+    image_path: str,
+    images_root: str,
+    masks_root: str | None,
+    manifest_id: str,
+    extractors: list[StatExtractor],
+    storage_options: dict | None,
+) -> ManifestRecord:
+    """Process a single image into a ManifestRecord.
+
+    Top-level function required for ProcessPoolExecutor picklability.
+
+    Args:
+        image_path: full URI to the source image.
+        images_root: root directory used to resolve the mask mirror path.
+        masks_root: root directory of masks; None when masks are unavailable.
+        manifest_id: run identifier shared by all records in a run.
+        extractors: list of StatExtractor callables.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        A ManifestRecord populated with stats and lung_out_of_frame.
+    """
+    arr, meta = read_image(image_path, storage_options=storage_options)
+    mask = _resolve_mask(image_path, images_root, masks_root, storage_options)
+
+    stats: dict[str, float] = {}
+    for extractor in extractors:
+        stats.update(extractor(arr, meta, mask=mask))
+
+    loof = lung_out_of_frame(mask) if mask is not None else None
+    label = Path(image_path).parent.name
+    filename = Path(image_path).name
+
+    return ManifestRecord(
+        manifest_id=manifest_id,
+        path=image_path,
+        filename=filename,
+        label=label,
+        split="",
+        stats=stats,
+        lung_out_of_frame=loof,
+    )
+
+
+class StatsProcessor:
+    """Run stat extraction over an image collection using a process pool.
+
+    Args:
+        extractors: list of StatExtractor callables to apply to each image.
+        workers: number of worker processes; defaults to os.cpu_count().
+    """
+
+    def __init__(
+        self,
+        extractors: list[StatExtractor],
+        workers: int = os.cpu_count() or 1,
+    ) -> None:
+        self._extractors = extractors
+        self._workers = workers
+
+    def run(
+        self,
+        reader: BaseImageReader,
+        manifest_id: str,
+        masks_root: str | None = None,
+    ) -> list[ManifestRecord]:
+        """Process all images reachable from reader.source.
+
+        Args:
+            reader: a BaseImageReader whose .source points at the image root.
+            manifest_id: run identifier stamped on every ManifestRecord.
+            masks_root: optional root directory for segmentation masks.
+
+        Returns:
+            List of ManifestRecord, one per successfully processed image.
+            Failed images are logged and skipped.
+        """
+        storage_options = getattr(reader, "_storage_options", None) or {}
+        fs, root = fsspec.url_to_fs(reader.source, **storage_options)
+        all_paths = sorted(fs.find(root))
+        image_paths = [
+            fs.unstrip_protocol(p)
+            for p in all_paths
+            if Path(p).suffix.lower() in SUPPORTED_FORMATS
+        ]
+
+        records: list[ManifestRecord] = []
+        logger = Logger()
+
+        with ProcessPoolExecutor(max_workers=self._workers) as pool:
+            futures = {
+                pool.submit(
+                    _process_one,
+                    p,
+                    reader.source,
+                    masks_root,
+                    manifest_id,
+                    self._extractors,
+                    storage_options,
+                ): p
+                for p in image_paths
+            }
+            with Progress() as progress:
+                task_id = progress.add_task("Processing images...", total=len(futures))
+                for future in as_completed(futures):
+                    path = futures[future]
+                    try:
+                        records.append(future.result())
+                    except Exception as exc:
+                        logger.warning("Skipping %r: %s", path, exc)
+                    finally:
+                        progress.advance(task_id)
+
+        return records
