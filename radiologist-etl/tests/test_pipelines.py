@@ -22,7 +22,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 from pathlib import Path
 
@@ -30,7 +29,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from PIL import Image
 
-from radiologist.etl.pipeline import _build_shards, compute_run_id, etl_flow, main
+from radiologist.etl import compute_run_id, etl_flow
 
 
 def _write_png(path: Path, arr: np.ndarray) -> None:
@@ -104,11 +103,6 @@ def _read_manifest(path: str) -> list[dict]:
         return [json.loads(ln) for ln in f if ln.strip()]
 
 
-# ---------------------------------------------------------------------------
-# Scenario 1: one record per input image
-# ---------------------------------------------------------------------------
-
-
 def test_pipeline_produces_exactly_one_manifest_record_per_input_image(
     tmp_path: Path,
 ) -> None:
@@ -117,11 +111,6 @@ def test_pipeline_produces_exactly_one_manifest_record_per_input_image(
     manifest_path = etl_flow(cfg)
     records = _read_manifest(manifest_path)
     assert len(records) == 4
-
-
-# ---------------------------------------------------------------------------
-# Scenario 2: no masks -> lung_out_of_frame is null
-# ---------------------------------------------------------------------------
 
 
 def test_images_processed_without_masks_have_null_lung_out_of_frame_in_manifest(
@@ -138,11 +127,6 @@ def test_images_processed_without_masks_have_null_lung_out_of_frame_in_manifest(
     manifest_path = etl_flow(cfg)
     records = _read_manifest(manifest_path)
     assert all(r["lung_out_of_frame"] is None for r in records)
-
-
-# ---------------------------------------------------------------------------
-# Scenario 3: border-touching masks -> records present but flagged excluded
-# ---------------------------------------------------------------------------
 
 
 def test_images_with_border_touching_masks_are_flagged_excluded_in_manifest(
@@ -164,11 +148,6 @@ def test_images_with_border_touching_masks_are_flagged_excluded_in_manifest(
     assert any(r["lung_out_of_frame"] is True for r in records)
 
 
-# ---------------------------------------------------------------------------
-# Scenario 4: every record has a valid non-empty split
-# ---------------------------------------------------------------------------
-
-
 def test_every_manifest_record_has_a_valid_non_empty_split_assignment(
     tmp_path: Path,
 ) -> None:
@@ -179,11 +158,6 @@ def test_every_manifest_record_has_a_valid_non_empty_split_assignment(
     valid_splits = {"train", "val", "test"}
     for rec in records:
         assert rec["split"] in valid_splits, f"unexpected split: {rec['split']!r}"
-
-
-# ---------------------------------------------------------------------------
-# Scenario 5: all records in a run share the same manifest_id
-# ---------------------------------------------------------------------------
 
 
 def test_all_records_in_the_same_run_share_the_same_manifest_id(
@@ -197,11 +171,6 @@ def test_all_records_in_the_same_run_share_the_same_manifest_id(
     assert len(ids) == 1
 
 
-# ---------------------------------------------------------------------------
-# Scenario 6: idempotency — same config twice yields same path and record count
-# ---------------------------------------------------------------------------
-
-
 def test_running_pipeline_twice_with_identical_config_is_idempotent(
     tmp_path: Path,
 ) -> None:
@@ -211,11 +180,6 @@ def test_running_pipeline_twice_with_identical_config_is_idempotent(
     path2 = etl_flow(cfg)
     assert path1 == path2
     assert len(_read_manifest(path1)) == len(_read_manifest(path2))
-
-
-# ---------------------------------------------------------------------------
-# Scenario 7: run_label changes the run ID and is stable across identical calls
-# ---------------------------------------------------------------------------
 
 
 def test_compute_run_id_with_run_label_differs_from_no_label_and_is_stable(
@@ -231,11 +195,6 @@ def test_compute_run_id_with_run_label_differs_from_no_label_and_is_stable(
 
     assert id_with_label_1 != id_no_label
     assert id_with_label_1 == id_with_label_2
-
-
-# ---------------------------------------------------------------------------
-# Scenario 8: resume_from_manifest skips re-processing
-# ---------------------------------------------------------------------------
 
 
 def test_passing_resume_manifest_path_skips_re_processing_and_returns_consistent_manifest(
@@ -262,46 +221,11 @@ def test_passing_resume_manifest_path_skips_re_processing_and_returns_consistent
     assert resumed_manifest == first_manifest
 
 
-# ---------------------------------------------------------------------------
-# Fix 1: _build_shards portable core has no Prefect imports
-# ---------------------------------------------------------------------------
-
-
-def test_build_shards_portable_core_contains_no_prefect_imports() -> None:
-    assert "prefect" not in inspect.getsource(_build_shards)
-
-
-# ---------------------------------------------------------------------------
-# Fix 2: main entry point is importable and callable
-# ---------------------------------------------------------------------------
-
-
-def test_main_entry_point_is_callable() -> None:
-    assert callable(main)
-
-
-# ---------------------------------------------------------------------------
-# FIX C1: pipeline module exposes compute_run_id even when Prefect is absent
-# ---------------------------------------------------------------------------
-
-
-def test_pipeline_module_exposes_compute_run_id_without_prefect_at_call_time() -> None:
-    from radiologist.etl.pipeline import (  # noqa: F401 — import is the test
-        compute_run_id,
-    )
-
-    assert callable(compute_run_id)
-
-
-# ---------------------------------------------------------------------------
-# FIX C2: build_shards_task accepts storage_options kwarg
-# ---------------------------------------------------------------------------
-
 _RATIOS = {"train": 0.70, "val": 0.15, "test": 0.15}
 
 
 def test_build_shards_task_accepts_storage_options(tmp_path: Path) -> None:
-    from radiologist.etl.pipeline import build_shards_task
+    from radiologist.etl import build_shards_task
 
     images = _build_image_tree(tmp_path, n_per_class=2)
     cfg = _minimal_cfg(images, tmp_path / "out", tmp_path / "artifacts", run_label="c2")

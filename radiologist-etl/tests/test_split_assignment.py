@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pytest
 
-from radiologist.etl.split import assign_split
+from radiologist.etl import assign_split
 
 _RATIOS = {"train": 0.70, "val": 0.15, "test": 0.15}
 

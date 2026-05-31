@@ -28,7 +28,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from radiologist.etl.manifest import JsonlWriter, ManifestRecord, ParquetWriter
+from radiologist.etl import JsonlWriter, ManifestRecord, ParquetWriter
 
 
 def _record(
