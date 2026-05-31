@@ -3731,12 +3731,14 @@ version = "0.1.0"
 source = { editable = "radiologist-etl" }
 dependencies = [
     { name = "fsspec" },
+    { name = "gcsfs" },
     { name = "hydra-core" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "omegaconf" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "prefect" },
     { name = "pyarrow" },
     { name = "radiologist-utils" },
     { name = "rich" },
@@ -3745,26 +3747,21 @@ dependencies = [
     { name = "webdataset" },
 ]
 
-[package.optional-dependencies]
-pipeline = [
-    { name = "prefect" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "fsspec", specifier = ">=2025.3.0" },
+    { name = "gcsfs", specifier = ">=2026.4.0" },
     { name = "hydra-core", specifier = ">=1.3.0" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "pandas", specifier = ">=2.0.0" },
-    { name = "prefect", marker = "extra == 'pipeline'", specifier = ">=3.0.0" },
+    { name = "prefect", specifier = ">=3.0.0" },
     { name = "pyarrow", specifier = ">=14.0.0" },
     { name = "radiologist-utils", editable = "radiologist-utils" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "scikit-image", specifier = ">=0.24.0" },
     { name = "webdataset", specifier = ">=0.2.0" },
 ]
-provides-extras = ["pipeline"]
 
 [[package]]
 name = "radiologist-utils"

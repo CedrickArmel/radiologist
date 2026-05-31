@@ -43,3 +43,8 @@ repos:
     hooks:
       - id: mypy
         args: [--config-file, pyproject.toml]
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.10.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
