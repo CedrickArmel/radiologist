@@ -43,7 +43,19 @@
 # SOFTWARE.
 
 from .loggers import Logger
+from .readers import (
+    BaseImageReader,
+    ImageReader,
+    LocalImageReader,
+    RemoteImageReader,
+    read_image,
+)
 
 __all__ = [
+    "BaseImageReader",
+    "ImageReader",
+    "LocalImageReader",
     "Logger",
+    "RemoteImageReader",
+    "read_image",
 ]
