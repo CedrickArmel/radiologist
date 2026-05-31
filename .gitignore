@@ -1,6 +1,14 @@
 # Claude
-.claude/*
-!.claude/settings.json
+.claude/.cc-marker
+.claude/.settings.local.*
+.claude/local
+.claude/worktrees
+
+# Hydra
+outputs/
+
+# Prefect
+*:/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

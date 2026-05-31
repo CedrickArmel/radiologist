@@ -16,6 +16,13 @@ dependencies = [
     "rich>=13.0.0",
 ]
 
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "${version}-radiologist-utils" # the component name can be a prefix or suffix with or without a separator
+ignored_tag_formats = ["${version}-radiologist-*"] # Avoid noise from other tags
+update_changelog_on_bump = true
+
 [tool.uv.build-backend]
 namespace = true
 module-name = "radiocovid.utils"
