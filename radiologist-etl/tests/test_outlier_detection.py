@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
+from radiologist.etl import filter_iqr, filter_lung_out_of_frame
 
 
 def _manifest_df(values: list[float], col: str = "haralick_contrast") -> pd.DataFrame:

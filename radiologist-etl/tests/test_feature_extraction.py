@@ -28,8 +28,8 @@ import pickle
 import numpy as np
 import pytest
 
-from radiologist.etl.ops import lung_out_of_frame
-from radiologist.etl.stats import HARALICK_PROPERTIES, lung_asymmetry, make_haralick
+from radiologist.etl import lung_asymmetry, lung_out_of_frame, make_haralick
+from radiologist.etl.stats import HARALICK_PROPERTIES
 
 
 def _gray_image(seed: int = 42) -> np.ndarray:
@@ -44,9 +44,6 @@ def _rgb_image(seed: int = 0) -> np.ndarray:
 
 def _constant_image(value: int = 128) -> np.ndarray:
     return np.full((50, 50), value, dtype=np.uint8)
-
-
-# --- Haralick texture feature extraction ---
 
 
 def test_haralick_extractor_returns_one_finite_float_per_requested_feature() -> None:
@@ -116,9 +113,6 @@ def test_haralick_extractor_multiple_distances_and_angles_on_constant_image_matc
     )
 
 
-# --- Lung asymmetry ---
-
-
 def test_asymmetry_extractor_returns_empty_result_when_no_mask_provided() -> None:
     result = lung_asymmetry(_gray_image(), {}, mask=None)
     assert result == {}
@@ -141,9 +135,6 @@ def test_perfectly_symmetric_mask_produces_asymmetry_ratio_near_one() -> None:
     mask[10:40, 25:50] = 255
     result = lung_asymmetry(_gray_image(), {}, mask=mask)
     assert math.isclose(result["asymmetry_ratio"], 1.0, rel_tol=1e-6)
-
-
-# --- Lung framing predicate ---
 
 
 def test_lung_touching_image_border_is_detected_as_out_of_frame() -> None:

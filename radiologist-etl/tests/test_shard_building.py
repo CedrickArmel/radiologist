@@ -29,8 +29,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from radiologist.etl.manifest import JsonlWriter, ManifestRecord
-from radiologist.etl.shards import build_shards
+from radiologist.etl import JsonlWriter, ManifestRecord, build_shards
 
 _RATIOS = {"train": 0.70, "val": 0.15, "test": 0.15}
 
