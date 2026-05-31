@@ -8,7 +8,7 @@ This project provides a fully reproducible machine-learning pipeline that takes 
 
 ## Codebase
 
-Stack: PyTorch · Lightning · Hydra · W&B · DVC · Prefect · FastAPI · Streamlit.
+Stack: PyTorch · Lightning · Hydra · W&B · DVC · Prefect · FastAPI · Streamlit · UV · PyEnv.
 
 ### Repository layout
 
@@ -88,24 +88,53 @@ Each package sets `module-name = "radiocovid.*"` in its `pyproject.toml` (intent
 
 ### Environment setup
 
+Check if the virtual env defined in `.python-version` exists running `pyenv versions`. If yes proceed to environment setup.
+
+If not create it using:
+
 ```bash
-pyenv activate radiologist
-uv sync --active [--extra all] --all-groups  # verify extra all or install all optional individually
-pre-commit install                  # install git hooks (required once per clone)
+pyenv virtualenv 3.10.16 radiologist
 ```
+
+Setup the envionment running the following:
+
+```bash
+
+pyenv activate radiologist && uv sync --active [--extra all] --all-groups  # verify extra all or install all optional individually
+pre-commit install                  # install git hooks (required once per clone)
+pre-commit install --hook-stage commit-msg
+```
+
+**ALWAYS** use the `--active` options for `UV` commands so that `venv` managed locally by PyEnv is used.
+
+Run `uv add --active <package>` to add new package to dependencies.
+
+Run `uv [command] --help` to display `uv`'s help.
+
+Run `pyenv [command] --help` to display `pyenv`'s help.
+
+### Worktrees
+
+Always create worktrees in `PROJECT-ROOT`/.claude/worktrees to maintain clean repo - No exceptions.
+
+[Environment setup](#environment-setup) still apply in worktrees - No exceptions.
+
+When an subagent ends his work in a worktree:
+
+- `cp -r` his memory directory back to `PROJECT-ROOT`/.claude/agent-memory/`agent`.
 
 ### Running tests
 
 ```bash
-uv run pytest -q                          # all packages
-uv run pytest radiologist-core/tests -q   # single package
+uv run --active pytest -q                          # all packages
+uv run --active pytest radiologist-core/tests -q   # single package
 ```
 
 ### Code style — PEP 8
 
 PEP 8 is the enforced style guideline. Pre-commit hooks run automatically on `git commit`:
 
-`insert-license` · `isort` · `black` · `flake8` · `mypy`
+`insert-license` · `isort` · `black` · `flake8` · `mypy` · `Commitizen`
 
 Common fixes needed before a clean commit:
 
@@ -113,18 +142,24 @@ Common fixes needed before a clean commit:
 - Use `Optional[T] = None` not `T = None` for optional parameters (mypy `no_implicit_optional`)
 - Keep line length ≤ 88 (black default)
 
+### Public APIs
+
+Import public APIs in the `__init__.py` of their module and add them to `__all__` list. Take this into account accessing to them for testing.
+
+### Use `conftest.py` to share fixtures
+
+Fixtures defined in a `conftest.py` can be used by any test in that package without needing to import them (pytest will automatically discover them).
+
 ### Git
 
-- GPG signing is enabled; ensure `.venv` is active so pre-commit tools are on `PATH`.
-- Commitizen convention enforced (`cz check`). Valid prefix types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `revert`, `style`.
-- Stacked PRs: branches that depend on other feature branches (e.g., `feat/radiologist-etl` → `feat/utils-logger`) must target the dependency branch, not `main`. Adjust `gh pr create --base` accordingly.
+- GPG signing is enabled; ensure a `venv` is active with sync'ed project deps so pre-commit tools are on `PATH`.
+- Commitizen convention enforced via commitizen's pre-commit hook. Valid prefix types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `revert`, `style`.
+- Stacked PRs: branches that depend on other feature branches must target the dependency branch, not `main`. Adjust `gh pr create --base` accordingly.
 - After a `pre-commit.ci` remote auto-fix commit, run `git fetch origin <branch> && git rebase origin/<branch>` before the next push to avoid diverged-branch rejection.
 
 ## Gotchas
 
 - **[PyTorch]** The sandbox security hook false-positives on the `.eval()` method name. Use `model.train(mode=False)` instead of `model.eval()` in any PyTorch code.
-- **[LICENSE]** No need to add the license header in your code yourself. `pre-commit` we do that.
-- **[GitHub API]** `gh` CLI hits TLS errors in the sandbox. Read issues via `curl -sS https://api.github.com/repos/CedrickArmel/radiologist/issues/<n>`.
-- **[macOS multiprocessing]** `ProcessPoolExecutor` uses `spawn` on macOS — submitted callables must be picklable. Use `functools.partial` of a **top-level** function; closures are not picklable.
-- **[WebDataset]** `wds.ShardWriter` requires a `%d` format token in the path pattern. Use `wds.TarWriter` when writing shards with explicit file paths.
-- **[Prefect]** `prefect` is an optional `[pipeline]` extra. Always wrap `from prefect import ...` in `try/except ImportError` with stub no-ops so modules import cleanly without the extra installed.
+- **[LICENSE]** You MUST NOT add the license header in your code yourself. `pre-commit` we do that.
+- **[MEMORY]** Generalise before saving: a gotcha observed on one instance (a class, function, OS, or library) should be written at the level of the broader behavior it exemplifies — not pinned to the specific case that triggered it. When writing a memory or gotcha, ask: is this specific to X, or is X just one case of a wider rule? Write the wider rule; mention X only as an example if it aids clarity.
+- **[Extra]** For optional extra deps, write their imports (e.g. `from prefect import ...`) wrapped in `try/except ImportError` with stub no-ops so modules import cleanly without the extra installed.
