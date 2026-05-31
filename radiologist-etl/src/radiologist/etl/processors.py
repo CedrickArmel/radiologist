@@ -31,7 +31,6 @@ import numpy as np
 from rich.progress import Progress
 
 from radiologist.etl.manifest import ManifestRecord
-from radiologist.etl.ops import lung_out_of_frame
 from radiologist.etl.stats import StatExtractor
 from radiologist.utils.loggers import Logger
 from radiologist.utils.readers import SUPPORTED_FORMATS, BaseImageReader, read_image
@@ -72,6 +71,21 @@ def _resolve_mask(
         return arr
     except FileNotFoundError:
         return None
+
+
+def lung_out_of_frame(mask: np.ndarray) -> bool:
+    """Check if any nonzero mask pixel touches the image border.
+
+    Args:
+        mask: 2-D or 3-D (H, W) or (H, W, C) boolean/integer array.
+
+    Returns:
+        True if any nonzero pixel is on the first/last row or column.
+    """
+    if mask.ndim == 3:
+        mask = mask.max(axis=-1)
+    border = np.concatenate([mask[0, :], mask[-1, :], mask[:, 0], mask[:, -1]])
+    return bool(border.any())
 
 
 def _process_one(
