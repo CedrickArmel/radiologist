@@ -29,10 +29,12 @@ from .instantiators import (
 )
 from .logging_utils import log_hyperparameters
 from .nn import initialize_weights
+from .rich_utils import enforce_tags, print_config_tree
 from .seeding import get_seeded_generator, seed_worker, set_seed
 
 __all__ = [
     "balance_data_world_size",
+    "enforce_tags",
     "extras",
     "get_metric_value",
     "get_seeded_generator",
@@ -40,6 +42,7 @@ __all__ = [
     "instantiate_callbacks",
     "instantiate_loggers",
     "log_hyperparameters",
+    "print_config_tree",
     "seed_worker",
     "sequential_scheduler",
     "set_seed",
