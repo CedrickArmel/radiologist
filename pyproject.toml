@@ -24,7 +24,8 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "radiologist-utils",
-    "radiologist-etl"
+    "radiologist-etl",
+    "radiologist-core",
 ]
 
 [tool.commitizen]
@@ -117,6 +118,7 @@ ignore_missing_imports = true
 testpaths = [
     "radiologist-utils/tests",
     "radiologist-etl/tests",
+    "radiologist-core/tests",
 ]
 addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 
@@ -124,8 +126,9 @@ addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 namespace = true
 
 [tool.uv.workspace]
-members = ["radiologist-utils", "radiologist-etl"]
+members = ["radiologist-utils", "radiologist-etl", "radiologist-core"]
 
 [tool.uv.sources]
 radiologist-utils = { workspace = true }
 radiologist-etl = { workspace = true }
+radiologist-core = { workspace = true }
