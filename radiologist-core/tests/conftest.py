@@ -20,7 +20,105 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import io
 import sys
+import tarfile
+from functools import partial
 from pathlib import Path
 
+import pytest
+import torchvision.transforms as T  # type: ignore[import-untyped]
+import webdataset as wds  # type: ignore[import-untyped]
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+
+def _make_png_bytes() -> bytes:
+    """Create a minimal valid 4x4 RGB PNG image as bytes via PIL."""
+    import io as _io
+
+    from PIL import Image  # type: ignore[import-untyped]
+
+    img = Image.new("RGB", (4, 4), color=(255, 0, 0))
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _write_shard(path: Path, keys_and_labels: list) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    png_bytes = _make_png_bytes()
+    with tarfile.open(str(path), "w") as tf:
+        for key, label in keys_and_labels:
+            for ext, data in [("png", png_bytes), ("cls", label.encode())]:
+                info = tarfile.TarInfo(name=f"{key}.{ext}")
+                buf = io.BytesIO(data)
+                info.size = len(data)
+                tf.addfile(info, buf)
+
+
+@pytest.fixture()
+def shard_root(tmp_path: Path) -> Path:
+    """Minimal shard tree with train/val/test splits and two classes."""
+    root = tmp_path / "shards"
+    samples = {
+        ("train", "NORMAL"): [
+            ("train-normal-000000", "NORMAL"),
+            ("train-normal-000001", "NORMAL"),
+        ],
+        ("train", "ABNORMAL"): [
+            ("train-abnormal-000000", "ABNORMAL"),
+            ("train-abnormal-000001", "ABNORMAL"),
+        ],
+        ("val", "NORMAL"): [
+            ("val-normal-000000", "NORMAL"),
+            ("val-normal-000001", "NORMAL"),
+        ],
+        ("val", "ABNORMAL"): [
+            ("val-abnormal-000000", "ABNORMAL"),
+            ("val-abnormal-000001", "ABNORMAL"),
+        ],
+        ("test", "NORMAL"): [
+            ("test-normal-000000", "NORMAL"),
+            ("test-normal-000001", "NORMAL"),
+        ],
+        ("test", "ABNORMAL"): [
+            ("test-abnormal-000000", "ABNORMAL"),
+            ("test-abnormal-000001", "ABNORMAL"),
+        ],
+    }
+    for (split, label), items in samples.items():
+        shard_path = root / split / label / f"{split}-{label.lower()}-000000.tar"
+        _write_shard(shard_path, items)
+    return root
+
+
+@pytest.fixture()
+def label_map() -> dict:
+    return {"NORMAL": "normal", "ABNORMAL": "abnormal"}
+
+
+@pytest.fixture()
+def classes() -> list:
+    return ["abnormal", "normal"]
+
+
+@pytest.fixture()
+def train_transform() -> T.Compose:
+    return T.Compose([T.Resize((8, 8)), T.ToTensor()])
+
+
+@pytest.fixture()
+def eval_transform() -> T.Compose:
+    return T.Compose([T.Resize((8, 8)), T.ToTensor()])
+
+
+@pytest.fixture()
+def train_loader_partial() -> partial:
+    return partial(wds.WebLoader, batch_size=2, num_workers=0)
+
+
+@pytest.fixture()
+def eval_loader_partial() -> partial:
+    return partial(wds.WebLoader, batch_size=2, num_workers=0)
+>>>>>>> f830204 (feat(core): add WebDatasetDataModule and shard discovery utilities)
