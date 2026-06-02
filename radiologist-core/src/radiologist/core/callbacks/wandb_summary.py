@@ -20,13 +20,37 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .callbacks import BestMetricCallback, WandbDefineSummaryCallback
-from .losses import FocalLoss
-from .module import LModule
+from typing import Any
 
-__all__ = [
-    "BestMetricCallback",
-    "FocalLoss",
-    "LModule",
-    "WandbDefineSummaryCallback",
-]
+import lightning as L
+
+try:
+    import wandb as _wandb
+except ImportError:
+    _wandb = None  # type: ignore[assignment]
+
+
+class WandbDefineSummaryCallback(L.Callback):
+    """Configure the W&B run summary panel for the monitored metric.
+
+    Calls ``wandb.run.define_metric`` for both the raw metric and its
+    ``best_`` variant when a W&B run is active.  Silent no-op when wandb
+    is absent or no run is active.
+    """
+
+    def __init__(self, monitor: str, mode: str = "max") -> None:
+        super().__init__()
+        self.monitor = monitor
+        self.mode = mode
+
+    def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
+        import sys
+
+        wandb = sys.modules.get("wandb", _wandb)
+        if wandb is None:
+            return
+        run = getattr(wandb, "run", None)
+        if run is None:
+            return
+        run.define_metric(self.monitor, summary=self.mode)
+        run.define_metric(f"best_{self.monitor}", summary=self.mode)
