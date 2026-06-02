@@ -20,12 +20,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .callbacks import BestMetricCallback, WandbDefineSummaryCallback
+from .callbacks import AttributionCallback, BestMetricCallback, WandbDefineSummaryCallback
 from .data import WebDatasetDataModule
 from .losses import FocalLoss
 from .module import LModule
 
 __all__ = [
+    "AttributionCallback",
     "BestMetricCallback",
     "FocalLoss",
     "LModule",
