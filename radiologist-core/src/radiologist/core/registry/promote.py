@@ -108,7 +108,7 @@ def promote_to_registry(
     classes: List[str],
     cam_target_layer: str,
     local_dir: str,
-    opset: int = 17,
+    opset: int = 18,
 ) -> str:
     """Pull a checkpoint, export two ONNX models, and link them to the W&B registry.
 
@@ -120,7 +120,7 @@ def promote_to_registry(
         classes: ordered class names embedded in ONNX metadata.
         cam_target_layer: dot-path into ``LModule.net`` for CAM activation hook.
         local_dir: directory for downloaded checkpoint and exported ONNX files.
-        opset: ONNX opset version (default 17, must be ≥ 12 for MCD).
+        opset: ONNX opset version (default 18, must be ≥ 12 for MCD).
 
     Returns:
         Qualified name of the linked artifact in the W&B Model Registry.
