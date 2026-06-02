@@ -1,0 +1,5 @@
+# @package callbacks
+best_metric:
+  _target_: radiologist.core.BestMetricCallback
+  monitor: val_score
+  mode: max

@@ -1,0 +1,7 @@
+# @package callbacks
+defaults:
+  - best_metric
+  - wandb_summary
+  - attribution
+  - model_checkpoint
+  - lr_monitor

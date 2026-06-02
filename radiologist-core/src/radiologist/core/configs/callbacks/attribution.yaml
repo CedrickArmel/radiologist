@@ -1,0 +1,7 @@
+# @package callbacks
+attribution:
+  _target_: radiologist.core.AttributionCallback
+  target_layer: layer4.1.conv2
+  every_n_val_epochs: 5
+  n_test_batches: 1
+  n_samples_per_batch: 4

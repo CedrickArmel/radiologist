@@ -1,0 +1,16 @@
+# @package _global_
+loggers:
+  wandb:
+    _target_: lightning.pytorch.loggers.WandbLogger
+    _partial_: false
+    project: radiologist
+    name: null
+    save_dir: ${paths.output_dir}
+    offline: false
+    id: null
+    anonymous: null
+    log_model: false
+    prefix: ""
+    group: ""
+    tags: ${tags}
+    job_type: ""

@@ -1,0 +1,5 @@
+# @package callbacks
+wandb_summary:
+  _target_: radiologist.core.WandbDefineSummaryCallback
+  monitor: val_score
+  mode: max
