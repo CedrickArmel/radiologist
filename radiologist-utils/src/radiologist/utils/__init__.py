@@ -43,6 +43,7 @@
 # SOFTWARE.
 
 from .loggers import Logger
+from .pylogger import RankedLogger
 from .readers import (
     BaseImageReader,
     ImageReader,
@@ -56,6 +57,7 @@ __all__ = [
     "ImageReader",
     "LocalImageReader",
     "Logger",
+    "RankedLogger",
     "RemoteImageReader",
     "read_image",
 ]
