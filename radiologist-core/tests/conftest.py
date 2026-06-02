@@ -121,4 +121,3 @@ def train_loader_partial() -> partial:
 @pytest.fixture()
 def eval_loader_partial() -> partial:
     return partial(wds.WebLoader, batch_size=2, num_workers=0)
->>>>>>> f830204 (feat(core): add WebDatasetDataModule and shard discovery utilities)
