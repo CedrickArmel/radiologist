@@ -1,0 +1,16 @@
+# @package module
+metric:
+  _target_: torchmetrics.classification.MulticlassFBetaScore
+  _partial_: true
+  beta: 1.0
+  num_classes: ${datamodule.num_classes}
+  average: macro
+  multidim_average: global
+  top_k: 1
+  ignore_index: null
+  validate_args: true
+  zero_division: 0.0
+  compute_on_cpu: true
+  dist_sync_on_step: false
+  sync_on_compute: true
+  compute_with_cache: true

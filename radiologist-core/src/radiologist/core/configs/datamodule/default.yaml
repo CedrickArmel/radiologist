@@ -1,0 +1,40 @@
+# @package _global_
+datamodule:
+  _target_: radiologist.core.WebDatasetDataModule
+  shard_root: ???
+  seed: ${seed}
+  shardshuffle: 100
+  label_map:
+    NORMAL: healthy
+    PNEUMONIA: sick
+    COVID: sick
+  classes: [healthy, sick]
+  class_weights: null
+  priors: null
+  train_transform:
+    _target_: torchvision.transforms.v2.Compose
+    _partial_: false
+    transforms:
+      - {_target_: torchvision.transforms.v2.ToImage}
+      - {_target_: torchvision.transforms.v2.RandomResizedCrop, size: 224}
+      - {_target_: torchvision.transforms.v2.ToDtype, dtype: {_target_: torch.float32, _args_: []}, scale: true}
+  eval_transform:
+    _target_: torchvision.transforms.v2.Compose
+    _partial_: false
+    transforms:
+      - {_target_: torchvision.transforms.v2.ToImage}
+      - {_target_: torchvision.transforms.v2.Resize, size: 256}
+      - {_target_: torchvision.transforms.v2.CenterCrop, size: 224}
+      - {_target_: torchvision.transforms.v2.ToDtype, dtype: {_target_: torch.float32, _args_: []}, scale: true}
+  train_loader:
+    _target_: webdataset.WebLoader
+    _partial_: true
+    batch_size: ???
+    num_workers: 4
+    pin_memory: true
+  eval_loader:
+    _target_: webdataset.WebLoader
+    _partial_: true
+    batch_size: ???
+    num_workers: 4
+    pin_memory: true

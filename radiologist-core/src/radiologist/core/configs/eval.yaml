@@ -1,0 +1,24 @@
+# @package _global_
+defaults:
+  - paths
+  - extras
+  - hydra: default
+  - trainer
+  - module: resnet50
+  - module/loss: focal_loss
+  - module/metric: fbeta_score
+  - datamodule: default
+  - strategy: auto
+  - loggers: null
+  - callbacks: default
+  - debug: null
+  - profiler: null
+  - _self_
+
+stage: eval
+ckpt_path: ???
+seed: 42
+tags: null
+train: false
+test: true
+optimized_metric: test_score
