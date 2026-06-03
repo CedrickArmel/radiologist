@@ -22,12 +22,16 @@
 
 from __future__ import annotations
 
+import os
 from functools import partial
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import lightning as L
 import torch
 from torchmetrics import MaxMetric, MeanMetric, Metric
+from torchmetrics.utilities import dim_zero_cat
+
+from radiologist.utils.ml import initialize_weights
 
 
 class LModule(L.LightningModule):
@@ -50,7 +54,7 @@ class LModule(L.LightningModule):
         metric: partial,  # type: ignore[type-arg]
         optimizer: partial,  # type: ignore[type-arg]
         scheduler: Optional[partial] = None,  # type: ignore[type-arg]
-        trainable_layers: Optional[Dict[str, List]] = None,
+        trainable_layers: Optional[Dict[str, Any]] = None,
         priors: Optional[List[float]] = None,
     ) -> None:
         super().__init__()
@@ -61,7 +65,6 @@ class LModule(L.LightningModule):
 
         self.val_score: Metric = metric()
         self.test_score: Metric = metric()
-        self.train_score: Metric = metric()
 
         _kw = dict(
             compute_on_cpu=self.val_score.compute_on_cpu,
@@ -74,6 +77,93 @@ class LModule(L.LightningModule):
         self.test_loss = MeanMetric(**_kw)
 
         self.output: List[torch.Tensor] = []
+
+    def setup(self, stage: str) -> None:
+        """On 'fit': configure trainable params and (optionally) bias priors.
+
+        Transfer-learning (trainable_layers is not None):
+            freeze all -> selective unfreeze -> prior bias init if priors set.
+        From scratch (trainable_layers is None):
+            re-initialise net weights with initialize_weights(net, dist="normal").
+        """
+        trainable_layers = self.hparams.get("trainable_layers", None)  # type: ignore[union-attr]
+        if trainable_layers is not None:
+            self.net.apply(lambda m: self._set_layer_trainable(m, False))
+            self._set_trainable()
+            priors = self.hparams.get("priors", None)  # type: ignore[union-attr]
+            if priors is not None:
+                self._init_last_linear_bias_with_priors()
+        else:
+            initialize_weights(self.net, dist="normal")
+
+    def _set_trainable(self) -> None:
+        """Unfreeze layers named in self.hparams['trainable_layers'].
+
+        Each key is a dot-path into self.net. Value None unfreezes the whole
+        submodule; a list of ints unfreezes only submodule[idx] for each idx.
+        """
+        trainable_layers: Dict[str, Any] = self.hparams["trainable_layers"]  # type: ignore[index]
+        for dot_path, indices in trainable_layers.items():
+            submodule = self._resolve_submodule(dot_path)
+            if indices is None:
+                self._set_layer_trainable(submodule, True)
+            else:
+                for idx in indices:
+                    self._set_layer_trainable(submodule[idx], True)  # type: ignore[index]
+
+    def _resolve_submodule(self, dot_path: str) -> torch.nn.Module:
+        """Traverse self.net by dot-path; empty string returns self.net."""
+        if dot_path == "":
+            return self.net
+        module: torch.nn.Module = self.net
+        for part in dot_path.split("."):
+            if part.isdigit():
+                module = module[int(part)]  # type: ignore
+            else:
+                module = getattr(module, part)
+        return module
+
+    def _set_layer_trainable(
+        self, layer: torch.nn.Module, trainable: bool = False
+    ) -> None:
+        """Set requires_grad=trainable on every parameter of layer."""
+        for param in layer.parameters():
+            param.requires_grad = trainable
+
+    def _init_last_linear_bias_with_priors(self) -> None:
+        """Set the last nn.Linear bias in self.net to -log(priors).
+
+        Raises:
+            ValueError: if len(priors) != out_features of the last Linear bias.
+        """
+        priors: List[float] = self.hparams["priors"]  # type: ignore[index]
+        last_linear: Optional[torch.nn.Linear] = None
+        for module in self.net.modules():
+            if isinstance(module, torch.nn.Linear) and module.bias is not None:
+                last_linear = module
+        if last_linear is None:
+            return
+        if len(priors) != last_linear.out_features:
+            raise ValueError(
+                f"len(priors)={len(priors)} does not match "
+                f"out_features={last_linear.out_features}"
+            )
+        bias_val = -torch.log(torch.tensor(priors, dtype=torch.float32))
+        with torch.no_grad():
+            last_linear.bias.copy_(bias_val)
+
+    def _shared_step(
+        self, batch: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return (logits, loss, preds) for a batch.
+
+        logits = self(batch['input']); loss = self.criterion(logits, target);
+        preds  = logits.argmax(dim=1).
+        """
+        logits = self(batch["input"])
+        loss = self.criterion(logits, batch["target"])
+        preds = logits.argmax(dim=1)
+        return logits, loss, preds
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Return logits for input tensor ``x``."""
@@ -110,19 +200,13 @@ class LModule(L.LightningModule):
         self.log("weight_norm_post_clip", weight_norm, on_step=True, prog_bar=False)
 
     def training_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
-        logits = self(batch["input"])
-        loss = self.criterion(logits, batch["target"])
-        preds = logits.argmax(dim=1)
+        _, loss, _ = self._shared_step(batch)
         self.train_loss(loss)
-        self.train_score(preds, batch["target"])
         self.log("train_loss", self.train_loss, on_step=True, prog_bar=True)
-        self.log("train_score", self.train_score, on_step=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
-        logits = self(batch["input"])
-        loss = self.criterion(logits, batch["target"])
-        preds = logits.argmax(dim=1)
+        logits, loss, preds = self._shared_step(batch)
         self.val_loss(loss)
         self.val_score(preds, batch["target"])
         self.log("val_loss", self.val_loss, on_epoch=True, prog_bar=True)
@@ -130,15 +214,26 @@ class LModule(L.LightningModule):
         return logits
 
     def test_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
-        logits = self(batch["input"])
-        loss = self.criterion(logits, batch["target"])
-        preds = logits.argmax(dim=1)
+        logits, loss, preds = self._shared_step(batch)
         self.test_loss(loss)
         self.test_score(preds, batch["target"])
         self.log("test_loss", self.test_loss, on_epoch=True, prog_bar=True)
         self.log("test_score", self.test_score, on_epoch=True, prog_bar=True)
         self.output.append(preds)
         return logits
+
+    def on_test_epoch_end(self) -> None:
+        """Concatenate self.output and save to preds-rank{global_rank}.pt.
+
+        No-op when self.trainer.log_dir is None.
+        """
+        output = dim_zero_cat(self.output)
+        if self.trainer.log_dir:
+            path = os.path.join(
+                self.trainer.log_dir,
+                f"preds-rank{self.trainer.global_rank}.pt",
+            )
+            torch.save(output, path)
 
     def on_train_batch_end(self, outputs: Any, batch: Any, batch_idx: int) -> None:
         weight_norm = self._get_weight_norm()
