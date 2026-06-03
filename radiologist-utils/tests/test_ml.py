@@ -219,3 +219,53 @@ def test_public_api_imports_resolve() -> None:
         task_wrapper,
         worker_balanced_n_samples,
     )
+
+
+# ---------------------------------------------------------------------------
+# print_config_tree / enforce_tags re-export
+# ---------------------------------------------------------------------------
+
+
+def test_print_config_tree_and_enforce_tags_importable_from_ml() -> None:
+    from radiologist.utils.ml import enforce_tags, print_config_tree  # noqa: F401
+
+    assert callable(print_config_tree)
+    assert callable(enforce_tags)
+
+
+# ---------------------------------------------------------------------------
+# log_hyperparameters — "module" key
+# ---------------------------------------------------------------------------
+
+
+class _FakeLogger:
+    def __init__(self) -> None:
+        self.logged: dict = {}
+
+    def log_hyperparams(self, params: dict) -> None:
+        self.logged.update(params)
+
+
+class _FakeTrainer:
+    def __init__(self) -> None:
+        self.logger = _FakeLogger()
+
+
+class _FakeModule:
+    pass
+
+
+def test_log_hyperparameters_logs_module_name_from_module_key() -> None:
+    from radiologist.utils.ml import log_hyperparameters
+
+    trainer = _FakeTrainer()
+    module = _FakeModule()
+    log_hyperparameters({"cfg": {}, "module": module, "trainer": trainer})
+    assert trainer.logger.logged.get("module") == "_FakeModule"
+
+
+def test_log_hyperparameters_does_not_raise_when_module_key_absent() -> None:
+    from radiologist.utils.ml import log_hyperparameters
+
+    trainer = _FakeTrainer()
+    log_hyperparameters({"cfg": {}, "trainer": trainer})
