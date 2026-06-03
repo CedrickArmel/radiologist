@@ -393,3 +393,108 @@ def test_on_test_epoch_end_is_noop_when_log_dir_is_none(module, fake_batch):
     module._trainer = mock_trainer
 
     module.on_test_epoch_end()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# AC: grad-norm hook — on_before_optimizer_step always fires
+# ---------------------------------------------------------------------------
+
+
+def test_on_before_optimizer_step_logs_grad_norm_without_clipping(module, fake_batch):
+    """on_before_optimizer_step must log grad_norm on every optimizer step."""
+    logged: dict = {}
+    module.log = lambda name, value, **kw: logged.update({name: value})
+
+    module.training_step(fake_batch, batch_idx=0)
+    optimizer = module.configure_optimizers()["optimizer"]
+    module.on_before_optimizer_step(optimizer)
+
+    assert "grad_norm" in logged
+
+
+def test_grad_norm_value_is_non_negative(module, fake_batch):
+    """grad_norm logged by on_before_optimizer_step must be >= 0."""
+    logged: dict = {}
+    module.log = lambda name, value, **kw: logged.update({name: value})
+
+    module.training_step(fake_batch, batch_idx=0)
+    optimizer = module.configure_optimizers()["optimizer"]
+    module.on_before_optimizer_step(optimizer)
+
+    assert logged["grad_norm"] >= 0
+
+
+# ---------------------------------------------------------------------------
+# AC: configure_gradient_clipping logs grad_norm_post_clip, not weight_norm_post_clip
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_trainer(clip_val: float = 1.0) -> MagicMock:
+    """Return a minimal Trainer mock that satisfies clip_gradients internals."""
+    mock_trainer = MagicMock()
+    mock_trainer.gradient_clip_val = clip_val
+    mock_trainer.gradient_clip_algorithm = "norm"
+    return mock_trainer
+
+
+def test_configure_gradient_clipping_logs_grad_norm_post_clip(module, fake_batch):
+    """configure_gradient_clipping must log grad_norm_post_clip after clipping."""
+    logged: dict = {}
+    module.log = lambda name, value, **kw: logged.update({name: value})
+    module._trainer = _make_mock_trainer(clip_val=1.0)
+
+    module.training_step(fake_batch, batch_idx=0)
+    optimizer = module.configure_optimizers()["optimizer"]
+    module.configure_gradient_clipping(
+        optimizer, gradient_clip_val=1.0, gradient_clip_algorithm="norm"
+    )
+
+    assert "grad_norm_post_clip" in logged
+
+
+def test_grad_norm_post_clip_is_at_most_clip_threshold(module, fake_batch):
+    """Post-clip grad norm must be <= gradient_clip_val for norm-based clipping."""
+    logged: dict = {}
+    module.log = lambda name, value, **kw: logged.update({name: value})
+    clip_val = 0.1
+    module._trainer = _make_mock_trainer(clip_val=clip_val)
+
+    module.training_step(fake_batch, batch_idx=0)
+    optimizer = module.configure_optimizers()["optimizer"]
+    module.configure_gradient_clipping(
+        optimizer, gradient_clip_val=clip_val, gradient_clip_algorithm="norm"
+    )
+
+    assert float(logged["grad_norm_post_clip"]) <= clip_val + 1e-6
+
+
+def test_configure_gradient_clipping_does_not_log_weight_norm_post_clip(
+    module, fake_batch
+):
+    """configure_gradient_clipping must NOT log weight_norm_post_clip."""
+    logged: dict = {}
+    module.log = lambda name, value, **kw: logged.update({name: value})
+    module._trainer = _make_mock_trainer(clip_val=1.0)
+
+    module.training_step(fake_batch, batch_idx=0)
+    optimizer = module.configure_optimizers()["optimizer"]
+    module.configure_gradient_clipping(
+        optimizer, gradient_clip_val=1.0, gradient_clip_algorithm="norm"
+    )
+
+    assert "weight_norm_post_clip" not in logged
+
+
+# ---------------------------------------------------------------------------
+# AC: on_train_batch_end still logs weight_norm
+# ---------------------------------------------------------------------------
+
+
+def test_on_train_batch_end_logs_weight_norm(module, fake_batch):
+    """on_train_batch_end must log weight_norm on every training batch."""
+    logged: dict = {}
+    module.log = lambda name, value, **kw: logged.update({name: value})
+
+    module.on_train_batch_end(outputs=None, batch=fake_batch, batch_idx=0)
+
+    assert "weight_norm" in logged

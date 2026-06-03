@@ -183,21 +183,27 @@ class LModule(L.LightningModule):
             "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
         }
 
+    def on_before_optimizer_step(self, optimizer: Any) -> None:
+        """Log pre-clip gradient L2 norm. Fires every optimizer step."""
+        grad_norm = self._get_grad_norm()
+        self.log("grad_norm", grad_norm, on_step=True, prog_bar=False)
+
     def configure_gradient_clipping(
         self,
         optimizer: Any,
         gradient_clip_val: Optional[float] = None,
         gradient_clip_algorithm: Optional[str] = None,
     ) -> None:
-        grad_norm = self._get_grad_norm()
-        self.log("grad_norm", grad_norm, on_step=True, prog_bar=False)
+        """Clip gradients, then log post-clip grad norm."""
         self.clip_gradients(
             optimizer,
             gradient_clip_val=gradient_clip_val,
             gradient_clip_algorithm=gradient_clip_algorithm,
         )
-        weight_norm = self._get_weight_norm()
-        self.log("weight_norm_post_clip", weight_norm, on_step=True, prog_bar=False)
+        grad_norm_post_clip = self._get_grad_norm()
+        self.log(
+            "grad_norm_post_clip", grad_norm_post_clip, on_step=True, prog_bar=False
+        )
 
     def training_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
         _, loss, _ = self._shared_step(batch)
