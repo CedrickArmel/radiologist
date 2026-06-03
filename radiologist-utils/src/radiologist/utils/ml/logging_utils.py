@@ -27,10 +27,10 @@ from lightning_utilities.core.rank_zero import (
 
 @rank_zero_only
 def log_hyperparameters(object_dict: dict) -> None:
-    """Log hyperparameters from cfg/model/trainer to every trainer logger.
+    """Log hyperparameters from cfg/module/trainer to every trainer logger.
 
     Args:
-        object_dict: Must contain keys "cfg" (DictConfig), "model"
+        object_dict: Must contain keys "cfg" (DictConfig), "module"
             (LightningModule), and "trainer" (Trainer). No-op when the
             trainer has no logger attached.
     """
@@ -44,8 +44,8 @@ def log_hyperparameters(object_dict: dict) -> None:
     if cfg is not None:
         hparams["cfg"] = cfg
 
-    model = object_dict.get("model")
-    if model is not None:
-        hparams["model"] = type(model).__name__
+    module = object_dict.get("module")
+    if module is not None:
+        hparams["module"] = type(module).__name__
 
     trainer.logger.log_hyperparams(hparams)
