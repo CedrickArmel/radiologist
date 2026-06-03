@@ -43,7 +43,7 @@
 # SOFTWARE.
 
 from .loggers import Logger
-from .pylogger import RankedLogger
+from .ml.pylogger import RankedLogger
 from .readers import (
     BaseImageReader,
     ImageReader,
