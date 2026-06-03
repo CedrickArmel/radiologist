@@ -41,7 +41,7 @@ def net():
 
 @pytest.fixture
 def loss_fn():
-    return FocalLoss(gamma=2.0, reduction="mean")
+    return FocalLoss(gamma=2.0, reduction="mean", to_onehot_y=True)
 
 
 @pytest.fixture
