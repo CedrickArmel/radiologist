@@ -29,6 +29,7 @@ from .instantiators import (
 )
 from .logging_utils import log_hyperparameters
 from .nn import initialize_weights
+from .pylogger import RankedLogger
 from .rich_utils import enforce_tags, print_config_tree
 from .seeding import get_seeded_generator, seed_worker, set_seed
 
@@ -43,6 +44,7 @@ __all__ = [
     "instantiate_loggers",
     "log_hyperparameters",
     "print_config_tree",
+    "RankedLogger",
     "seed_worker",
     "sequential_scheduler",
     "set_seed",

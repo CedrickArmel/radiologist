@@ -23,6 +23,8 @@
 import logging
 from typing import Any, Mapping, MutableMapping, Optional, Tuple
 
+from lightning_utilities.core.rank_zero import rank_zero_only as _rank_zero_only  # type: ignore[import-untyped]
+
 
 class RankedLogger(logging.LoggerAdapter):
     """Logger adapter that prefixes messages with the distributed process rank.
@@ -41,7 +43,7 @@ class RankedLogger(logging.LoggerAdapter):
     ) -> None:
         logger = logging.getLogger(name)
         super().__init__(logger, extra or {})
-        self.rank_zero_only = rank_zero_only
+        self._rank_zero_only = rank_zero_only
 
     def log(  # type: ignore[override]
         self,
@@ -50,16 +52,13 @@ class RankedLogger(logging.LoggerAdapter):
         *args: object,
         **kwargs: object,
     ) -> None:
-        rank: Optional[int] = kwargs.pop("rank", None)  # type: ignore[assignment]
+        rank: int = getattr(_rank_zero_only, "rank", 0)
 
-        if self.rank_zero_only:
-            if rank is None:
-                raise RuntimeError("rank must be provided when rank_zero_only=True")
-            if rank != 0:
-                return
+        if self._rank_zero_only and rank != 0:
+            return
 
         if self.isEnabledFor(level):
-            prefix = f"[rank {rank}] " if rank is not None else ""
+            prefix = f"[rank {rank}] "
             full_msg, kwargs = self.process(f"{prefix}{msg}", kwargs)  # type: ignore[arg-type,assignment]
             self.logger.log(level, full_msg, *args, **kwargs)
 

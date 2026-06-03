@@ -21,42 +21,68 @@
 # SOFTWARE.
 
 import logging
+from unittest.mock import patch
 
 import pytest
 
 from radiologist.utils import RankedLogger
 
 
-class TestRankedLoggerPrefixesRank:
-    def test_message_is_emitted_with_rank_prefix(self, caplog):
+class TestRankedLoggerAutoDetectsRank:
+    def test_log_without_rank_kwarg_emits_rank_zero_prefix_in_single_process(
+        self, caplog
+    ):
         logger = RankedLogger(rank_zero_only=False)
         with caplog.at_level(logging.DEBUG):
-            logger.log(logging.INFO, "hello", rank=2)
-        assert any("2" in record.message for record in caplog.records)
+            logger.log(logging.INFO, "hello")
+        assert any("[rank 0]" in record.message for record in caplog.records)
 
-    def test_message_emitted_when_rank_zero_only_and_rank_is_zero(self, caplog):
+    def test_rank_zero_only_does_not_raise_when_no_rank_kwarg_passed(self):
+        logger = RankedLogger(rank_zero_only=True)
+        try:
+            logger.log(logging.INFO, "hello")
+        except RuntimeError:
+            pytest.fail(
+                "RankedLogger raised RuntimeError when rank_zero_only=True "
+                "and no rank= kwarg was passed"
+            )
+
+    def test_rank_zero_only_suppresses_message_when_detected_rank_is_nonzero(
+        self, caplog
+    ):
         logger = RankedLogger(rank_zero_only=True)
         with caplog.at_level(logging.DEBUG):
-            logger.log(logging.INFO, "hello", rank=0)
-        assert len(caplog.records) > 0
-
-    def test_message_suppressed_when_rank_zero_only_and_rank_is_nonzero(self, caplog):
-        logger = RankedLogger(rank_zero_only=True)
-        with caplog.at_level(logging.DEBUG):
-            logger.log(logging.INFO, "hello", rank=1)
+            with patch(
+                "radiologist.utils.ml.pylogger._rank_zero_only",
+                **{"rank": 1},
+            ) as mock_rzo:
+                mock_rzo.rank = 1
+                logger.log(logging.INFO, "hello")
         assert len(caplog.records) == 0
 
-    def test_raises_runtime_error_when_rank_zero_only_and_rank_is_unset(self):
+    def test_rank_zero_only_emits_message_when_detected_rank_is_zero(self, caplog):
         logger = RankedLogger(rank_zero_only=True)
-        with pytest.raises(RuntimeError):
+        with caplog.at_level(logging.DEBUG):
             logger.log(logging.INFO, "hello")
+        assert len(caplog.records) > 0
 
 
-class TestRankedLoggerPublicExport:
+class TestRankedLoggerPublicExports:
     def test_ranked_logger_importable_from_radiologist_utils(self):
         from radiologist.utils import RankedLogger as RL
 
         assert RL is not None
+
+    def test_ranked_logger_importable_from_radiologist_utils_ml(self):
+        from radiologist.utils.ml import RankedLogger as RL
+
+        assert RL is not None
+
+    def test_both_imports_resolve_to_same_class(self):
+        from radiologist.utils import RankedLogger as RL1
+        from radiologist.utils.ml import RankedLogger as RL2
+
+        assert RL1 is RL2
 
 
 class TestLogHyperparameters:
