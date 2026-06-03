@@ -89,19 +89,22 @@ def _make_fake_wandb_module(tmp_path: Path, run_id: str, precision: str) -> Magi
     fake = MagicMock()
     fake.Api.return_value = _make_fake_wandb_api(tmp_path, run_id, precision)
 
-    linked_artifact = MagicMock()
-    linked_artifact.qualified_name = f"wandb-registry-model/{run_id}:latest"
+    det_art_mock = MagicMock()
+    det_art_mock.qualified_name = f"wandb-registry-model/model-{run_id}:latest"
 
-    artifact_log_mock = MagicMock()
-    artifact_log_mock.qualified_name = f"wandb-registry-model/{run_id}:latest"
-    artifact_log_mock.wait.return_value = None
+    mcd_art_mock = MagicMock()
+    mcd_art_mock.qualified_name = f"wandb-registry-model/model-{run_id}-mcd:latest"
+    mcd_art_mock.wait.return_value = None
+
+    fake.Artifact.side_effect = [det_art_mock, mcd_art_mock]
+    fake._det_art_mock = det_art_mock
+    fake._mcd_art_mock = mcd_art_mock
 
     run_mock = MagicMock()
     run_mock.__enter__ = MagicMock(return_value=run_mock)
     run_mock.__exit__ = MagicMock(return_value=False)
-    run_mock.log_artifact.return_value = artifact_log_mock
+    run_mock.log_artifact.side_effect = [det_art_mock, mcd_art_mock]
     fake.init.return_value = run_mock
-    fake.Artifact.return_value = artifact_log_mock
 
     return fake
 
@@ -485,3 +488,129 @@ def test_pull_checkpoint_and_promote_importable_from_core():
 
     assert callable(pull_checkpoint)
     assert callable(promote_to_registry)
+
+
+# ---------------------------------------------------------------------------
+# AC: add_file called for deterministic artifact with det_path
+# ---------------------------------------------------------------------------
+
+
+def test_promote_calls_add_file_on_det_artifact_with_det_path(tmp_path):
+    import radiologist.core.registry.promote as promo_mod
+
+    net = _make_tiny_net()
+    lm = _make_lmodule(net)
+    run_id = "abc123"
+    fake_wandb = _make_fake_wandb_module(tmp_path, run_id, "16-mixed")
+    ckpt_path = tmp_path / "model.ckpt"
+    ckpt_path.write_text("placeholder")
+
+    with (
+        patch.object(promo_mod, "wandb", fake_wandb),
+        patch.object(promo_mod, "pull_checkpoint", return_value=str(ckpt_path)),
+        patch.object(promo_mod.LModule, "load_from_checkpoint", return_value=lm),
+    ):
+        promo_mod.promote_to_registry(
+            artifact="entity/project/model:best",
+            collection="my-collection",
+            registry_alias="latest",
+            input_shape=(1, 3, 8, 8),
+            classes=["healthy", "sick"],
+            cam_target_layer="2",
+            local_dir=str(tmp_path),
+        )
+
+    det_art_mock = fake_wandb._det_art_mock
+    expected_det_path = str(tmp_path / f"model-{run_id}.onnx")
+    det_art_mock.add_file.assert_called_once_with(expected_det_path)
+
+
+# ---------------------------------------------------------------------------
+# AC: add_file called for MCD artifact with mcd_path
+# ---------------------------------------------------------------------------
+
+
+def test_promote_calls_add_file_on_mcd_artifact_with_mcd_path(tmp_path):
+    import radiologist.core.registry.promote as promo_mod
+
+    net = _make_tiny_net()
+    lm = _make_lmodule(net)
+    run_id = "abc123"
+    fake_wandb = _make_fake_wandb_module(tmp_path, run_id, "16-mixed")
+    ckpt_path = tmp_path / "model.ckpt"
+    ckpt_path.write_text("placeholder")
+
+    with (
+        patch.object(promo_mod, "wandb", fake_wandb),
+        patch.object(promo_mod, "pull_checkpoint", return_value=str(ckpt_path)),
+        patch.object(promo_mod.LModule, "load_from_checkpoint", return_value=lm),
+    ):
+        promo_mod.promote_to_registry(
+            artifact="entity/project/model:best",
+            collection="my-collection",
+            registry_alias="latest",
+            input_shape=(1, 3, 8, 8),
+            classes=["healthy", "sick"],
+            cam_target_layer="2",
+            local_dir=str(tmp_path),
+        )
+
+    mcd_art_mock = fake_wandb._mcd_art_mock
+    expected_mcd_path = str(tmp_path / f"model-{run_id}-mcd.onnx")
+    mcd_art_mock.add_file.assert_called_once_with(expected_mcd_path)
+
+
+# ---------------------------------------------------------------------------
+# AC: for each artifact, log_artifact is called before link
+# ---------------------------------------------------------------------------
+
+
+def test_promote_calls_log_artifact_before_link_for_each_artifact(tmp_path):
+    import radiologist.core.registry.promote as promo_mod
+
+    net = _make_tiny_net()
+    lm = _make_lmodule(net)
+    run_id = "abc123"
+    fake_wandb = _make_fake_wandb_module(tmp_path, run_id, "16-mixed")
+    ckpt_path = tmp_path / "model.ckpt"
+    ckpt_path.write_text("placeholder")
+
+    with (
+        patch.object(promo_mod, "wandb", fake_wandb),
+        patch.object(promo_mod, "pull_checkpoint", return_value=str(ckpt_path)),
+        patch.object(promo_mod.LModule, "load_from_checkpoint", return_value=lm),
+    ):
+        promo_mod.promote_to_registry(
+            artifact="entity/project/model:best",
+            collection="my-collection",
+            registry_alias="latest",
+            input_shape=(1, 3, 8, 8),
+            classes=["healthy", "sick"],
+            cam_target_layer="2",
+            local_dir=str(tmp_path),
+        )
+
+    run_mock = fake_wandb.init.return_value.__enter__.return_value
+    det_art_mock = fake_wandb._det_art_mock
+    mcd_art_mock = fake_wandb._mcd_art_mock
+
+    # log_artifact must have been called for both artifacts
+    run_mock.log_artifact.assert_any_call(det_art_mock)
+    run_mock.log_artifact.assert_any_call(mcd_art_mock)
+
+    # For det artifact: add_file then log_artifact then link
+    det_add_file_order = det_art_mock.add_file.call_args_list
+    det_link_order = det_art_mock.link.call_args_list
+    assert len(det_add_file_order) == 1, "det add_file must be called exactly once"
+    assert len(det_link_order) == 1, "det link must be called exactly once"
+
+    # Verify ordering via mock_calls on each artifact mock
+    det_call_names = [c[0] for c in det_art_mock.mock_calls]
+    assert det_call_names.index("add_file") < det_call_names.index(
+        "link"
+    ), "det: add_file must be called before link"
+
+    mcd_call_names = [c[0] for c in mcd_art_mock.mock_calls]
+    assert mcd_call_names.index("add_file") < mcd_call_names.index(
+        "link"
+    ), "mcd: add_file must be called before link"

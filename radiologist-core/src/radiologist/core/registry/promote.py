@@ -228,23 +228,25 @@ def promote_to_registry(
     onnx.save(mcd_model, mcd_path)
 
     # =====================================================================
-    # Link both files to W&B Model Registry
+    # Upload and link both artifacts to W&B Model Registry
     # =====================================================================
     with wandb.init(job_type="registry-promote") as run:
         det_art = wandb.Artifact(
             name=f"model-{run_id}",
             type="model",
         )
-        det_art.link(collection, aliases=[registry_alias])
+        det_art.add_file(det_path)
         run.log_artifact(det_art)
+        det_art.link(collection, aliases=[registry_alias])
 
         mcd_art = wandb.Artifact(
             name=f"model-{run_id}-mcd",
             type="model",
         )
-        mcd_art.link(collection, aliases=[registry_alias])
+        mcd_art.add_file(mcd_path)
         linked = run.log_artifact(mcd_art)
         linked.wait()
+        mcd_art.link(collection, aliases=[registry_alias])
         qualified_name: str = linked.qualified_name
 
     return qualified_name
