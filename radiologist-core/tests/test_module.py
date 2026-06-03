@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 from functools import partial
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -151,3 +152,244 @@ def test_on_validation_epoch_end_tracks_best_val_score(module, fake_batch):
     module.validation_step(fake_batch, batch_idx=0)
     module.on_validation_epoch_end()
     assert hasattr(module, "val_score_best")
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for setup / transfer-learning tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def small_net():
+    """A tiny sequential net with a named submodule and a final Linear."""
+    net = nn.Sequential(
+        nn.Linear(IN_FEATURES, 8),  # index 0
+        nn.ReLU(),  # index 1
+        nn.Linear(8, NUM_CLASSES),  # index 2  ← last Linear
+    )
+    return net
+
+
+@pytest.fixture
+def module_scratch(small_net, loss_fn, metric_partial, optimizer_partial):
+    """LModule with trainable_layers=None (from-scratch mode)."""
+    return LModule(
+        net=small_net,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers=None,
+    )
+
+
+@pytest.fixture
+def module_tl(small_net, loss_fn, metric_partial, optimizer_partial):
+    """LModule with transfer-learning: only index 2 (last Linear) trainable."""
+    return LModule(
+        net=small_net,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers={"2": None},
+    )
+
+
+@pytest.fixture
+def module_tl_with_priors(small_net, loss_fn, metric_partial, optimizer_partial):
+    """LModule with transfer-learning and class priors."""
+    return LModule(
+        net=small_net,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers={"2": None},
+        priors=[0.3, 0.7],
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC: setup(fit) from-scratch re-initialises all params and leaves them trainable
+# ---------------------------------------------------------------------------
+
+
+def test_setup_from_scratch_all_params_remain_trainable(module_scratch):
+    module_scratch.setup("fit")
+    all_trainable = all(p.requires_grad for p in module_scratch.net.parameters())
+    assert all_trainable
+
+
+def test_setup_from_scratch_reinitialises_weights(
+    small_net, loss_fn, metric_partial, optimizer_partial
+):
+    torch.manual_seed(0)
+    original_weight = small_net[0].weight.clone()
+
+    torch.manual_seed(0)
+    mod = LModule(
+        net=small_net,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers=None,
+    )
+    mod.setup("fit")
+    assert not torch.equal(mod.net[0].weight, original_weight)
+
+
+# ---------------------------------------------------------------------------
+# AC: setup(fit) transfer-learning freezes all then selectively unfreezes
+# ---------------------------------------------------------------------------
+
+
+def test_setup_tl_only_named_layers_are_trainable(module_tl, small_net):
+    module_tl.setup("fit")
+    # layer 2 (last Linear) should be trainable
+    for p in small_net[2].parameters():
+        assert p.requires_grad
+    # layers 0 and 1 should be frozen
+    for p in small_net[0].parameters():
+        assert not p.requires_grad
+
+
+def test_setup_tl_none_value_unfreezes_whole_submodule(
+    small_net, loss_fn, metric_partial, optimizer_partial
+):
+    """trainable_layers with None value unfreezes entire named submodule."""
+    mod = LModule(
+        net=small_net,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers={"2": None},
+    )
+    mod.setup("fit")
+    for p in small_net[2].parameters():
+        assert p.requires_grad
+
+
+def test_setup_tl_list_of_indices_unfreezes_only_those(
+    loss_fn, metric_partial, optimizer_partial
+):
+    """trainable_layers with list of ints unfreezes only those submodule indices."""
+    outer = nn.Sequential(
+        nn.Sequential(nn.Linear(4, 4), nn.ReLU()),  # index 0
+        nn.Sequential(nn.Linear(4, 2), nn.ReLU()),  # index 1
+    )
+    mod = LModule(
+        net=outer,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers={"": [1]},
+    )
+    mod.setup("fit")
+    for p in outer[1].parameters():
+        assert p.requires_grad
+    for p in outer[0].parameters():
+        assert not p.requires_grad
+
+
+# ---------------------------------------------------------------------------
+# AC: priors bias initialisation
+# ---------------------------------------------------------------------------
+
+
+def test_setup_tl_with_priors_sets_last_linear_bias(module_tl_with_priors, small_net):
+    module_tl_with_priors.setup("fit")
+    expected = -torch.log(torch.tensor([0.3, 0.7], dtype=torch.float32))
+    actual = small_net[2].bias.data
+    assert torch.allclose(actual, expected, atol=1e-5)
+
+
+def test_setup_tl_priors_length_mismatch_raises_value_error(
+    small_net, loss_fn, metric_partial, optimizer_partial
+):
+    mod = LModule(
+        net=small_net,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers={"2": None},
+        priors=[0.5, 0.3, 0.2],  # 3 priors vs 2 out_features
+    )
+    with pytest.raises(ValueError):
+        mod.setup("fit")
+
+
+def test_setup_tl_no_priors_leaves_last_linear_bias_unchanged(
+    small_net, loss_fn, metric_partial, optimizer_partial
+):
+    original_bias = small_net[2].bias.data.clone()
+    mod = LModule(
+        net=small_net,
+        loss=loss_fn,
+        metric=metric_partial,
+        optimizer=optimizer_partial,
+        trainable_layers={"2": None},
+        priors=None,
+    )
+    mod.setup("fit")
+    assert torch.equal(small_net[2].bias.data, original_bias)
+
+
+# ---------------------------------------------------------------------------
+# AC: train_score removed
+# ---------------------------------------------------------------------------
+
+
+def test_training_step_does_not_log_train_score(module, fake_batch):
+    assert not hasattr(module, "train_score")
+
+
+def test_training_step_returns_finite_scalar_loss(module, fake_batch):
+    loss = module.training_step(fake_batch, batch_idx=0)
+    assert loss.shape == torch.Size([])
+    assert torch.isfinite(loss)
+
+
+# ---------------------------------------------------------------------------
+# AC: shared step — validation_step and test_step return correct logit shape
+# ---------------------------------------------------------------------------
+
+
+def test_validation_step_returns_logits_correct_shape(module, fake_batch):
+    logits = module.validation_step(fake_batch, batch_idx=0)
+    assert logits.shape == (BATCH_SIZE, NUM_CLASSES)
+
+
+def test_test_step_returns_logits_correct_shape(module, fake_batch):
+    logits = module.test_step(fake_batch, batch_idx=0)
+    assert logits.shape == (BATCH_SIZE, NUM_CLASSES)
+
+
+# ---------------------------------------------------------------------------
+# AC: on_test_epoch_end saves concatenated preds to log_dir
+# ---------------------------------------------------------------------------
+
+
+def test_on_test_epoch_end_saves_preds_file(module, fake_batch, tmp_path):
+    module.test_step(fake_batch, batch_idx=0)
+    module.test_step(fake_batch, batch_idx=1)
+
+    mock_trainer = MagicMock()
+    mock_trainer.log_dir = str(tmp_path)
+    mock_trainer.global_rank = 0
+    module._trainer = mock_trainer
+
+    module.on_test_epoch_end()
+
+    expected_path = tmp_path / "preds-rank0.pt"
+    assert expected_path.exists()
+    saved = torch.load(str(expected_path), weights_only=True)
+    assert saved.shape == (BATCH_SIZE * 2,)
+
+
+def test_on_test_epoch_end_is_noop_when_log_dir_is_none(module, fake_batch):
+    module.test_step(fake_batch, batch_idx=0)
+
+    mock_trainer = MagicMock()
+    mock_trainer.log_dir = None
+    mock_trainer.global_rank = 0
+    module._trainer = mock_trainer
+
+    module.on_test_epoch_end()  # must not raise
