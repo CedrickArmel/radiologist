@@ -89,7 +89,7 @@ Three active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`
 
 Each package uses `namespace = true` (no `__init__.py` at the `radiologist/` level). Add new members to `[tool.uv.workspace] members` and `[tool.uv.sources]` in the root `pyproject.toml`.
 
-Each package sets `module-name = "radiocovid.*"` in its `pyproject.toml` (intentional — do not change). Sources live under `src/radiologist/`; tests import via a `sys.path.insert(0, src/)` shim in each package's `tests/conftest.py`. Mirror this pattern when adding new packages.
+Each package sets `module-name = "radiologist.*"` in its `pyproject.toml` (intentional — do not change). Sources live under `src/radiologist/`; tests import via a `sys.path.insert(0, src/)` shim in each package's `tests/conftest.py`. Mirror this pattern when adding new packages.
 
 ### Requirements
 
@@ -124,7 +124,7 @@ Run `pyenv [command] --help` to display `pyenv`'s help.
 
 ### Worktrees
 
-Always create worktrees in `PROJECT-ROOT`/.claude/worktrees to maintain clean repo - No exceptions.
+Always create worktrees in `PROJECT-ROOT`/.claude/worktrees to maintain clean repo. Never nest worktrees - No exceptions.
 
 [Environment setup](#environment-setup) still apply in worktrees - No exceptions.
 
@@ -165,6 +165,7 @@ Fixtures defined in a `conftest.py` can be used by any test in that package with
 - Commitizen convention enforced via commitizen's pre-commit hook. Valid prefix types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `revert`, `style`.
 - Stacked PRs: branches that depend on other feature branches must target the dependency branch, not `main`. Adjust `gh pr create --base` accordingly.
 - After a `pre-commit.ci` remote auto-fix commit, run `git fetch origin <branch> && git rebase origin/<branch>` before the next push to avoid diverged-branch rejection.
+- Keep git tree linear.
 
 ## Gotchas
 
@@ -173,3 +174,4 @@ Fixtures defined in a `conftest.py` can be used by any test in that package with
 - **[LICENSE]** You MUST NOT add the license header in your code yourself. `pre-commit` we do that.
 - **[MEMORY]** Generalise before saving: a gotcha observed on one instance (a class, function, OS, or library) should be written at the level of the broader behavior it exemplifies — not pinned to the specific case that triggered it. When writing a memory or gotcha, ask: is this specific to X, or is X just one case of a wider rule? Write the wider rule; mention X only as an example if it aids clarity.
 - **[Extra]** For optional extra deps, write their imports (e.g. `from prefect import ...`) wrapped in `try/except ImportError` with stub no-ops so modules import cleanly without the extra installed.
+- **[Context]** Large output floods the context window and wastes tokens. Keep Bash output small: pipe through `grep`/`head`/`tail` to extract only what matters, or redirect to `$TMPDIR/out.txt` and read it selectively with the Read tool (`offset`/`limit`). Never `cat` a file via Bash — use the Read tool directly. Never dump raw `find`, `tree`, or long test output into context without filtering.
