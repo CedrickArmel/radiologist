@@ -76,13 +76,10 @@ class FocalLoss(nn.Module):
         else:
             probs = torch.sigmoid(logits)
 
-        if target.dim() == 1:
+        if self.to_onehot_y and target.dim() == 1:
             target_oh = F.one_hot(target, num_classes=num_classes).float()
         else:
             target_oh = target.float()
-
-        if self.to_onehot_y and target.dim() == 1:
-            target_oh = F.one_hot(target, num_classes=num_classes).float()
 
         pt = (probs * target_oh).sum(dim=1)
         focal_weight = self.alpha * (1.0 - pt) ** self.gamma
