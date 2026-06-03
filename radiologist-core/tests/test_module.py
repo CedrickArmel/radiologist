@@ -148,10 +148,47 @@ def test_save_hyperparameters_excludes_net_and_loss(module):
     assert "loss" not in module.hparams
 
 
-def test_on_validation_epoch_end_tracks_best_val_score(module, fake_batch):
+# ---------------------------------------------------------------------------
+# AC: val_score_best removed — BestMetricCallback is the single source of truth
+# ---------------------------------------------------------------------------
+
+
+def test_lmodule_does_not_expose_val_score_best(module):
+    assert not hasattr(module, "val_score_best")
+
+
+def test_lmodule_does_not_define_on_validation_epoch_end(module):
+    assert "on_validation_epoch_end" not in type(module).__dict__
+
+
+def test_best_metric_callback_produces_best_val_score_in_callback_metrics(
+    module, fake_batch
+):
+    from unittest.mock import MagicMock
+
+    from radiologist.core import BestMetricCallback
+
+    cb = BestMetricCallback(monitor="val_score", mode="max")
+    trainer = MagicMock()
+    trainer.callback_metrics = {}
+    trainer.loggers = []
+
     module.validation_step(fake_batch, batch_idx=0)
-    module.on_validation_epoch_end()
-    assert hasattr(module, "val_score_best")
+    val_score_value = module.val_score.compute()
+    trainer.callback_metrics["val_score"] = val_score_value
+
+    cb.on_validation_epoch_end(trainer, module)
+
+    assert "best_val_score" in trainer.callback_metrics
+
+
+def test_validation_step_still_logs_val_score(module, fake_batch):
+    logged: dict = {}
+    module.log = lambda name, value, **kw: logged.update({name: value})
+
+    module.validation_step(fake_batch, batch_idx=0)
+
+    assert "val_score" in logged
 
 
 # ---------------------------------------------------------------------------

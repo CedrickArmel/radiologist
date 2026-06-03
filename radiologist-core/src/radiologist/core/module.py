@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import lightning as L
 import torch
-from torchmetrics import MaxMetric, MeanMetric, Metric
+from torchmetrics import MeanMetric, Metric
 from torchmetrics.utilities import dim_zero_cat
 
 from radiologist.utils.ml import initialize_weights
@@ -71,7 +71,6 @@ class LModule(L.LightningModule):
             sync_on_compute=self.val_score.sync_on_compute,
             process_group=self.val_score.process_group,
         )
-        self.val_score_best = MaxMetric(**_kw)
         self.train_loss = MeanMetric(**_kw)
         self.val_loss = MeanMetric(**_kw)
         self.test_loss = MeanMetric(**_kw)
@@ -244,11 +243,6 @@ class LModule(L.LightningModule):
     def on_train_batch_end(self, outputs: Any, batch: Any, batch_idx: int) -> None:
         weight_norm = self._get_weight_norm()
         self.log("weight_norm", weight_norm, on_step=True, prog_bar=False)
-
-    def on_validation_epoch_end(self) -> None:
-        score = self.val_score.compute()
-        self.val_score_best(score)
-        self.log("val_score_best", self.val_score_best.compute(), prog_bar=True)
 
     def _get_grad_norm(self) -> torch.Tensor:
         total_norm = torch.tensor(0.0)
