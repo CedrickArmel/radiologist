@@ -230,9 +230,13 @@ class LModule(L.LightningModule):
     def on_test_epoch_end(self) -> None:
         """Concatenate self.output and save to preds-rank{global_rank}.pt.
 
-        No-op when self.trainer.log_dir is None.
+        No-op when self.trainer.log_dir is None or output buffer is empty.
+        Clears the buffer after saving so repeated test() calls don't accumulate.
         """
+        if not self.output:
+            return
         output = dim_zero_cat(self.output)
+        self.output.clear()
         if self.trainer.log_dir:
             path = os.path.join(
                 self.trainer.log_dir,
@@ -245,14 +249,14 @@ class LModule(L.LightningModule):
         self.log("weight_norm", weight_norm, on_step=True, prog_bar=False)
 
     def _get_grad_norm(self) -> torch.Tensor:
-        total_norm = torch.tensor(0.0)
+        total_norm = torch.tensor(0.0, device=self.device)
         for p in self.parameters():
             if p.grad is not None:
                 total_norm += p.grad.data.norm(2) ** 2
         return total_norm**0.5
 
     def _get_weight_norm(self) -> torch.Tensor:
-        total_norm = torch.tensor(0.0)
+        total_norm = torch.tensor(0.0, device=self.device)
         for p in self.parameters():
             total_norm += p.data.norm(2) ** 2
         return total_norm**0.5
