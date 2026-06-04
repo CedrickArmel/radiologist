@@ -32,11 +32,12 @@ from radiologist.core import BestMetricCallback, WandbDefineSummaryCallback
 # ---------------------------------------------------------------------------
 
 
-def _make_trainer(metrics=None, loggers=None):
+def _make_trainer(metrics=None, loggers=None, is_global_zero=True):
     """Return a minimal trainer stub with callback_metrics and loggers."""
     trainer = MagicMock()
     trainer.callback_metrics = metrics if metrics is not None else {}
     trainer.loggers = loggers if loggers is not None else []
+    trainer.is_global_zero = is_global_zero
     return trainer
 
 
@@ -100,6 +101,41 @@ def test_best_metric_callback_logs_to_every_logger():
         logger.log_metrics.assert_called_once()
         logged = logger.log_metrics.call_args[0][0]
         assert "best_val_score" in logged
+        assert logged["best_val_score"] == pytest.approx(0.7)
+
+
+def test_best_metric_callback_skips_logger_write_on_non_global_zero_rank():
+    logger = MagicMock()
+    cb = BestMetricCallback(monitor="val_score", mode="max")
+    pl_module = MagicMock()
+
+    trainer = _make_trainer(
+        metrics={"val_score": torch.tensor(0.9)},
+        loggers=[logger],
+        is_global_zero=False,
+    )
+    cb.on_validation_epoch_end(trainer, pl_module)
+
+    logger.log_metrics.assert_not_called()
+    assert trainer.callback_metrics["best_val_score"] == pytest.approx(0.9)
+
+
+def test_best_metric_callback_writes_logger_exactly_once_per_logger_on_global_zero():
+    logger_a = MagicMock()
+    logger_b = MagicMock()
+    cb = BestMetricCallback(monitor="val_score", mode="max")
+    pl_module = MagicMock()
+
+    trainer = _make_trainer(
+        metrics={"val_score": torch.tensor(0.7)},
+        loggers=[logger_a, logger_b],
+        is_global_zero=True,
+    )
+    cb.on_validation_epoch_end(trainer, pl_module)
+
+    for logger in (logger_a, logger_b):
+        logger.log_metrics.assert_called_once()
+        logged = logger.log_metrics.call_args[0][0]
         assert logged["best_val_score"] == pytest.approx(0.7)
 
 

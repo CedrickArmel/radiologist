@@ -61,5 +61,6 @@ class BestMetricCallback(L.Callback):
         key = f"best_{self.monitor}"
         trainer.callback_metrics[key] = self._best
 
-        for logger in trainer.loggers:
-            logger.log_metrics({key: self._best})
+        if trainer.is_global_zero:
+            for logger in trainer.loggers:
+                logger.log_metrics({key: self._best})
