@@ -111,7 +111,10 @@ class WebDatasetDataModule(L.LightningDataModule):
                     )
 
         if self.priors is None and "train" in (self._shards or {}):
-            self.priors = self._compute_priors()
+            if self.trainer is None or self.trainer.is_global_zero:
+                self.priors = self._compute_priors()
+            if self.trainer is not None:
+                self.priors = self.trainer.strategy.broadcast(self.priors, src=0)
 
     def _compute_priors(self) -> List[float]:
         assert self._shards is not None
