@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 import torch
 import webdataset as wds  # type: ignore[import-untyped]
@@ -227,6 +229,119 @@ class TestPriors:
             priors=explicit,
         )
         dm.setup("fit")
+        assert dm.priors == explicit
+
+    def test_priors_equal_per_class_sample_count_fractions(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+        )
+        dm.setup("fit")
+        # shard_root has 2 ABNORMAL and 2 NORMAL train samples;
+        # classes = ["abnormal", "normal"] -> each prior = 0.5
+        assert dm.priors is not None
+        assert len(dm.priors) == len(classes)
+        for p in dm.priors:
+            assert abs(p - 0.5) < 1e-6
+
+    def test_shard_scan_runs_only_on_global_zero_rank_and_broadcast_delivers_priors(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+    ) -> None:
+        expected_priors = [0.5, 0.5]
+
+        fake_strategy = MagicMock()
+        fake_strategy.broadcast.return_value = expected_priors
+
+        fake_trainer_rank0 = MagicMock()
+        fake_trainer_rank0.is_global_zero = True
+        fake_trainer_rank0.strategy = fake_strategy
+
+        fake_trainer_rank1 = MagicMock()
+        fake_trainer_rank1.is_global_zero = False
+        fake_trainer_rank1.strategy = fake_strategy
+
+        with patch("radiologist.core.data.datamodule._count_samples") as mock_count:
+            mock_count.return_value = 2
+
+            dm_rank0 = _make_dm(
+                shard_root,
+                label_map,
+                classes,
+                train_transform,
+                eval_transform,
+                train_loader_partial,
+                eval_loader_partial,
+            )
+            dm_rank0.trainer = fake_trainer_rank0
+            dm_rank0.setup("fit")
+
+            rank0_scan_calls = mock_count.call_count
+            assert rank0_scan_calls > 0
+
+            mock_count.reset_mock()
+
+            dm_rank1 = _make_dm(
+                shard_root,
+                label_map,
+                classes,
+                train_transform,
+                eval_transform,
+                train_loader_partial,
+                eval_loader_partial,
+            )
+            dm_rank1.trainer = fake_trainer_rank1
+            dm_rank1.setup("fit")
+
+            assert mock_count.call_count == 0
+            assert dm_rank1.priors == expected_priors
+            # rank-1 passes its placeholder (None) to broadcast and receives the value
+            fake_strategy.broadcast.assert_called_with(None, src=0)
+
+    def test_no_shard_scan_when_explicit_priors_provided(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+    ) -> None:
+        explicit = [0.3, 0.7]
+        with patch("radiologist.core.data.datamodule._count_samples") as mock_count:
+            dm = _make_dm(
+                shard_root,
+                label_map,
+                classes,
+                train_transform,
+                eval_transform,
+                train_loader_partial,
+                eval_loader_partial,
+                priors=explicit,
+            )
+            dm.setup("fit")
+            assert mock_count.call_count == 0
         assert dm.priors == explicit
 
 
