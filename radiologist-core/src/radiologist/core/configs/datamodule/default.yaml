@@ -2,6 +2,7 @@
 datamodule:
   _target_: radiologist.core.WebDatasetDataModule
   shard_root: ???
+  batches_per_epoch: ???
   seed: ${seed}
   shardshuffle: 100
   label_map:

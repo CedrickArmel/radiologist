@@ -37,6 +37,7 @@ def _make_dm(
     eval_transform,
     train_loader_partial,
     eval_loader_partial,
+    batches_per_epoch: int = 10,
     **kwargs,
 ) -> WebDatasetDataModule:
     return WebDatasetDataModule(
@@ -47,6 +48,7 @@ def _make_dm(
         train_loader=train_loader_partial,
         eval_loader=eval_loader_partial,
         classes=classes,
+        batches_per_epoch=batches_per_epoch,
         **kwargs,
     )
 
@@ -89,6 +91,7 @@ class TestNumClasses:
             eval_transform=eval_transform,
             train_loader=train_loader_partial,
             eval_loader=eval_loader_partial,
+            batches_per_epoch=10,
         )
         expected = sorted(set(label_map.values()))
         assert dm.num_classes == len(expected)
@@ -496,9 +499,170 @@ class TestDataloaders:
             eval_transform=eval_transform,
             train_loader=train_loader_partial,
             eval_loader=eval_loader_partial,
+            batches_per_epoch=10,
         )
         dm.setup("fit")
         loader = dm.train_dataloader()
         batch = self._batch_from_loader(loader)
         targets = batch["target"]
         assert (targets == 0).all() == True  # noqa: E712
+
+
+class TestWebDatasetConstructorSplitArgs:
+    """WebDataset must be constructed with nodesplitter=None, workersplitter=None.
+
+    The constructor's built-in splitters (single_node_only + split_by_worker) must
+    be disabled so that the explicit .compose(split_by_node, split_by_worker) is the
+    single source of splitting — preventing double-splits and multi-node crashes.
+    """
+
+    def _collect_webdataset_kwargs(self, dm: WebDatasetDataModule, stage: str) -> list:
+        """Call the appropriate dataloader and return captured WebDataset call kwargs."""
+        captured = []
+        original_init = wds.WebDataset.__init__
+
+        def capturing_init(self_inner, *args, **kwargs):
+            captured.append(kwargs)
+            return original_init(self_inner, *args, **kwargs)
+
+        with patch.object(wds.WebDataset, "__init__", capturing_init):
+            if stage == "train":
+                dm.train_dataloader()
+            elif stage == "val":
+                dm.val_dataloader()
+            elif stage == "test":
+                dm.test_dataloader()
+
+        return captured
+
+    def test_build_pipeline_passes_nodesplitter_none_to_webdataset(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+        )
+        dm.setup("fit")
+        captured = self._collect_webdataset_kwargs(dm, "val")
+        assert len(captured) >= 1
+        for kwargs in captured:
+            assert kwargs.get("nodesplitter") is None
+
+    def test_build_pipeline_passes_workersplitter_none_to_webdataset(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+        )
+        dm.setup("fit")
+        captured = self._collect_webdataset_kwargs(dm, "val")
+        assert len(captured) >= 1
+        for kwargs in captured:
+            assert kwargs.get("workersplitter") is None
+
+    def test_build_class_pipelines_passes_nodesplitter_none_to_webdataset(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+        )
+        dm.setup("fit")
+        captured = self._collect_webdataset_kwargs(dm, "train")
+        assert len(captured) >= 1
+        for kwargs in captured:
+            assert kwargs.get("nodesplitter") is None
+
+    def test_build_class_pipelines_passes_workersplitter_none_to_webdataset(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+        )
+        dm.setup("fit")
+        captured = self._collect_webdataset_kwargs(dm, "train")
+        assert len(captured) >= 1
+        for kwargs in captured:
+            assert kwargs.get("workersplitter") is None
+
+
+class TestBatchesPerEpoch:
+    """WebDatasetDataModule must bound the training epoch to batches_per_epoch batches."""
+
+    def test_train_epoch_terminates_after_exactly_batches_per_epoch(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        eval_loader_partial,
+    ) -> None:
+        from functools import partial
+
+        batches_per_epoch = 3
+        bounded_loader = partial(wds.WebLoader, batch_size=1, num_workers=0)
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            bounded_loader,
+            eval_loader_partial,
+            batches_per_epoch=batches_per_epoch,
+        )
+        dm.setup("fit")
+        loader = dm.train_dataloader()
+        count = sum(1 for _ in loader)
+        assert count == batches_per_epoch
