@@ -94,8 +94,11 @@ class AttributionCallback(L.Callback):
         stage: str,
     ) -> None:
         """Core attribution logic — only called when captum is available."""
+        log_dir = trainer.log_dir or trainer.default_root_dir
+        if log_dir is None:
+            return
         layer = self._resolve_layer(pl_module.net)
-        out_dir = self._out_dir(trainer.log_dir)
+        out_dir = self._out_dir(log_dir)
         epoch = trainer.current_epoch
 
         inputs = batch["input"]
@@ -169,6 +172,8 @@ class AttributionCallback(L.Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
+        if not trainer.is_global_zero:
+            return
         if not _CAPTUM_AVAILABLE:
             return
         if batch_idx != 0:
@@ -186,6 +191,8 @@ class AttributionCallback(L.Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
+        if not trainer.is_global_zero:
+            return
         if not _CAPTUM_AVAILABLE:
             return
         if batch_idx >= self.n_test_batches:
