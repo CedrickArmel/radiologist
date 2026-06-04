@@ -4311,6 +4311,7 @@ name = "radiologist-core"
 version = "0.1.0"
 source = { editable = "radiologist-core" }
 dependencies = [
+    { name = "fsspec" },
     { name = "hydra-core" },
     { name = "lightning" },
     { name = "omegaconf" },
@@ -4331,6 +4332,7 @@ registry = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fsspec", specifier = ">=2023.1.0" },
     { name = "hydra-core", specifier = ">=1.3.0" },
     { name = "lightning", specifier = ">=2.0.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
