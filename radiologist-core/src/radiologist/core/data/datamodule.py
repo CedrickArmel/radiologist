@@ -44,6 +44,8 @@ class WebDatasetDataModule(L.LightningDataModule):
         eval_transform: Transform applied to val/test images (PIL → Tensor).
         train_loader: Partial factory for wds.WebLoader (training).
         eval_loader: Partial factory for wds.WebLoader (eval/test).
+        batches_per_epoch: Number of batches per training epoch; bounds the
+            otherwise-infinite WebDataset pipeline via WebLoader.with_epoch().
         classes: Ordered class names. If None, derived from sorted(set(label_map.values())).
         class_weights: Per-class mixing weights for RandomMix. Uniform when None.
         priors: Pre-computed class priors. Auto-computed from shard counts when None.
@@ -59,6 +61,7 @@ class WebDatasetDataModule(L.LightningDataModule):
         eval_transform: Callable,
         train_loader: partial,
         eval_loader: partial,
+        batches_per_epoch: int,
         classes: Optional[List[str]] = None,
         class_weights: Optional[List[float]] = None,
         priors: Optional[List[float]] = None,
@@ -71,6 +74,7 @@ class WebDatasetDataModule(L.LightningDataModule):
         self.classes: List[str] = (
             classes if classes is not None else sorted(set(label_map.values()))
         )
+        self.batches_per_epoch = batches_per_epoch
         self.class_weights = class_weights
         self.priors = priors
         self.shardshuffle = shardshuffle
@@ -154,6 +158,8 @@ class WebDatasetDataModule(L.LightningDataModule):
             wds.WebDataset(
                 all_shards,
                 shardshuffle=self.shardshuffle if shuffle else False,
+                nodesplitter=None,
+                workersplitter=None,
             )
             .compose(wds.split_by_node, wds.split_by_worker)
             .map(self._make_sample_mapper(transform))
@@ -170,7 +176,12 @@ class WebDatasetDataModule(L.LightningDataModule):
             cls_idx = self.classes.index(cls_name)
 
             ds = (
-                wds.WebDataset(paths, shardshuffle=self.shardshuffle)
+                wds.WebDataset(
+                    paths,
+                    shardshuffle=self.shardshuffle,
+                    nodesplitter=None,
+                    workersplitter=None,
+                )
                 .compose(wds.split_by_node, wds.split_by_worker)
                 .map(self._make_sample_mapper(transform))
             )
@@ -194,7 +205,7 @@ class WebDatasetDataModule(L.LightningDataModule):
             self.class_weights if self.class_weights is not None else [1.0 / n] * n
         )
         mixed = wds.RandomMix(class_pipelines, weights)
-        return self._train_loader(mixed)
+        return self._train_loader(mixed).with_epoch(self.batches_per_epoch)
 
     def val_dataloader(self) -> wds.WebLoader:
         """Build deterministic val loader over all val shards."""
