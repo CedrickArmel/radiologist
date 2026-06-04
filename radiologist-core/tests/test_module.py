@@ -535,3 +535,57 @@ def test_on_train_batch_end_logs_weight_norm(module, fake_batch):
     module.on_train_batch_end(outputs=None, batch=fake_batch, batch_idx=0)
 
     assert "weight_norm" in logged
+
+
+# ---------------------------------------------------------------------------
+# AC: Bug A — grad/weight norm tensors must use self.device, not CPU
+# ---------------------------------------------------------------------------
+
+
+def test_grad_norm_tensor_lives_on_model_device(module, fake_batch):
+    """_get_grad_norm must return a tensor on the same device as model params."""
+    module.training_step(fake_batch, batch_idx=0)
+    norm = module._get_grad_norm()
+    param_device = next(module.parameters()).device
+    assert norm.device == param_device
+
+
+def test_weight_norm_tensor_lives_on_model_device(module, fake_batch):
+    """_get_weight_norm must return a tensor on the same device as model params."""
+    norm = module._get_weight_norm()
+    param_device = next(module.parameters()).device
+    assert norm.device == param_device
+
+
+# ---------------------------------------------------------------------------
+# AC: Bug B — on_test_epoch_end clears output buffer between runs
+# ---------------------------------------------------------------------------
+
+
+def test_second_test_run_yields_single_run_length(module, fake_batch, tmp_path):
+    """Calling on_test_epoch_end twice must not accumulate preds across runs."""
+    mock_trainer = MagicMock()
+    mock_trainer.log_dir = str(tmp_path)
+    mock_trainer.global_rank = 0
+    module._trainer = mock_trainer
+
+    # First run
+    module.test_step(fake_batch, batch_idx=0)
+    module.on_test_epoch_end()
+
+    # Second run — buffer should have been cleared after first run
+    module.test_step(fake_batch, batch_idx=0)
+    module.on_test_epoch_end()
+
+    saved = torch.load(str(tmp_path / "preds-rank0.pt"), weights_only=True)
+    assert saved.shape == (BATCH_SIZE,)
+
+
+def test_on_test_epoch_end_with_empty_output_does_not_raise(module, tmp_path):
+    """on_test_epoch_end with no test_step calls must complete without error."""
+    mock_trainer = MagicMock()
+    mock_trainer.log_dir = str(tmp_path)
+    mock_trainer.global_rank = 0
+    module._trainer = mock_trainer
+
+    module.on_test_epoch_end()  # no test_step was called — output is empty
