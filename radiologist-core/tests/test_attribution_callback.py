@@ -404,3 +404,112 @@ def test_wandb_image_logged_when_wandb_active(tmp_path):
         cb2.on_validation_batch_end(trainer, pl, outputs, batch, batch_idx=0)
 
     assert fake_wandb.log.called or fake_wandb.Image.called
+
+
+# ---------------------------------------------------------------------------
+# AC: non-global-zero rank → no attribution, no files written
+# ---------------------------------------------------------------------------
+
+
+def _make_trainer_non_zero_rank(tmp_path: Path, epoch: int = 0) -> MagicMock:
+    trainer = MagicMock()
+    trainer.current_epoch = epoch
+    trainer.log_dir = str(tmp_path)
+    trainer.is_global_zero = False
+    return trainer
+
+
+def test_validation_batch_end_skips_attribution_on_non_zero_rank(tmp_path):
+    fake_captum, fake_attr = _make_fake_captum_modules()
+    AttrCB = _reload_attribution_with_captum(fake_captum, fake_attr)
+
+    cb = AttrCB(target_layer="0", every_n_val_epochs=1, n_samples_per_batch=2)
+    trainer = _make_trainer_non_zero_rank(tmp_path, epoch=0)
+    pl = _make_pl_module(_make_net())
+    batch = _make_batch(n=4)
+    outputs = _make_outputs(n=4)
+
+    import sys
+
+    with patch.dict(
+        sys.modules,
+        {"captum": fake_captum, "captum.attr": fake_attr},
+    ):
+        cb.on_validation_batch_end(trainer, pl, outputs, batch, batch_idx=0)
+
+    written = list(tmp_path.rglob("*.png"))
+    assert written == []
+
+
+def test_test_batch_end_skips_attribution_on_non_zero_rank(tmp_path):
+    fake_captum, fake_attr = _make_fake_captum_modules()
+    AttrCB = _reload_attribution_with_captum(fake_captum, fake_attr)
+
+    cb = AttrCB(target_layer="0", n_test_batches=2, n_samples_per_batch=2)
+    trainer = _make_trainer_non_zero_rank(tmp_path, epoch=0)
+    pl = _make_pl_module(_make_net())
+    batch = _make_batch(n=4)
+    outputs = _make_outputs(n=4)
+
+    import sys
+
+    with patch.dict(
+        sys.modules,
+        {"captum": fake_captum, "captum.attr": fake_attr},
+    ):
+        cb.on_test_batch_end(trainer, pl, outputs, batch, batch_idx=0)
+
+    written = list(tmp_path.rglob("*.png"))
+    assert written == []
+
+
+# ---------------------------------------------------------------------------
+# AC: log_dir=None, default_root_dir=None → returns without raising TypeError
+# ---------------------------------------------------------------------------
+
+
+def _make_trainer_null_log_dir(epoch: int = 0) -> MagicMock:
+    trainer = MagicMock()
+    trainer.current_epoch = epoch
+    trainer.log_dir = None
+    trainer.default_root_dir = None
+    trainer.is_global_zero = True
+    return trainer
+
+
+def test_validation_batch_end_no_error_when_log_dir_is_none():
+    fake_captum, fake_attr = _make_fake_captum_modules()
+    AttrCB = _reload_attribution_with_captum(fake_captum, fake_attr)
+
+    cb = AttrCB(target_layer="0", every_n_val_epochs=1, n_samples_per_batch=1)
+    trainer = _make_trainer_null_log_dir(epoch=0)
+    pl = _make_pl_module(_make_net())
+    batch = _make_batch(n=2)
+    outputs = _make_outputs(n=2)
+
+    import sys
+
+    with patch.dict(
+        sys.modules,
+        {"captum": fake_captum, "captum.attr": fake_attr},
+    ):
+        cb.on_validation_batch_end(trainer, pl, outputs, batch, batch_idx=0)
+
+
+def test_test_batch_end_no_error_when_log_dir_is_none():
+    fake_captum, fake_attr = _make_fake_captum_modules()
+    AttrCB = _reload_attribution_with_captum(fake_captum, fake_attr)
+
+    cb = AttrCB(target_layer="0", n_test_batches=2, n_samples_per_batch=1)
+    trainer = _make_trainer_null_log_dir(epoch=0)
+    pl = _make_pl_module(_make_net())
+    batch = _make_batch(n=2)
+    outputs = _make_outputs(n=2)
+
+    import sys
+
+    with patch.dict(
+        sys.modules,
+        {"captum": fake_captum, "captum.attr": fake_attr},
+    ):
+        cb.on_test_batch_end(trainer, pl, outputs, batch, batch_idx=0)
