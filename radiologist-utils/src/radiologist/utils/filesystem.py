@@ -20,26 +20,45 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from __future__ import annotations
+import warnings
+from pathlib import PurePath, PurePosixPath
 
-import math
-import random
-from typing import Dict, List
+import fsspec
 
-
-def worker_balanced_n_samples(n_samples: int, batch: int, worldsize: int) -> int:
-    """Round n_samples up to the next multiple of batch * worldsize."""
-    unit = batch * worldsize
-    return math.ceil(n_samples / unit) * unit
+warnings.filterwarnings("once")
 
 
-def balance_data_world_size(
-    data: List[Dict],  # type: ignore[type-arg]
-    batch: int,
-    worldsize: int,
-) -> List[Dict]:  # type: ignore[type-arg]
-    """Pad data with random resamples so its length is a multiple of batch * worldsize."""
-    target = worker_balanced_n_samples(len(data), batch, worldsize)
-    shortfall = target - len(data)
-    padding = random.choices(data, k=shortfall) if shortfall > 0 else []
-    return list(data) + padding
+def pathjoin(a: str, /, *paths: str) -> str:
+    """Join path components, preserving the filesystem protocol."""
+    fs, root = fsspec.url_to_fs(a)
+    pure = PurePosixPath(root) if "local" not in fs.protocol else PurePath(root)
+    return (
+        fs.unstrip_protocol(str(pure.joinpath(*paths)))
+        if "local" not in fs.protocol
+        else str(pure.joinpath(*paths))
+    )
+
+
+def pathname(path: str) -> str:
+    fs, root = fsspec.url_to_fs(path)
+    return PurePosixPath(root).name
+
+
+def pathparent(path: str) -> str:
+    fs, root = fsspec.url_to_fs(path)
+    root = PurePosixPath(root) if "local" not in fs.protocol else PurePath(root)
+    parent = str(root.parent)
+    return fs.unstrip_protocol(parent) if "local" not in fs.protocol else str(parent)
+
+
+def pathstem(path) -> str:
+    fs, root = fsspec.url_to_fs(path)
+    return PurePosixPath(root).stem
+
+
+__all__ = [
+    "pathjoin",
+    "pathname",
+    "pathparent",
+    "pathstem",
+]

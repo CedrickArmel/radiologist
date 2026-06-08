@@ -35,7 +35,7 @@ class TestRankedLoggerAutoDetectsRank:
         logger = RankedLogger(rank_zero_only=False)
         with caplog.at_level(logging.DEBUG):
             logger.log(logging.INFO, "hello")
-        assert any("[rank 0]" in record.message for record in caplog.records)
+        assert any("[rank: 0]" in record.message for record in caplog.records)
 
     def test_rank_zero_only_does_not_raise_when_no_rank_kwarg_passed(self):
         logger = RankedLogger(rank_zero_only=True)

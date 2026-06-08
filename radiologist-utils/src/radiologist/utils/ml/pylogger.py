@@ -23,6 +23,7 @@
 import logging
 from typing import Any, Mapping, MutableMapping, Optional, Tuple
 
+from lightning_utilities.core.rank_zero import rank_prefixed_message
 from lightning_utilities.core.rank_zero import rank_zero_only as _rank_zero_only  # type: ignore[import-untyped]
 
 
@@ -49,18 +50,22 @@ class RankedLogger(logging.LoggerAdapter):
         self,
         level: int,
         msg: object,
+        rank: int | None = None,
         *args: object,
         **kwargs: object,
     ) -> None:
-        rank: int = getattr(_rank_zero_only, "rank", 0)
-
-        if self._rank_zero_only and rank != 0:
-            return
 
         if self.isEnabledFor(level):
-            prefix = f"[rank {rank}] "
-            full_msg, kwargs = self.process(f"{prefix}{msg}", kwargs)  # type: ignore[arg-type,assignment]
-            self.logger.log(level, full_msg, *args, **kwargs)
+            msg, kwargs = self.process(str(msg), dict(kwargs))  # type: ignore[arg-type,assignment]
+            current_rank = getattr(_rank_zero_only, "rank", 0)
+            msg = rank_prefixed_message(msg, current_rank)
+            rank = current_rank if rank is None else rank
+            rank = 0 if self._rank_zero_only else rank
+
+            if (current_rank != 0 and self._rank_zero_only) or (current_rank != rank):
+                return
+
+            self.logger.log(level, msg, *args, **kwargs)
 
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
