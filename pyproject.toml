@@ -28,6 +28,9 @@ dependencies = [
     "radiologist-core",
 ]
 
+[project.optional-dependencies]
+registry = ["radiologist-core[registry]"]
+
 [tool.commitizen]
 name = "cz_conventional_commits"
 version = "0.1.0"
@@ -126,7 +129,11 @@ addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 namespace = true
 
 [tool.uv.workspace]
-members = ["radiologist-utils", "radiologist-etl", "radiologist-core"]
+members = [
+    "radiologist-utils",
+    "radiologist-etl",
+    "radiologist-core",
+]
 
 [tool.uv.sources]
 radiologist-utils = { workspace = true }
