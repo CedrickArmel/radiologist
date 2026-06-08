@@ -22,7 +22,6 @@
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -32,8 +31,11 @@ from rich.progress import Progress
 
 from radiologist.etl.manifest import ManifestRecord
 from radiologist.etl.stats import StatExtractor
-from radiologist.utils.loggers import Logger
-from radiologist.utils.readers import SUPPORTED_FORMATS, BaseImageReader, read_image
+from radiologist.utils import Logger, read_image
+
+SUPPORTED_FORMATS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg"})
+
+logger = Logger(__name__)
 
 
 def _resolve_mask(
@@ -138,7 +140,7 @@ class StatsProcessor:
 
     Args:
         extractors: list of StatExtractor callables to apply to each image.
-        workers: number of worker processes; defaults to os.cpu_count().
+        workers: number of worker processes; defaults to 1.
     """
 
     def __init__(
@@ -147,28 +149,33 @@ class StatsProcessor:
         workers: int | None = None,
     ) -> None:
         self._extractors = extractors
-        self._workers = workers or os.cpu_count() or 1
+        self._workers = workers or 1
 
     def run(
         self,
-        reader: BaseImageReader,
+        source: str,
         manifest_id: str,
         masks_root: str | None = None,
+        storage_options: dict | None = None,
     ) -> list[ManifestRecord]:
-        """Process all images reachable from reader.source.
+        """Process all images reachable from source.
 
         Args:
-            reader: a BaseImageReader whose .source points at the image root.
+            source: fsspec-compatible URI to the image root directory.
             manifest_id: run identifier stamped on every ManifestRecord.
             masks_root: optional root directory for segmentation masks.
+            storage_options: extra kwargs forwarded to fsspec.
 
         Returns:
             List of ManifestRecord, one per successfully processed image.
             Failed images are logged and skipped.
         """
-        storage_options = getattr(reader, "_storage_options", None) or {}
-        fs, root = fsspec.url_to_fs(reader.source, **storage_options)
+
+        logger.info("Processing images to extract statistics...")
+
+        fs, root = fsspec.url_to_fs(source, **(storage_options or {}))
         all_paths = sorted(fs.find(root))
+
         image_paths = [
             fs.unstrip_protocol(p)
             for p in all_paths
@@ -176,14 +183,13 @@ class StatsProcessor:
         ]
 
         records: list[ManifestRecord] = []
-        logger = Logger()
 
         with ProcessPoolExecutor(max_workers=self._workers) as pool:
             futures = {
                 pool.submit(
                     _process_one,
                     p,
-                    reader.source,
+                    source,
                     masks_root,
                     manifest_id,
                     self._extractors,
@@ -201,5 +207,5 @@ class StatsProcessor:
                         logger.warning("Skipping %r: %s", path, exc)
                     finally:
                         progress.advance(task_id)
-
+        logger.info("Statistics extraction completed successfully!")
         return records
