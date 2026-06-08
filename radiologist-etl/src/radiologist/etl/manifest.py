@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 import fsspec  # type: ignore[import-untyped]
 import pyarrow as pa  # type: ignore[import-untyped]
@@ -175,7 +176,9 @@ class ParquetWriter:
         table = pa.Table.from_pylist(flat_rows, schema=schema)
 
         fs, path = fsspec.url_to_fs(destination, **(storage_options or {}))
-        with fs.open(path, "wb") as f:
+        if hasattr(fs, "makedirs"):
+            fs.makedirs(str(Path(path).parent), exist_ok=True)
+        with fs.open(destination, "wb") as f:
             pq.write_table(table, f)
 
 
@@ -196,7 +199,20 @@ class JsonlWriter:
             storage_options: extra kwargs for fsspec.
         """
         fs, path = fsspec.url_to_fs(destination, **(storage_options or {}))
-        with fs.open(path, "wt", encoding="utf-8") as f:
+        if hasattr(fs, "makedirs"):
+            fs.makedirs(str(Path(path).parent), exist_ok=True)
+        with fs.open(destination, "wt", encoding="utf-8") as f:
             for record in records:
                 flat = record._to_flat_dict()
                 f.write(json.dumps(flat) + "\n")
+
+
+def records_reader(path: str, storage_options) -> list[ManifestRecord]:
+    fs, mpath = fsspec.url_to_fs(path, **storage_options)
+    records: list[ManifestRecord] = []
+    with fs.open(mpath, "rt", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(ManifestRecord.from_flat_dict(json.loads(line)))
+    return records

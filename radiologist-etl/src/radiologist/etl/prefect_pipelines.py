@@ -24,19 +24,27 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
+import fsspec  # type: ignore[import-untyped]
 import hydra  # type: ignore[import-untyped]
 from omegaconf import DictConfig, OmegaConf
 
+import radiologist.utils.filesystem as fst
+from radiologist.utils import Logger
+
+logger = Logger(name=__name__)
+
 try:
     from prefect import flow, task
-    from prefect.artifacts import create_link_artifact, create_table_artifact
+    from prefect.artifacts import (
+        create_link_artifact,
+        create_markdown_artifact,
+        create_table_artifact,
+    )
     from prefect.cache_policies import INPUTS
 
     _PREFECT_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    _PREFECT_AVAILABLE = False
+except ImportError as ex:  # pragma: no cover
 
     def flow(fn=None, **_):  # type: ignore[misc, no-redef]
         return fn if fn is not None else (lambda f: f)
@@ -47,12 +55,17 @@ except ImportError:  # pragma: no cover
     def create_link_artifact(**_):  # type: ignore[misc, no-redef]
         pass
 
+    def create_markdown_artifact(**_):
+        pass
+
     def create_table_artifact(**_):  # type: ignore[misc, no-redef]
         pass
 
+    _PREFECT_AVAILABLE = False
+    _PREFECT_IMPORT_ERROR: str = str(ex)
     INPUTS = None  # type: ignore[assignment]
 
-from radiologist.etl.ops import (
+from radiologist.etl.ops import (  # noqa: E402
     _apply_filters,
     _assign_splits,
     _build_shards,
@@ -60,7 +73,11 @@ from radiologist.etl.ops import (
     _write_jsonl,
     compute_run_id,
 )
-from radiologist.etl.stats import StatExtractor, lung_asymmetry, make_haralick
+from radiologist.etl.stats import (  # noqa: E402
+    StatExtractor,
+    lung_asymmetry,
+    make_haralick,
+)
 
 
 @task(cache_policy=INPUTS)
@@ -128,7 +145,7 @@ def apply_filters_task(
         factor=factor,
         storage_options=storage_options,
     )
-    run_id = Path(parquet_path).stem.replace("stats-", "")
+    run_id = fst.pathstem(parquet_path).replace("stats-", "")
     create_link_artifact(
         link=out,
         key=f"stats-{run_id}-filtered",
@@ -158,7 +175,7 @@ def assign_splits_task(
         ratios=ratios,
         storage_options=storage_options,
     )
-    run_id = Path(parquet_path).stem.replace("stats-", "").replace("-filtered", "")
+    run_id = fst.pathstem(parquet_path).replace("stats-", "").replace("-filtered", "")
     create_link_artifact(
         link=out,
         key=f"stats-{run_id}-split",
@@ -188,7 +205,7 @@ def write_jsonl_task(
         destination=destination,
         storage_options=storage_options,
     )
-    run_id = Path(parquet_path).stem.replace("stats-", "").replace("-split", "")
+    run_id = fst.pathstem(parquet_path).replace("stats-", "").replace("-split", "")
     create_link_artifact(
         link=out,
         key=f"manifest-{run_id}",
@@ -227,9 +244,13 @@ def build_shards_task(
         start_shard_index=start_shard_index,
         storage_options=storage_options,
     )
-    run_id = Path(manifest_path).stem.split("-", 1)[1]
-    report_path = str(Path(manifest_path).parent / f"split-report-{run_id}.json")
-    with open(report_path) as f:
+    manifest_stem = fst.pathstem(manifest_path)
+    run_id = manifest_stem.split("-", 1)[1] if "-" in manifest_stem else manifest_stem
+    manifest_parent = manifest_path.rsplit("/", 1)[0]
+    report_path = f"{manifest_parent}/split-report-{run_id}.json"
+    opts = storage_options or {}
+    fs_r, rpath = fsspec.url_to_fs(report_path, **opts)
+    with fs_r.open(rpath, "rt", encoding="utf-8") as f:
         report = json.load(f)
     observed = report.get("observed", {})
     rows = [
@@ -241,9 +262,6 @@ def build_shards_task(
         description=f"Shard split report for run {run_id}",
     )
     return out
-
-
-# ── Flow ──────────────────────────────────────────────────────────────────────
 
 
 def _haralick_list(cfg_node: object, key: str) -> list | None:
@@ -273,6 +291,17 @@ def etl_flow(cfg: DictConfig) -> str:
     Returns:
         Path to the final JSONL manifest file.
     """
+
+    if not _PREFECT_AVAILABLE:
+        logger.warning(
+            f"{_PREFECT_IMPORT_ERROR}: prefect is missing. This flow will not be recorded!"
+        )
+
+    create_markdown_artifact(
+        key="etlconfig",
+        markdown=f"```yaml\n{OmegaConf.to_yaml(cfg, resolve=True, sort_keys=True)}\n```",
+    )
+
     _so_raw = (
         OmegaConf.to_container(cfg.storage_options)
         if OmegaConf.select(cfg, "storage_options") is not None
@@ -292,7 +321,6 @@ def etl_flow(cfg: DictConfig) -> str:
     workers: int = int(cfg.workers) if cfg.workers else (os.cpu_count() or 1)
 
     manifest_dest = f"{cfg.destination}/manifest-{run_id}.jsonl"
-    Path(cfg.destination).mkdir(parents=True, exist_ok=True)
 
     resume_parquet = OmegaConf.select(cfg, "resume_from_parquet")
     resume_filtered = OmegaConf.select(cfg, "resume_from_filtered")
@@ -342,6 +370,7 @@ def main(cfg: DictConfig) -> None:
     Args:
         cfg: Hydra DictConfig populated from conf/etl.yaml and CLI overrides.
     """
+
     etl_flow(cfg)
 
 

@@ -23,9 +23,14 @@
 from __future__ import annotations
 
 from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
-from radiologist.etl.manifest import JsonlWriter, ManifestRecord, ParquetWriter
+from radiologist.etl.manifest import (
+    JsonlWriter,
+    ManifestRecord,
+    ParquetWriter,
+    records_reader,
+)
 from radiologist.etl.ops import compute_run_id
-from radiologist.etl.prefect import (
+from radiologist.etl.prefect_pipelines import (
     apply_filters_task,
     assign_splits_task,
     build_shards_task,
@@ -55,6 +60,7 @@ __all__: list[str] = [
     "make_haralick",
     "ManifestRecord",
     "ParquetWriter",
+    "records_reader",
     "StatExtractor",
     "StatsProcessor",
     "write_jsonl_task",

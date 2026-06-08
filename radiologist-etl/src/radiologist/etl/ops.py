@@ -24,12 +24,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
 import fsspec  # type: ignore[import-untyped]
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 
+import radiologist.utils.filesystem as fst
 from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
 from radiologist.etl.manifest import (
     JsonlWriter,
@@ -40,7 +40,6 @@ from radiologist.etl.processors import StatsProcessor
 from radiologist.etl.shards import build_shards
 from radiologist.etl.split import assign_split
 from radiologist.etl.stats import StatExtractor
-from radiologist.utils.readers import ImageReader
 
 
 def compute_run_id(
@@ -105,11 +104,14 @@ def _compute_stats(
     Returns:
         Path to the written Parquet file: ``{artifact_dir}/stats-{run_id}.parquet``.
     """
-    Path(artifact_dir).mkdir(parents=True, exist_ok=True)
-    reader = ImageReader(source, storage_options=storage_options)
     processor = StatsProcessor(extractors=extractors, workers=workers)
-    records = processor.run(reader, manifest_id=run_id, masks_root=masks_root)
-    dest = f"{artifact_dir}/stats-{run_id}.parquet"
+    records = processor.run(
+        source=source,
+        manifest_id=run_id,
+        masks_root=masks_root,
+        storage_options=storage_options,
+    )
+    dest = fst.pathjoin(artifact_dir, f"stats-{run_id}.parquet")
     ParquetWriter().write(records, dest, storage_options=storage_options)
     return dest
 
@@ -131,12 +133,14 @@ def _apply_filters(
     Returns:
         Path to the filtered Parquet: same dir, with ``-filtered`` suffix.
     """
-    df = pd.read_parquet(parquet_path)
+    df = pd.read_parquet(parquet_path, storage_options=storage_options)
     if iqr_columns:
         df = filter_iqr(df, iqr_columns, factor=factor)
     df = filter_lung_out_of_frame(df)
-    stem = Path(parquet_path).stem
-    out = str(Path(parquet_path).parent / f"{stem}-filtered.parquet")
+
+    stem = fst.pathstem(parquet_path)
+    parent = fst.pathparent(parquet_path)
+    out = fst.pathjoin(parent, f"{stem}-filtered.parquet")
     records = _df_to_records(df)
     ParquetWriter().write(records, out, storage_options=storage_options)
     return out
@@ -157,11 +161,11 @@ def _assign_splits(
     Returns:
         Path to the split Parquet: same dir, with ``-split`` replacing ``-filtered``.
     """
-    df = pd.read_parquet(parquet_path)
+    df = pd.read_parquet(parquet_path, storage_options=storage_options)
     df["split"] = df["filename"].apply(lambda f: assign_split(f, ratios))
-    p = Path(parquet_path)
-    run_id_part = p.stem.replace("stats-", "").replace("-filtered", "")
-    out = str(p.parent / f"stats-{run_id_part}-split.parquet")
+    name = fst.pathname(parquet_path).replace("-filtered", "-split")
+    parent = fst.pathparent(parquet_path)
+    out = fst.pathjoin(parent, name)
     records = _df_to_records(df)
     ParquetWriter().write(records, out, storage_options=storage_options)
     return out
@@ -228,7 +232,7 @@ def _write_jsonl(
     Returns:
         The destination path (unchanged).
     """
-    df = pd.read_parquet(parquet_path)
+    df = pd.read_parquet(parquet_path, storage_options=storage_options)
     records = _df_to_records(df)
     JsonlWriter().write(records, destination, storage_options=storage_options)
     return destination

@@ -23,13 +23,15 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import defaultdict
-from pathlib import Path
 
 import fsspec  # type: ignore[import-untyped]
 import webdataset as wds  # type: ignore[import-untyped]
+from rich.progress import Progress
 
-from radiologist.etl.manifest import JsonlWriter, ManifestRecord
+import radiologist.utils.filesystem as fst
+from radiologist.etl.manifest import JsonlWriter, ManifestRecord, records_reader
 
 
 def build_shards(
@@ -53,60 +55,57 @@ def build_shards(
     Returns:
         Updated manifest_path (same path, rewritten in place).
     """
+    opts = storage_options or {}
     if start_shard_index is None:
         start_shard_index = {}
 
-    # Read all records from manifest
-    fs_m, mpath = fsspec.url_to_fs(manifest_path, **(storage_options or {}))
-    records: list[ManifestRecord] = []
-    with fs_m.open(mpath, "rt", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                records.append(ManifestRecord.from_flat_dict(json.loads(line)))
+    records = records_reader(manifest_path, opts)
 
-    # Group non-excluded records by (split, label)
     groups: dict[tuple[str, str], list[ManifestRecord]] = defaultdict(list)
     for rec in records:
         if not rec.excluded:
             groups[(rec.split, rec.label)].append(rec)
 
-    for key, group_records in groups.items():
-        split, label = key
-        idx = start_shard_index.get(key, 0)
+    total_shards = sum(math.ceil(len(g) / shard_size) for g in groups.values())
+    with Progress() as progress:
+        task_id = progress.add_task("Building shards...", total=total_shards)
+        for key, group_records in groups.items():
+            split, label = key
+            idx = start_shard_index.get(key, 0)
 
-        for chunk_start in range(0, max(len(group_records), 1), shard_size):
-            chunk = group_records[chunk_start : chunk_start + shard_size]
-            shard_filename = f"{split}-{label.lower()}-{idx:06d}.tar"
-            shard_path = f"{shard_root}/{split}/{label}/{shard_filename}"
-            relative_shard = f"{split}/{label}/{shard_filename}"
-            Path(shard_path).parent.mkdir(parents=True, exist_ok=True)
-            with wds.TarWriter(shard_path) as sink:
-                for record in chunk:
-                    fs_src, src_path = fsspec.url_to_fs(
-                        record.path, **(storage_options or {})
-                    )
-                    with fs_src.open(src_path, "rb") as img_f:
-                        img_bytes = img_f.read()
-                    stem = Path(record.filename).stem
-                    sink.write(
-                        {
-                            "__key__": stem,
-                            "png": img_bytes,
-                            "cls": record.label.encode(),
-                        }
-                    )
-                    record.shard = relative_shard
-            idx += 1
+            for chunk_start in range(0, len(group_records), shard_size):
+                chunk = group_records[chunk_start : chunk_start + shard_size]
+                shard_filename = f"{split}-{label.lower()}-{idx:06d}.tar"
+                shard_path = fst.pathjoin(shard_root, split, label, shard_filename)
+                fs_dst, dst_path = fsspec.url_to_fs(shard_path, **opts)
+                relative_shard = fs_dst.sep.join([split, label, shard_filename])
+                if hasattr(fs_dst, "makedirs"):
+                    fs_dst.makedirs(fst.pathparent(dst_path), exist_ok=True)
+                with fs_dst.open(dst_path, "wb") as out:
+                    with wds.TarWriter(out) as sink:
+                        for record in chunk:
+                            fs_src, src_path = fsspec.url_to_fs(record.path, **opts)
+                            with fs_src.open(src_path, "rb") as img_f:
+                                img_bytes = img_f.read()
+                            stem = fst.pathstem(record.filename)
+                            sink.write(
+                                {
+                                    "__key__": stem,
+                                    "png": img_bytes,
+                                    "cls": record.label.encode(),
+                                }
+                            )
+                            record.shard = relative_shard
+                progress.advance(task_id)
+                idx += 1
 
-    # Write updated manifest in place
     JsonlWriter().write(records, manifest_path, storage_options=storage_options)
 
-    # Compute split report
-    run_id = Path(manifest_path).stem.split("-", 1)[1]
-    report_path = str(Path(manifest_path).parent / f"split-report-{run_id}.json")
+    manifest_stem = fst.pathstem(manifest_path)
+    run_id = manifest_stem.split("-", 1)[1] if "-" in manifest_stem else manifest_stem
+    manifest_parent = fst.pathparent(manifest_path)
+    report_path = fst.pathjoin(manifest_parent, f"split-report-{run_id}.json")
 
-    # Count per label, per split (including excluded as its own bucket)
     label_split_counts: dict[str, dict[str, int]] = defaultdict(
         lambda: defaultdict(int)
     )
@@ -120,7 +119,7 @@ def build_shards(
     for label, split_counts in label_split_counts.items():
         total_all = sum(split_counts.values())
         observed[label] = {
-            split: count / total_all for split, count in split_counts.items()
+            split: (count / total_all) for split, count in split_counts.items()
         }
 
     report = {
@@ -128,7 +127,9 @@ def build_shards(
         "configured_ratios": ratios,
         "observed": observed,
     }
-    fs_r, rpath = fsspec.url_to_fs(report_path, **(storage_options or {}))
+    fs_r, rpath = fsspec.url_to_fs(report_path, **opts)
+    if hasattr(fs_r, "makedirs"):
+        fs_r.makedirs(fst.pathparent(rpath), exist_ok=True)
     with fs_r.open(rpath, "wt", encoding="utf-8") as rf:
         json.dump(report, rf, indent=2)
 
