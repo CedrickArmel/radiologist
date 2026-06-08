@@ -148,21 +148,20 @@ def test_wandb_define_summary_noop_when_wandb_absent():
     cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
     trainer = _make_trainer()
     pl_module = MagicMock()
-
-    with patch.dict("sys.modules", {"wandb": None}):
-        cb.on_fit_start(trainer, pl_module)  # must not raise
+    cb.on_fit_start(
+        trainer, pl_module
+    )  # wandb.run is None in test env — must not raise
 
 
 def test_wandb_define_summary_calls_define_metric_when_run_active():
+    import wandb
+
     cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
     trainer = _make_trainer()
     pl_module = MagicMock()
 
     fake_run = MagicMock()
-    fake_wandb = MagicMock()
-    fake_wandb.run = fake_run
-
-    with patch.dict("sys.modules", {"wandb": fake_wandb}):
+    with patch.object(wandb, "run", fake_run):
         cb.on_fit_start(trainer, pl_module)
 
     fake_run.define_metric.assert_any_call("val_score", summary="max")
@@ -173,9 +172,6 @@ def test_wandb_define_summary_noop_when_run_is_none():
     cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
     trainer = _make_trainer()
     pl_module = MagicMock()
-
-    fake_wandb = MagicMock()
-    fake_wandb.run = None
-
-    with patch.dict("sys.modules", {"wandb": fake_wandb}):
-        cb.on_fit_start(trainer, pl_module)  # must not raise
+    cb.on_fit_start(
+        trainer, pl_module
+    )  # wandb.run is None in test env — must not raise

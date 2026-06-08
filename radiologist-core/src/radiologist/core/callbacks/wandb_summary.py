@@ -23,11 +23,7 @@
 from typing import Any
 
 import lightning as L
-
-try:
-    import wandb as _wandb
-except ImportError:
-    _wandb = None  # type: ignore[assignment]
+import wandb
 
 
 class WandbDefineSummaryCallback(L.Callback):
@@ -44,11 +40,6 @@ class WandbDefineSummaryCallback(L.Callback):
         self.mode = mode
 
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
-        import sys
-
-        wandb = sys.modules.get("wandb", _wandb)
-        if wandb is None:
-            return
         run = getattr(wandb, "run", None)
         if run is None:
             return

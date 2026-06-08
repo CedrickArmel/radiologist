@@ -186,8 +186,10 @@ def _count_samples(tar_path: str) -> int:
         Number of samples (one per .cls file).
     """
     count = 0
-    with tarfile.open(tar_path, "r") as tf:
-        for member in tf.getmembers():
-            if member.name.endswith(".cls"):
-                count += 1
+    fs, path = fsspec.url_to_fs(tar_path)
+    with fs.open(path, "rb") as f:
+        with tarfile.open(fileobj=f, mode="r|*") as tf:
+            for member in tf:
+                if member.name.endswith(".cls"):
+                    count += 1
     return count

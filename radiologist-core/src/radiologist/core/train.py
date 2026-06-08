@@ -28,6 +28,7 @@ import hydra
 from omegaconf import DictConfig
 
 from radiologist.utils.ml import (
+    RankedLogger,
     extras,
     get_metric_value,
     instantiate_callbacks,
@@ -43,6 +44,8 @@ try:
 except ImportError:
     Trainer = object  # type: ignore[assignment,misc]
     instantiate = None  # type: ignore[assignment]
+
+log = RankedLogger(__name__, rank_zero_only=True)
 
 
 @task_wrapper
@@ -68,11 +71,16 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if cfg.get("train") or cfg.get("test"):
         datamodule = instantiate(cfg.datamodule)
         module = instantiate(cfg.module)
+
+        if cfg.get("ckpt_path") and module.precision:
+            cfg.trainer.precision = module.precision
+
         trainer: Trainer = instantiate(
             cfg.trainer,
             callbacks=callbacks,
             logger=loggers,
         )
+
         object_dict = {
             "cfg": cfg,
             "datamodule": datamodule,
@@ -80,17 +88,32 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
             "trainer": trainer,
         }
 
+        log.info(f"Output dir: {cfg.paths.output_dir}")
+
         if cfg.get("train"):
+            log.info("Starting fit stage...")
+            if cfg.get("ckpt_path"):
+                log.debug(
+                    f"Resuming training from checkpoint {cfg.get('ckpt_path')}..."
+                )
             trainer.fit(
                 model=module, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path")
             )
 
         if cfg.get("test"):
+            log.info("Starting test stage...")
             ckpt_path = (
                 trainer.checkpoint_callback.best_model_path  # type: ignore[union-attr]
                 if cfg.get("train")
                 else cfg.get("ckpt_path")
             )
+
+            log.debug(
+                "Re-using best model from training..."
+                if cfg.get("train")
+                else f"Re-using checkpoint {ckpt_path}"
+            )
+
             trainer.test(model=module, datamodule=datamodule, ckpt_path=ckpt_path)
 
         log_hyperparameters(object_dict)
@@ -105,3 +128,7 @@ def main(cfg: DictConfig) -> Optional[float]:
     extras(cfg)
     metrics, _ = train(cfg)
     return get_metric_value(metrics, cfg.get("optimized_metric"))
+
+
+if __name__ == "__main__":
+    main()

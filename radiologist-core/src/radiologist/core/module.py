@@ -58,7 +58,7 @@ class LModule(L.LightningModule):
         priors: Optional[List[float]] = None,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=["net", "loss"])
+        self.save_hyperparameters(ignore=["net", "loss", "metric"])
 
         self.net = net
         self.criterion = loss
@@ -85,15 +85,24 @@ class LModule(L.LightningModule):
         From scratch (trainable_layers is None):
             re-initialise net weights with initialize_weights(net, dist="normal").
         """
-        trainable_layers = self.hparams.get("trainable_layers", None)  # type: ignore[union-attr]
-        if trainable_layers is not None:
-            self.net.apply(lambda m: self._set_layer_trainable(m, False))
-            self._set_trainable()
+
+        if stage == "fit":
+            trainable_layers = self.hparams.get("trainable_layers", None)  # type: ignore[union-attr]
+            if trainable_layers is not None:
+                self.net.apply(lambda m: self._set_layer_trainable(m, False))
+                self._set_trainable()
+            else:
+                initialize_weights(self.net, dist="normal")
+
             priors = self.hparams.get("priors", None)  # type: ignore[union-attr]
-            if priors is not None:
-                self._init_last_linear_bias_with_priors()
-        else:
-            initialize_weights(self.net, dist="normal")
+            if priors is None:
+                try:
+                    priors = getattr(self.trainer.datamodule, "priors", None)
+                except RuntimeError:
+                    priors = None
+
+            if priors:
+                self._init_last_linear_bias_with_priors(priors=priors)
 
     def _set_trainable(self) -> None:
         """Unfreeze layers named in self.hparams['trainable_layers'].
@@ -129,13 +138,12 @@ class LModule(L.LightningModule):
         for param in layer.parameters():
             param.requires_grad = trainable
 
-    def _init_last_linear_bias_with_priors(self) -> None:
+    def _init_last_linear_bias_with_priors(self, priors: list[float]) -> None:
         """Set the last nn.Linear bias in self.net to -log(priors).
 
         Raises:
             ValueError: if len(priors) != out_features of the last Linear bias.
         """
-        priors: List[float] = self.hparams["priors"]  # type: ignore[index]
         last_linear: Optional[torch.nn.Linear] = None
         for module in self.net.modules():
             if isinstance(module, torch.nn.Linear) and module.bias is not None:
@@ -186,6 +194,12 @@ class LModule(L.LightningModule):
         """Log pre-clip gradient L2 norm. Fires every optimizer step."""
         grad_norm = self._get_grad_norm()
         self.log("grad_norm", grad_norm, on_step=True, prog_bar=False)
+
+    def on_save_checkpoint(self, checkpoint):
+        checkpoint["precision"] = self.precision
+
+    def on_load_checkpoint(self, checkpoint):
+        self.precision = checkpoint.get("precision", self.precision)
 
     def configure_gradient_clipping(
         self,
