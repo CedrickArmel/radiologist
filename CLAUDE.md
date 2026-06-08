@@ -126,8 +126,8 @@ When an subagent ends his work in a worktree:
 ### Running tests
 
 ```bash
-uv run --active pytest -q                          # all packages
-uv run --active pytest radiologist-core/tests -q   # single package
+uv run --active pytest -q -p no:warnings                          # all packages
+uv run --active pytest radiologist-core/tests -q -p no:warnings  # single package
 ```
 
 ### Code style — PEP 8
