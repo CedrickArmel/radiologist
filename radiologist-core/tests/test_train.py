@@ -28,6 +28,8 @@ from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+_CONFIGS_DIR = Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
+
 
 @pytest.fixture()
 def minimal_cfg() -> DictConfig:
@@ -110,74 +112,70 @@ def test_train_module_importable() -> None:
     assert callable(main)
 
 
-def test_configs_train_yaml_exists() -> None:
-    """configs/train.yaml exists under radiologist.core package."""
-    configs_dir = (
-        Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
-    )
-    assert (configs_dir / "train.yaml").exists(), "configs/train.yaml must exist"
+# ---------------------------------------------------------------------------
+# AC: config files exist and carry required wiring contracts
+# ---------------------------------------------------------------------------
 
 
-def test_configs_eval_yaml_exists() -> None:
-    """configs/eval.yaml exists under radiologist.core package."""
-    configs_dir = (
-        Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
-    )
-    assert (configs_dir / "eval.yaml").exists(), "configs/eval.yaml must exist"
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        "train.yaml",
+        "eval.yaml",
+    ],
+)
+def test_config_yaml_exists(rel_path: str) -> None:
+    assert (_CONFIGS_DIR / rel_path).exists(), f"configs/{rel_path} must exist"
 
 
-def test_configs_trainer_yaml_has_use_distributed_sampler_false() -> None:
-    """configs/trainer.yaml sets use_distributed_sampler: false (required for WebDataset DDP)."""
-    configs_dir = (
-        Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
-    )
-    cfg = OmegaConf.load(configs_dir / "trainer.yaml")
-    assert cfg.trainer.use_distributed_sampler == False  # noqa: E712
-
-
-def test_configs_callbacks_default_yaml_wires_all_five_callbacks() -> None:
-    """callbacks/default.yaml lists all five required callbacks."""
-    configs_dir = (
-        Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
-    )
-    with open(configs_dir / "callbacks" / "default.yaml") as f:
-        content = f.read()
-
-    required = [
-        "best_metric",
-        "wandb_summary",
-        "attribution",
-        "model_checkpoint",
-        "lr_monitor",
-    ]
-    for name in required:
-        assert name in content, f"callbacks/default.yaml must reference '{name}'"
-
-
-def test_configs_datamodule_num_classes_interpolation_resolves() -> None:
-    """${datamodule.num_classes} is a valid interpolation reference in module configs."""
-    configs_dir = (
-        Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
-    )
-    with open(configs_dir / "module" / "resnet50.yaml") as f:
-        content = f.read()
-    assert "${datamodule.num_classes}" in content
-
-
-def test_configs_train_yaml_has_correct_optimized_metric() -> None:
-    """train.yaml root config has optimized_metric: best_val_score."""
-    configs_dir = (
-        Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
-    )
-    cfg = OmegaConf.load(configs_dir / "train.yaml")
-    assert cfg.optimized_metric == "best_val_score"
-
-
-def test_configs_eval_yaml_has_train_false_test_true() -> None:
-    """eval.yaml sets train: false and test: true (eval-only mode)."""
-    configs_dir = (
-        Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
-    )
-    cfg = OmegaConf.load(configs_dir / "eval.yaml")
-    assert cfg.train == False  # noqa: E712
-    assert cfg.test == True  # noqa: E712
+@pytest.mark.parametrize(
+    "check_id,description,check",
+    [
+        (
+            "train_optimized_metric",
+            "train.yaml has optimized_metric: best_val_score",
+            lambda: OmegaConf.load(_CONFIGS_DIR / "train.yaml").optimized_metric
+            == "best_val_score",
+        ),
+        (
+            "eval_train_false_test_true",
+            "eval.yaml sets train=false, test=true",
+            lambda: (
+                OmegaConf.load(_CONFIGS_DIR / "eval.yaml").train == False  # noqa: E712
+                and OmegaConf.load(_CONFIGS_DIR / "eval.yaml").test
+                == True  # noqa: E712
+            ),
+        ),
+        (
+            "trainer_no_distributed_sampler",
+            "trainer.yaml sets use_distributed_sampler: false",
+            lambda: OmegaConf.load(
+                _CONFIGS_DIR / "trainer.yaml"
+            ).trainer.use_distributed_sampler
+            == False,  # noqa: E712
+        ),
+        (
+            "callbacks_default_wires_all_five",
+            "callbacks/default.yaml lists all five required callbacks",
+            lambda: all(
+                name in (_CONFIGS_DIR / "callbacks" / "default.yaml").read_text()
+                for name in [
+                    "best_metric",
+                    "wandb_summary",
+                    "attribution",
+                    "model_checkpoint",
+                    "lr_monitor",
+                ]
+            ),
+        ),
+        (
+            "module_interpolation",
+            "module/resnet50.yaml references ${datamodule.num_classes}",
+            lambda: "${datamodule.num_classes}"
+            in (_CONFIGS_DIR / "module" / "resnet50.yaml").read_text(),
+        ),
+    ],
+    ids=lambda x: x if isinstance(x, str) else "",
+)
+def test_config_contract(check_id: str, description: str, check) -> None:
+    assert check(), description
