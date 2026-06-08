@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .promote import promote_to_registry
-from .pull import pull_checkpoint
+from radiologist.core.registry.promote import promote_to_registry
+from radiologist.core.registry.pull import pull_checkpoint
 
 __all__ = ["pull_checkpoint", "promote_to_registry"]

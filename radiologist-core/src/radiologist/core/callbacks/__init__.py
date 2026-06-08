@@ -20,9 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .attribution import AttributionCallback
-from .best_metric import BestMetricCallback
-from .wandb_summary import WandbDefineSummaryCallback
+from radiologist.core.callbacks.attribution import AttributionCallback
+from radiologist.core.callbacks.best_metric import BestMetricCallback
+from radiologist.core.callbacks.wandb_summary import WandbDefineSummaryCallback
 
 __all__ = [
     "AttributionCallback",

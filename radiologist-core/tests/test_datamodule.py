@@ -37,18 +37,20 @@ def _make_dm(
     eval_transform,
     train_loader_partial,
     eval_loader_partial,
-    batches_per_epoch: int = 10,
+    split_manifest_uri,
+    batch_size,
     **kwargs,
 ) -> WebDatasetDataModule:
     return WebDatasetDataModule(
         shard_root=str(shard_root),
+        split_manifest_uri=split_manifest_uri,
+        batch_size=batch_size,
         label_map=label_map,
         train_transform=train_transform,
         eval_transform=eval_transform,
         train_loader=train_loader_partial,
         eval_loader=eval_loader_partial,
         classes=classes,
-        batches_per_epoch=batches_per_epoch,
         **kwargs,
     )
 
@@ -63,6 +65,8 @@ class TestNumClasses:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -72,6 +76,8 @@ class TestNumClasses:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         assert dm.num_classes == len(classes)
 
@@ -83,15 +89,18 @@ class TestNumClasses:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = WebDatasetDataModule(
             shard_root=str(shard_root),
+            split_manifest_uri=split_manifest_uri,
+            batch_size=batch_size,
             label_map=label_map,
             train_transform=train_transform,
             eval_transform=eval_transform,
             train_loader=train_loader_partial,
             eval_loader=eval_loader_partial,
-            batches_per_epoch=10,
         )
         expected = sorted(set(label_map.values()))
         assert dm.num_classes == len(expected)
@@ -108,6 +117,8 @@ class TestSetupFit:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -117,6 +128,8 @@ class TestSetupFit:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
 
@@ -129,6 +142,8 @@ class TestSetupFit:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         empty_root = tmp_path / "empty"
         empty_root.mkdir()
@@ -140,6 +155,8 @@ class TestSetupFit:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         with pytest.raises(FileNotFoundError):
             dm.setup("fit")
@@ -153,6 +170,8 @@ class TestSetupFit:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         import io
         import tarfile
@@ -180,6 +199,8 @@ class TestSetupFit:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         with pytest.raises(KeyError):
             dm.setup("fit")
@@ -195,6 +216,8 @@ class TestPriors:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -204,6 +227,8 @@ class TestPriors:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         assert dm.priors is not None
@@ -219,6 +244,8 @@ class TestPriors:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         explicit = [0.3, 0.7]
         dm = _make_dm(
@@ -229,6 +256,8 @@ class TestPriors:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
             priors=explicit,
         )
         dm.setup("fit")
@@ -243,6 +272,8 @@ class TestPriors:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -252,6 +283,8 @@ class TestPriors:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         # shard_root has 2 ABNORMAL and 2 NORMAL train samples;
@@ -270,7 +303,11 @@ class TestPriors:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
+        from radiologist.etl import ManifestRecord
+
         expected_priors = [0.5, 0.5]
 
         fake_strategy = MagicMock()
@@ -284,8 +321,51 @@ class TestPriors:
         fake_trainer_rank1.is_global_zero = False
         fake_trainer_rank1.strategy = fake_strategy
 
-        with patch("radiologist.core.data.datamodule._count_samples") as mock_count:
-            mock_count.return_value = 2
+        fake_records = [
+            ManifestRecord(
+                manifest_id="test0000000000000000",
+                path="s3://fake/train/NORMAL/img_0.png",
+                filename="img_0.png",
+                label="NORMAL",
+                split="train",
+                stats={},
+                excluded=False,
+                shard="train/NORMAL/train-normal-000000.tar",
+            ),
+            ManifestRecord(
+                manifest_id="test0000000000000000",
+                path="s3://fake/train/NORMAL/img_1.png",
+                filename="img_1.png",
+                label="NORMAL",
+                split="train",
+                stats={},
+                excluded=False,
+                shard="train/NORMAL/train-normal-000000.tar",
+            ),
+            ManifestRecord(
+                manifest_id="test0000000000000000",
+                path="s3://fake/train/ABNORMAL/img_0.png",
+                filename="img_0.png",
+                label="ABNORMAL",
+                split="train",
+                stats={},
+                excluded=False,
+                shard="train/ABNORMAL/train-abnormal-000000.tar",
+            ),
+            ManifestRecord(
+                manifest_id="test0000000000000000",
+                path="s3://fake/train/ABNORMAL/img_1.png",
+                filename="img_1.png",
+                label="ABNORMAL",
+                split="train",
+                stats={},
+                excluded=False,
+                shard="train/ABNORMAL/train-abnormal-000000.tar",
+            ),
+        ]
+
+        with patch("radiologist.core.data.datamodule.records_reader") as mock_reader:
+            mock_reader.return_value = fake_records
 
             dm_rank0 = _make_dm(
                 shard_root,
@@ -295,14 +375,17 @@ class TestPriors:
                 eval_transform,
                 train_loader_partial,
                 eval_loader_partial,
+                split_manifest_uri,
+                batch_size,
             )
             dm_rank0.trainer = fake_trainer_rank0
             dm_rank0.setup("fit")
 
-            rank0_scan_calls = mock_count.call_count
-            assert rank0_scan_calls > 0
+            rank0_reader_calls = mock_reader.call_count
+            assert rank0_reader_calls > 0
 
-            mock_count.reset_mock()
+            mock_reader.reset_mock()
+            mock_reader.return_value = fake_records
 
             dm_rank1 = _make_dm(
                 shard_root,
@@ -312,11 +395,12 @@ class TestPriors:
                 eval_transform,
                 train_loader_partial,
                 eval_loader_partial,
+                split_manifest_uri,
+                batch_size,
             )
             dm_rank1.trainer = fake_trainer_rank1
             dm_rank1.setup("fit")
 
-            assert mock_count.call_count == 0
             assert dm_rank1.priors == expected_priors
             # rank-1 passes its placeholder (None) to broadcast and receives the value
             fake_strategy.broadcast.assert_called_with(None, src=0)
@@ -330,9 +414,12 @@ class TestPriors:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         explicit = [0.3, 0.7]
-        with patch("radiologist.core.data.datamodule._count_samples") as mock_count:
+        with patch("radiologist.core.data.datamodule.records_reader") as mock_reader:
+            mock_reader.return_value = []
             dm = _make_dm(
                 shard_root,
                 label_map,
@@ -341,10 +428,12 @@ class TestPriors:
                 eval_transform,
                 train_loader_partial,
                 eval_loader_partial,
+                split_manifest_uri,
+                batch_size,
                 priors=explicit,
             )
             dm.setup("fit")
-            assert mock_count.call_count == 0
+            assert mock_reader.call_count == 1
         assert dm.priors == explicit
 
 
@@ -363,6 +452,8 @@ class TestDataloaders:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -372,6 +463,8 @@ class TestDataloaders:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         loader = dm.train_dataloader()
@@ -388,6 +481,8 @@ class TestDataloaders:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -397,6 +492,8 @@ class TestDataloaders:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         loader = dm.train_dataloader()
@@ -416,6 +513,8 @@ class TestDataloaders:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -425,6 +524,8 @@ class TestDataloaders:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         loader = dm.train_dataloader()
@@ -442,6 +543,8 @@ class TestDataloaders:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -451,6 +554,8 @@ class TestDataloaders:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         loader = dm.val_dataloader()
@@ -467,6 +572,8 @@ class TestDataloaders:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -476,6 +583,8 @@ class TestDataloaders:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("test")
         loader = dm.test_dataloader()
@@ -490,16 +599,19 @@ class TestDataloaders:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         shared_map = {"NORMAL": "healthy", "ABNORMAL": "healthy"}
         dm = WebDatasetDataModule(
             shard_root=str(shard_root),
+            split_manifest_uri=split_manifest_uri,
+            batch_size=batch_size,
             label_map=shared_map,
             train_transform=train_transform,
             eval_transform=eval_transform,
             train_loader=train_loader_partial,
             eval_loader=eval_loader_partial,
-            batches_per_epoch=10,
         )
         dm.setup("fit")
         loader = dm.train_dataloader()
@@ -544,6 +656,8 @@ class TestWebDatasetConstructorSplitArgs:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -553,6 +667,8 @@ class TestWebDatasetConstructorSplitArgs:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         captured = self._collect_webdataset_kwargs(dm, "val")
@@ -569,6 +685,8 @@ class TestWebDatasetConstructorSplitArgs:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -578,6 +696,8 @@ class TestWebDatasetConstructorSplitArgs:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         captured = self._collect_webdataset_kwargs(dm, "val")
@@ -594,6 +714,8 @@ class TestWebDatasetConstructorSplitArgs:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -603,6 +725,8 @@ class TestWebDatasetConstructorSplitArgs:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         captured = self._collect_webdataset_kwargs(dm, "train")
@@ -619,6 +743,8 @@ class TestWebDatasetConstructorSplitArgs:
         eval_transform,
         train_loader_partial,
         eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
     ) -> None:
         dm = _make_dm(
             shard_root,
@@ -628,6 +754,8 @@ class TestWebDatasetConstructorSplitArgs:
             eval_transform,
             train_loader_partial,
             eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
         )
         dm.setup("fit")
         captured = self._collect_webdataset_kwargs(dm, "train")
@@ -636,10 +764,90 @@ class TestWebDatasetConstructorSplitArgs:
             assert kwargs.get("workersplitter") is None
 
 
-class TestBatchesPerEpoch:
-    """WebDatasetDataModule must bound the training epoch to batches_per_epoch batches."""
+class TestSplitSizes:
+    def test_train_size_equals_manifest_train_record_count(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
+        )
+        dm.setup("fit")
+        assert dm.train_size == 4
 
-    def test_train_epoch_terminates_after_exactly_batches_per_epoch(
+    def test_val_size_equals_manifest_val_record_count(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
+        )
+        dm.setup("fit")
+        assert dm.val_size == 4
+
+    def test_test_size_equals_manifest_test_record_count(
+        self,
+        shard_root,
+        label_map,
+        classes,
+        train_transform,
+        eval_transform,
+        train_loader_partial,
+        eval_loader_partial,
+        split_manifest_uri,
+        batch_size,
+    ) -> None:
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
+        )
+        dm.setup("test")
+        assert dm.test_size == 4
+
+
+class TestWithEpoch:
+    """train_dataloader epoch length equals train_size // batch_size."""
+
+    def test_train_epoch_length_equals_train_size_divided_by_batch_size(
         self,
         shard_root,
         label_map,
@@ -647,22 +855,23 @@ class TestBatchesPerEpoch:
         train_transform,
         eval_transform,
         eval_loader_partial,
+        split_manifest_uri,
     ) -> None:
         from functools import partial
 
-        batches_per_epoch = 3
-        bounded_loader = partial(wds.WebLoader, batch_size=1, num_workers=0)
+        loader_bs1 = partial(wds.WebLoader, batch_size=1, num_workers=0)
         dm = _make_dm(
             shard_root,
             label_map,
             classes,
             train_transform,
             eval_transform,
-            bounded_loader,
+            loader_bs1,
             eval_loader_partial,
-            batches_per_epoch=batches_per_epoch,
+            split_manifest_uri,
+            batch_size=1,
         )
         dm.setup("fit")
         loader = dm.train_dataloader()
         count = sum(1 for _ in loader)
-        assert count == batches_per_epoch
+        assert count == dm.train_size // dm.batch_size

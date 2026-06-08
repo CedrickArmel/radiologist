@@ -30,18 +30,18 @@ import lightning as L
 import torch
 
 try:
-    from captum.attr import IntegratedGradients, LayerGradCam
+    from captum.attr import (  # type: ignore[import-untyped]
+        IntegratedGradients,
+        LayerGradCam,
+    )
 
     _CAPTUM_AVAILABLE = True
 except ImportError:
+    IntegratedGradients = None  # type: ignore[assignment,misc]
+    LayerGradCam = None  # type: ignore[assignment,misc]
     _CAPTUM_AVAILABLE = False
 
-try:
-    import wandb as _wandb
-
-    _WANDB_AVAILABLE = True
-except ImportError:
-    _WANDB_AVAILABLE = False
+import wandb
 
 
 class AttributionCallback(L.Callback):
@@ -72,10 +72,6 @@ class AttributionCallback(L.Callback):
         self.n_samples_per_batch = n_samples_per_batch
         self.output_subdir = output_subdir
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _resolve_layer(self, net: torch.nn.Module) -> torch.nn.Module:
         """Resolve ``self.target_layer`` dot-path against ``net``."""
         return functools.reduce(getattr, self.target_layer.split("."), net)
@@ -93,7 +89,9 @@ class AttributionCallback(L.Callback):
         batch: Dict[str, Any],
         stage: str,
     ) -> None:
-        """Core attribution logic — only called when captum is available."""
+        """Core attribution logic — skipped when captum is not installed."""
+        if not _CAPTUM_AVAILABLE:
+            return
         log_dir = trainer.log_dir or trainer.default_root_dir
         if log_dir is None:
             return
@@ -153,15 +151,10 @@ class AttributionCallback(L.Callback):
             a = (a - a_min) / (a_max - a_min)
         vutils.save_image(a, str(path))
 
-        if _WANDB_AVAILABLE:
-            try:
-                _wandb.log({log_key: _wandb.Image(str(path))})
-            except Exception:
-                pass
-
-    # ------------------------------------------------------------------
-    # Lightning hooks
-    # ------------------------------------------------------------------
+        try:
+            wandb.log({log_key: wandb.Image(str(path))})
+        except Exception:
+            pass
 
     def on_validation_batch_end(
         self,
@@ -172,13 +165,11 @@ class AttributionCallback(L.Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
-        if not trainer.is_global_zero:
-            return
-        if not _CAPTUM_AVAILABLE:
-            return
-        if batch_idx != 0:
-            return
-        if trainer.current_epoch % self.every_n_val_epochs != 0:
+        if (
+            not trainer.is_global_zero
+            or batch_idx != 0
+            or trainer.current_epoch % self.every_n_val_epochs != 0
+        ):
             return
         self._run_attribution(trainer, pl_module, outputs, batch, stage="val")
 
@@ -191,10 +182,6 @@ class AttributionCallback(L.Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
-        if not trainer.is_global_zero:
-            return
-        if not _CAPTUM_AVAILABLE:
-            return
-        if batch_idx >= self.n_test_batches:
+        if not trainer.is_global_zero or batch_idx >= self.n_test_batches:
             return
         self._run_attribution(trainer, pl_module, outputs, batch, stage="test")

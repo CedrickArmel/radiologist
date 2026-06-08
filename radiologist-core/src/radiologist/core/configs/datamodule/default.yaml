@@ -2,40 +2,50 @@
 datamodule:
   _target_: radiologist.core.WebDatasetDataModule
   shard_root: ???
-  batches_per_epoch: ???
+  split_manifest_uri: ???
+  batch_size: ???
   seed: ${seed}
   shardshuffle: 100
   label_map:
-    NORMAL: healthy
-    PNEUMONIA: sick
-    COVID: sick
-  classes: [healthy, sick]
+    normal: healthy
+    pneumonia: viral
+    COVID: viral
+    lung_opacity: opacity
+  classes: [healthy, viral, opacity]
   class_weights: null
   priors: null
   train_transform:
     _target_: torchvision.transforms.v2.Compose
-    _partial_: false
     transforms:
-      - {_target_: torchvision.transforms.v2.ToImage}
-      - {_target_: torchvision.transforms.v2.RandomResizedCrop, size: 224}
-      - {_target_: torchvision.transforms.v2.ToDtype, dtype: {_target_: torch.float32, _args_: []}, scale: true}
+      - {_target_: torchvision.transforms.ToImage}
+      - {_target_: torchvision.transforms.Resize, size: 256}
+      - {_target_: torchvision.transforms.RandomApply, p: 0.0, transforms: [{_target_: torchvision.transforms.RandomResizedCrop, size: 256, scale: [0.9, 1.1]}]}
+      - {_target_: torchvision.transforms.RandomApply, p: 0.0, transforms: [{_target_: torchvision.transforms.ColorJitter, brightness: 0.1, contrast: 0.2}]}
+      - _target_: torchvision.transforms.ToTensor
+      - {_target_: torchvision.transforms.Normalize, mean: [128], std: [65]}
   eval_transform:
     _target_: torchvision.transforms.v2.Compose
-    _partial_: false
     transforms:
-      - {_target_: torchvision.transforms.v2.ToImage}
-      - {_target_: torchvision.transforms.v2.Resize, size: 256}
-      - {_target_: torchvision.transforms.v2.CenterCrop, size: 224}
-      - {_target_: torchvision.transforms.v2.ToDtype, dtype: {_target_: torch.float32, _args_: []}, scale: true}
+      - {_target_: torchvision.transforms.ToImage}
+      - {_target_: torchvision.transforms.Resize, size: 256}
+      - _target_: torchvision.transforms.ToTensor
+      - {_target_: torchvision.transforms.Normalize, mean: [128], std: [65]}
   train_loader:
     _target_: webdataset.WebLoader
     _partial_: true
-    batch_size: ???
     num_workers: 4
-    pin_memory: true
+    pin_memory: false
+    worker_init_fn:
+    generator:
+      _target_: radiologist.utils.get_seeded_generator
+      seed: ${seed}
   eval_loader:
     _target_: webdataset.WebLoader
     _partial_: true
-    batch_size: ???
     num_workers: 4
-    pin_memory: true
+    pin_memory: false
+    worker_init_fn: {_target_: radiologist.utils.seed_worker}
+    generator:
+      _target_: radiologist.utils.get_seeded_generator
+      seed: ${seed}
+  storage_options: null

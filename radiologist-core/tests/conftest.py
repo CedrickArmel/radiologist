@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 import io
+import json
 import sys
 import tarfile
 from functools import partial
@@ -121,3 +122,43 @@ def train_loader_partial() -> partial:
 @pytest.fixture()
 def eval_loader_partial() -> partial:
     return partial(wds.WebLoader, batch_size=2, num_workers=0)
+
+
+@pytest.fixture()
+def batch_size() -> int:
+    return 2
+
+
+@pytest.fixture()
+def split_manifest_uri(tmp_path: Path, shard_root: Path) -> str:
+    """JSONL manifest with one record per sample in shard_root (12 records total)."""
+    manifest_path = tmp_path / "manifest.jsonl"
+    records = []
+    splits_labels = [
+        ("train", "NORMAL"),
+        ("train", "ABNORMAL"),
+        ("val", "NORMAL"),
+        ("val", "ABNORMAL"),
+        ("test", "NORMAL"),
+        ("test", "ABNORMAL"),
+    ]
+    for split, label in splits_labels:
+        shard_rel = f"{split}/{label}/{split}-{label.lower()}-000000.tar"
+        for i in range(2):
+            records.append(
+                {
+                    "manifest_id": "test0000000000000000",
+                    "path": f"s3://fake/{split}/{label}/img_{i}.png",
+                    "filename": f"img_{i}.png",
+                    "label": label,
+                    "split": split,
+                    "shard": shard_rel,
+                    "lung_out_of_frame": None,
+                    "excluded": False,
+                    "exclusion_reason": "",
+                }
+            )
+    with open(str(manifest_path), "w") as f:
+        for rec in records:
+            f.write(json.dumps(rec) + "\n")
+    return str(manifest_path)
