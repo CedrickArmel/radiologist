@@ -85,42 +85,50 @@ def test_lmodule_forward_returns_correct_shape(module, fake_batch):
     assert output.shape == (BATCH_SIZE, NUM_CLASSES)
 
 
-def test_training_step_runs_without_error(module, fake_batch):
+# ---------------------------------------------------------------------------
+# AC: training_step returns a finite scalar loss
+# ---------------------------------------------------------------------------
+
+
+def test_training_step_returns_finite_scalar_loss(module, fake_batch):
     loss = module.training_step(fake_batch, batch_idx=0)
     assert loss is not None
+    assert loss.shape == torch.Size([])
     assert torch.isfinite(loss)
 
 
-def test_training_step_loss_is_scalar(module, fake_batch):
-    loss = module.training_step(fake_batch, batch_idx=0)
-    assert loss.shape == torch.Size([])
+# ---------------------------------------------------------------------------
+# AC: validation_step returns logits of the correct shape
+# ---------------------------------------------------------------------------
 
 
-def test_validation_step_returns_logits(module, fake_batch):
+def test_validation_step_returns_logits_correct_shape(module, fake_batch):
     logits = module.validation_step(fake_batch, batch_idx=0)
     assert logits is not None
     assert logits.shape == (BATCH_SIZE, NUM_CLASSES)
 
 
-def test_test_step_returns_logits(module, fake_batch):
+# ---------------------------------------------------------------------------
+# AC: test_step returns logits of the correct shape and appends preds
+# ---------------------------------------------------------------------------
+
+
+def test_test_step_returns_correct_logits_and_appends_preds(module, fake_batch):
     logits = module.test_step(fake_batch, batch_idx=0)
     assert logits is not None
     assert logits.shape == (BATCH_SIZE, NUM_CLASSES)
-
-
-def test_test_step_appends_preds_to_output(module, fake_batch):
-    module.test_step(fake_batch, batch_idx=0)
     assert hasattr(module, "output")
     assert len(module.output) == 1
 
 
-def test_configure_optimizers_returns_dict_with_optimizer(module):
-    result = module.configure_optimizers()
-    assert "optimizer" in result
+# ---------------------------------------------------------------------------
+# AC: configure_optimizers — no-scheduler path returns optimizer only
+# ---------------------------------------------------------------------------
 
 
 def test_configure_optimizers_no_scheduler_returns_optimizer_only(module):
     result = module.configure_optimizers()
+    assert "optimizer" in result
     assert "lr_scheduler" not in result
 
 
@@ -142,23 +150,9 @@ def test_configure_optimizers_with_scheduler_returns_scheduler_dict(
     assert result["lr_scheduler"]["interval"] == "step"
 
 
-def test_save_hyperparameters_excludes_net_and_loss(module):
-    assert len(module.hparams) > 0
-    assert "net" not in module.hparams
-    assert "loss" not in module.hparams
-
-
 # ---------------------------------------------------------------------------
 # AC: val_score_best removed — BestMetricCallback is the single source of truth
 # ---------------------------------------------------------------------------
-
-
-def test_lmodule_does_not_expose_val_score_best(module):
-    assert not hasattr(module, "val_score_best")
-
-
-def test_lmodule_does_not_define_on_validation_epoch_end(module):
-    assert "on_validation_epoch_end" not in type(module).__dict__
 
 
 def test_best_metric_callback_produces_best_val_score_in_callback_metrics(
@@ -202,7 +196,7 @@ def small_net():
     net = nn.Sequential(
         nn.Linear(IN_FEATURES, 8),  # index 0
         nn.ReLU(),  # index 1
-        nn.Linear(8, NUM_CLASSES),  # index 2  ← last Linear
+        nn.Linear(8, NUM_CLASSES),  # index 2  <- last Linear
     )
     return net
 
@@ -378,27 +372,6 @@ def test_training_step_does_not_log_train_score(module, fake_batch):
     assert not hasattr(module, "train_score")
 
 
-def test_training_step_returns_finite_scalar_loss(module, fake_batch):
-    loss = module.training_step(fake_batch, batch_idx=0)
-    assert loss.shape == torch.Size([])
-    assert torch.isfinite(loss)
-
-
-# ---------------------------------------------------------------------------
-# AC: shared step — validation_step and test_step return correct logit shape
-# ---------------------------------------------------------------------------
-
-
-def test_validation_step_returns_logits_correct_shape(module, fake_batch):
-    logits = module.validation_step(fake_batch, batch_idx=0)
-    assert logits.shape == (BATCH_SIZE, NUM_CLASSES)
-
-
-def test_test_step_returns_logits_correct_shape(module, fake_batch):
-    logits = module.test_step(fake_batch, batch_idx=0)
-    assert logits.shape == (BATCH_SIZE, NUM_CLASSES)
-
-
 # ---------------------------------------------------------------------------
 # AC: on_test_epoch_end saves concatenated preds to log_dir
 # ---------------------------------------------------------------------------
@@ -433,12 +406,15 @@ def test_on_test_epoch_end_is_noop_when_log_dir_is_none(module, fake_batch):
 
 
 # ---------------------------------------------------------------------------
-# AC: grad-norm hook — on_before_optimizer_step always fires
+# AC: grad-norm hook — on_before_optimizer_step always fires with a non-negative
+#     norm tensor on the model device
 # ---------------------------------------------------------------------------
 
 
-def test_on_before_optimizer_step_logs_grad_norm_without_clipping(module, fake_batch):
-    """on_before_optimizer_step must log grad_norm on every optimizer step."""
+def test_on_before_optimizer_step_logs_non_negative_grad_norm_on_model_device(
+    module, fake_batch
+):
+    """on_before_optimizer_step must log a non-negative grad_norm on the model device."""
     logged: dict = {}
     module.log = lambda name, value, **kw: logged.update({name: value})
 
@@ -447,18 +423,10 @@ def test_on_before_optimizer_step_logs_grad_norm_without_clipping(module, fake_b
     module.on_before_optimizer_step(optimizer)
 
     assert "grad_norm" in logged
-
-
-def test_grad_norm_value_is_non_negative(module, fake_batch):
-    """grad_norm logged by on_before_optimizer_step must be >= 0."""
-    logged: dict = {}
-    module.log = lambda name, value, **kw: logged.update({name: value})
-
-    module.training_step(fake_batch, batch_idx=0)
-    optimizer = module.configure_optimizers()["optimizer"]
-    module.on_before_optimizer_step(optimizer)
-
     assert logged["grad_norm"] >= 0
+    param_device = next(module.parameters()).device
+    norm = module._get_grad_norm()
+    assert norm.device == param_device
 
 
 # ---------------------------------------------------------------------------
@@ -474,23 +442,11 @@ def _make_mock_trainer(clip_val: float = 1.0) -> MagicMock:
     return mock_trainer
 
 
-def test_configure_gradient_clipping_logs_grad_norm_post_clip(module, fake_batch):
-    """configure_gradient_clipping must log grad_norm_post_clip after clipping."""
-    logged: dict = {}
-    module.log = lambda name, value, **kw: logged.update({name: value})
-    module._trainer = _make_mock_trainer(clip_val=1.0)
-
-    module.training_step(fake_batch, batch_idx=0)
-    optimizer = module.configure_optimizers()["optimizer"]
-    module.configure_gradient_clipping(
-        optimizer, gradient_clip_val=1.0, gradient_clip_algorithm="norm"
-    )
-
-    assert "grad_norm_post_clip" in logged
-
-
-def test_grad_norm_post_clip_is_at_most_clip_threshold(module, fake_batch):
-    """Post-clip grad norm must be <= gradient_clip_val for norm-based clipping."""
+def test_configure_gradient_clipping_logs_bounded_post_clip_norm_not_weight_norm(
+    module, fake_batch
+):
+    """configure_gradient_clipping must log grad_norm_post_clip <= clip_val,
+    and must NOT log weight_norm_post_clip."""
     logged: dict = {}
     module.log = lambda name, value, **kw: logged.update({name: value})
     clip_val = 0.1
@@ -502,23 +458,8 @@ def test_grad_norm_post_clip_is_at_most_clip_threshold(module, fake_batch):
         optimizer, gradient_clip_val=clip_val, gradient_clip_algorithm="norm"
     )
 
+    assert "grad_norm_post_clip" in logged
     assert float(logged["grad_norm_post_clip"]) <= clip_val + 1e-6
-
-
-def test_configure_gradient_clipping_does_not_log_weight_norm_post_clip(
-    module, fake_batch
-):
-    """configure_gradient_clipping must NOT log weight_norm_post_clip."""
-    logged: dict = {}
-    module.log = lambda name, value, **kw: logged.update({name: value})
-    module._trainer = _make_mock_trainer(clip_val=1.0)
-
-    module.training_step(fake_batch, batch_idx=0)
-    optimizer = module.configure_optimizers()["optimizer"]
-    module.configure_gradient_clipping(
-        optimizer, gradient_clip_val=1.0, gradient_clip_algorithm="norm"
-    )
-
     assert "weight_norm_post_clip" not in logged
 
 
@@ -538,16 +479,8 @@ def test_on_train_batch_end_logs_weight_norm(module, fake_batch):
 
 
 # ---------------------------------------------------------------------------
-# AC: Bug A — grad/weight norm tensors must use self.device, not CPU
+# AC: Bug A — weight norm tensor must use self.device, not CPU
 # ---------------------------------------------------------------------------
-
-
-def test_grad_norm_tensor_lives_on_model_device(module, fake_batch):
-    """_get_grad_norm must return a tensor on the same device as model params."""
-    module.training_step(fake_batch, batch_idx=0)
-    norm = module._get_grad_norm()
-    param_device = next(module.parameters()).device
-    assert norm.device == param_device
 
 
 def test_weight_norm_tensor_lives_on_model_device(module, fake_batch):

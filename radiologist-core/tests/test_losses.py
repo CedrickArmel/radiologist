@@ -34,18 +34,12 @@ def batch():
     return logits, targets
 
 
-def test_focal_loss_mean_reduction_returns_scalar(batch):
+def test_focal_loss_mean_reduction_returns_finite_scalar(batch):
     logits, targets = batch
     loss_fn = FocalLoss(gamma=2.0, to_onehot_y=True, reduction="mean")
     result = loss_fn(logits, targets)
     assert result.shape == torch.Size([])
     assert result.numel() == 1
-
-
-def test_focal_loss_mean_reduction_is_finite(batch):
-    logits, targets = batch
-    loss_fn = FocalLoss(gamma=2.0, to_onehot_y=True, reduction="mean")
-    result = loss_fn(logits, targets)
     assert torch.isfinite(result)
 
 
