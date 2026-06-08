@@ -33,13 +33,11 @@ from torch.optim import SGD
 from torch.optim.lr_scheduler import ConstantLR, SequentialLR
 
 from radiologist.utils.ml import (
-    balance_data_world_size,
     get_metric_value,
     instantiate_callbacks,
     instantiate_loggers,
     sequential_scheduler,
     task_wrapper,
-    worker_balanced_n_samples,
 )
 
 # ---------------------------------------------------------------------------
@@ -162,7 +160,8 @@ def test_task_wrapper_reraises_exception_and_finalizes_wandb() -> None:
             raise ValueError("boom")
 
         with pytest.raises(ValueError, match="boom"):
-            failing_task(object())
+            cfg = OmegaConf.create({"paths": {"output_dir": "logging/path"}})
+            failing_task(cfg)
 
         assert finish_called, "wandb.finish was not called"
     finally:
@@ -173,51 +172,18 @@ def test_task_wrapper_reraises_exception_and_finalizes_wandb() -> None:
 
 
 # ---------------------------------------------------------------------------
-# worker_balanced_n_samples
-# ---------------------------------------------------------------------------
-
-
-def test_worker_balanced_n_samples_rounds_up_to_next_multiple() -> None:
-    assert worker_balanced_n_samples(10, batch=4, worldsize=2) == 16
-
-
-def test_worker_balanced_n_samples_already_multiple_unchanged() -> None:
-    assert worker_balanced_n_samples(8, batch=4, worldsize=2) == 8
-
-
-# ---------------------------------------------------------------------------
-# balance_data_world_size
-# ---------------------------------------------------------------------------
-
-
-def test_balance_data_world_size_len_is_multiple_of_batch_times_worldsize() -> None:
-    data = [{"x": i} for i in range(10)]
-    result = balance_data_world_size(data, batch=4, worldsize=2)
-    assert len(result) % (4 * 2) == 0
-
-
-def test_balance_data_world_size_preserves_original_items() -> None:
-    data = [{"x": i} for i in range(10)]
-    result = balance_data_world_size(data, batch=4, worldsize=2)
-    originals = result[:10]
-    assert originals == data
-
-
-# ---------------------------------------------------------------------------
 # public API re-export
 # ---------------------------------------------------------------------------
 
 
 def test_public_api_imports_resolve() -> None:
     from radiologist.utils.ml import (  # noqa: F401
-        balance_data_world_size,
         extras,
         get_metric_value,
         instantiate_callbacks,
         instantiate_loggers,
         sequential_scheduler,
         task_wrapper,
-        worker_balanced_n_samples,
     )
 
 
@@ -249,6 +215,7 @@ class _FakeLogger:
 class _FakeTrainer:
     def __init__(self) -> None:
         self.logger = _FakeLogger()
+        self.loggers = [_FakeLogger(), _FakeLogger()]
 
 
 class _FakeModule:
@@ -260,12 +227,15 @@ def test_log_hyperparameters_logs_module_name_from_module_key() -> None:
 
     trainer = _FakeTrainer()
     module = _FakeModule()
-    log_hyperparameters({"cfg": {}, "module": module, "trainer": trainer})
-    assert trainer.logger.logged.get("module") == "_FakeModule"
+    log_hyperparameters(
+        {"cfg": OmegaConf.create({}), "module": module, "trainer": trainer}
+    )
+    for lgr in trainer.loggers:
+        assert lgr.logged.get("module") == "_FakeModule"
 
 
 def test_log_hyperparameters_does_not_raise_when_module_key_absent() -> None:
     from radiologist.utils.ml import log_hyperparameters
 
     trainer = _FakeTrainer()
-    log_hyperparameters({"cfg": {}, "trainer": trainer})
+    log_hyperparameters({"cfg": OmegaConf.create({}), "trainer": trainer})

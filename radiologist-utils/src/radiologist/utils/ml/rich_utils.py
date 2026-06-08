@@ -29,7 +29,12 @@ import rich
 import rich.syntax
 import rich.tree
 from lightning.fabric.utilities.rank_zero import rank_zero_only
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
+from rich.prompt import Prompt
+
+from radiologist.utils.ml.pylogger import RankedLogger
+
+logger = RankedLogger(__name__, rank_zero_only=True)
 
 
 @rank_zero_only
@@ -54,6 +59,9 @@ def print_config_tree(
 
     for field in ordered_keys:
         if field not in cfg:
+            logger.debug(
+                f"Field '{field}' not found in config. Skipping '{field}' config printing..."
+            )
             continue
         branch = tree.add(str(field), style=style, guide_style=style)
         config_group = cfg[field]
@@ -96,11 +104,12 @@ def enforce_tags(cfg: DictConfig, save_to_file: bool = False) -> None:
         )
 
     if not has_tags:
-        rich.print(
-            "[prompt.choices]Enter tags for this experiment "
-            "(comma-separated): [/prompt.choices]",
-            end="",
-        )
+        logger.warning("No tags provided in config. Prompting user to input tags...")
+        raw = Prompt.ask("Enter a list of comma separated tags", default="dev")
+        tags = [t.strip() for t in raw.split(",") if t != ""]
+
+        with open_dict(cfg):
+            cfg.tags = tags
 
     if save_to_file:
         output_dir: Optional[str] = OmegaConf.select(cfg, "paths.output_dir")

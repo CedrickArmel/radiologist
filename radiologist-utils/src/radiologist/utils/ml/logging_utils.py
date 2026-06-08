@@ -23,6 +23,11 @@
 from lightning_utilities.core.rank_zero import (
     rank_zero_only,  # type: ignore[import-untyped]
 )
+from omegaconf import OmegaConf
+
+from radiologist.utils.ml.pylogger import RankedLogger
+
+logger = RankedLogger(__name__, rank_zero_only=True)
 
 
 @rank_zero_only
@@ -34,18 +39,23 @@ def log_hyperparameters(object_dict: dict) -> None:
             (LightningModule), and "trainer" (Trainer). No-op when the
             trainer has no logger attached.
     """
+
+    logger.info("Logging hyperparameters...")
+
     trainer = object_dict.get("trainer")
     if not trainer or not trainer.logger:
+        logger.warning("Logger not found! Skipping hyperparameter logging...")
         return
 
     hparams: dict = {}
 
     cfg = object_dict.get("cfg")
     if cfg is not None:
-        hparams["cfg"] = cfg
+        hparams["cfg"] = OmegaConf.to_container(cfg, resolve=True)
 
     module = object_dict.get("module")
     if module is not None:
         hparams["module"] = type(module).__name__
 
-    trainer.logger.log_hyperparams(hparams)
+    for lgr in trainer.loggers:
+        lgr.log_hyperparams(hparams)
