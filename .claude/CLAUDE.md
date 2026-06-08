@@ -10,6 +10,15 @@ This project provides a fully reproducible machine-learning pipeline that takes 
 
 Stack: PyTorch · Lightning · Hydra · W&B · DVC · Prefect · FastAPI · Streamlit · UV · PyEnv.
 
+### Module READMEs
+
+Each active package has a README that is the primary reference for its responsibilities, public API, configuration, and design decisions. Read the relevant README before exploring source files.
+
+- `README.md` — end-to-end pipeline overview and quick-start
+- `radiologist-utils/README.md` — filesystem helpers, logging, ML utilities
+- `radiologist-etl/README.md` — ETL pipeline stages, Haralick GLCM, sharding
+- `radiologist-core/README.md` — training loop, datamodule, callbacks, ONNX registry
+
 ### Repository layout
 
 This project adopts a mono-repo layout managed by `UV`.
@@ -76,7 +85,7 @@ This project adopts a mono-repo layout managed by `UV`.
 
 ### uv workspace
 
-Five members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`, `radiologist-inference`, `radiologist-app`.
+Three active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`. `radiologist-app` and `radiologist-inference` are **planned but not yet implemented** — their directories do not exist.
 
 Each package uses `namespace = true` (no `__init__.py` at the `radiologist/` level). Add new members to `[tool.uv.workspace] members` and `[tool.uv.sources]` in the root `pyproject.toml`.
 
@@ -126,8 +135,8 @@ When an subagent ends his work in a worktree:
 ### Running tests
 
 ```bash
-uv run --active pytest -q -p no:warnings                          # all packages
-uv run --active pytest radiologist-core/tests -q -p no:warnings  # single package
+uv run --active pytest -q                          # all packages
+uv run --active pytest radiologist-core/tests -q   # single package
 ```
 
 ### Code style — PEP 8
@@ -159,6 +168,7 @@ Fixtures defined in a `conftest.py` can be used by any test in that package with
 
 ## Gotchas
 
+- **[Packages]** `radiologist-app/` and `radiologist-inference/` do not exist on disk — they are planned packages. Do not attempt to read or import from them.
 - **[PyTorch]** The sandbox security hook false-positives on the `.eval()` method name. Use `model.train(mode=False)` instead of `model.eval()` in any PyTorch code.
 - **[LICENSE]** You MUST NOT add the license header in your code yourself. `pre-commit` we do that.
 - **[MEMORY]** Generalise before saving: a gotcha observed on one instance (a class, function, OS, or library) should be written at the level of the broader behavior it exemplifies — not pinned to the specific case that triggered it. When writing a memory or gotcha, ask: is this specific to X, or is X just one case of a wider rule? Write the wider rule; mention X only as an example if it aids clarity.
