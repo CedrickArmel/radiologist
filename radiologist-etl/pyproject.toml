@@ -19,8 +19,16 @@ dependencies = [
     "hydra-core>=1.3.0",
     "omegaconf>=2.3.0",
     "rich>=13.0.0",
-    "prefect>=3.0.0",
-    "gcsfs>=2026.4.0"
+
+
+]
+
+[project.optional-dependencies]
+gcs = ["gcsfs>=2026.4.0"]
+prefect = ["prefect>=3.0.0"]
+all = [
+    "gcsfs>=2026.4.0",
+    "prefect>=3.0.0"
 ]
 
 [tool.commitizen]

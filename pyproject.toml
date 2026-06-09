@@ -23,12 +23,18 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
-    "radiologist-utils",
-    "radiologist-etl",
     "radiologist-core",
+    "radiologist-utils[ml]",
 ]
 
 [project.optional-dependencies]
+all = [
+    "radiologist-core[all]",
+    "radiologist-etl[all]",
+    "radiologist-utils[all]",
+]
+etl = ["radiologist-etl"]
+prefect = ["radiologist-etl[prefect]"]
 registry = ["radiologist-core[registry]"]
 
 [tool.commitizen]
