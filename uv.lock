@@ -4762,11 +4762,21 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "radiologist-core" },
-    { name = "radiologist-etl" },
-    { name = "radiologist-utils" },
+    { name = "radiologist-utils", extra = ["ml"] },
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "radiologist-core", extra = ["all"] },
+    { name = "radiologist-etl", extra = ["all"] },
+    { name = "radiologist-utils", extra = ["all"] },
+]
+etl = [
+    { name = "radiologist-etl" },
+]
+prefect = [
+    { name = "radiologist-etl", extra = ["prefect"] },
+]
 registry = [
     { name = "radiologist-core", extra = ["registry"] },
 ]
@@ -4790,11 +4800,15 @@ typing = [
 [package.metadata]
 requires-dist = [
     { name = "radiologist-core", editable = "radiologist-core" },
+    { name = "radiologist-core", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-core" },
     { name = "radiologist-core", extras = ["registry"], marker = "extra == 'registry'", editable = "radiologist-core" },
-    { name = "radiologist-etl", editable = "radiologist-etl" },
-    { name = "radiologist-utils", editable = "radiologist-utils" },
+    { name = "radiologist-etl", marker = "extra == 'etl'", editable = "radiologist-etl" },
+    { name = "radiologist-etl", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-etl" },
+    { name = "radiologist-etl", extras = ["prefect"], marker = "extra == 'prefect'", editable = "radiologist-etl" },
+    { name = "radiologist-utils", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-utils" },
+    { name = "radiologist-utils", extras = ["ml"], editable = "radiologist-utils" },
 ]
-provides-extras = ["registry"]
+provides-extras = ["all", "etl", "prefect", "registry"]
 
 [package.metadata.requires-dev]
 lint = [
@@ -4815,46 +4829,70 @@ name = "radiologist-core"
 version = "0.1.0"
 source = { editable = "radiologist-core" }
 dependencies = [
-    { name = "captum" },
     { name = "fsspec" },
     { name = "hydra-core" },
     { name = "lightning" },
     { name = "omegaconf" },
+    { name = "pillow" },
     { name = "radiologist-etl" },
     { name = "radiologist-utils" },
     { name = "torch" },
     { name = "torchmetrics" },
     { name = "torchvision" },
-    { name = "wandb" },
     { name = "webdataset" },
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "captum" },
+    { name = "gcsfs" },
+    { name = "onnx" },
+    { name = "onnxruntime" },
+    { name = "onnxscript" },
+    { name = "wandb" },
+]
+gcs = [
+    { name = "gcsfs" },
+]
 registry = [
     { name = "onnx" },
     { name = "onnxruntime" },
     { name = "onnxscript" },
 ]
+wandb = [
+    { name = "wandb" },
+]
+xai = [
+    { name = "captum" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "captum", specifier = ">=0.9.0" },
+    { name = "captum", marker = "extra == 'all'", specifier = ">=0.9.0" },
+    { name = "captum", marker = "extra == 'xai'", specifier = ">=0.9.0" },
     { name = "fsspec", specifier = ">=2023.1.0" },
+    { name = "gcsfs", marker = "extra == 'all'", specifier = ">=2026.4.0" },
+    { name = "gcsfs", marker = "extra == 'gcs'", specifier = ">=2026.4.0" },
     { name = "hydra-core", specifier = ">=1.3.0" },
     { name = "lightning", specifier = ">=2.0.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
+    { name = "onnx", marker = "extra == 'all'", specifier = ">=1.14.0" },
     { name = "onnx", marker = "extra == 'registry'", specifier = ">=1.14.0" },
+    { name = "onnxruntime", marker = "extra == 'all'", specifier = ">=1.18.0,<1.24.0" },
     { name = "onnxruntime", marker = "extra == 'registry'", specifier = ">=1.18.0,<1.24.0" },
+    { name = "onnxscript", marker = "extra == 'all'", specifier = ">=0.1.0" },
     { name = "onnxscript", marker = "extra == 'registry'", specifier = ">=0.1.0" },
+    { name = "pillow", specifier = ">=10.0.0" },
     { name = "radiologist-etl", editable = "radiologist-etl" },
     { name = "radiologist-utils", editable = "radiologist-utils" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "torchmetrics", specifier = ">=1.0.0" },
     { name = "torchvision", specifier = ">=0.15.0" },
-    { name = "wandb", specifier = ">=0.18.0" },
+    { name = "wandb", marker = "extra == 'all'", specifier = ">=0.18.0" },
+    { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.18.0" },
     { name = "webdataset", specifier = ">=0.2.86" },
 ]
-provides-extras = ["registry"]
+provides-extras = ["all", "gcs", "registry", "wandb", "xai"]
 
 [[package]]
 name = "radiologist-etl"
@@ -4862,14 +4900,12 @@ version = "0.1.0"
 source = { editable = "radiologist-etl" }
 dependencies = [
     { name = "fsspec" },
-    { name = "gcsfs" },
     { name = "hydra-core" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "omegaconf" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "prefect" },
     { name = "pyarrow" },
     { name = "radiologist-utils" },
     { name = "rich" },
@@ -4878,21 +4914,36 @@ dependencies = [
     { name = "webdataset" },
 ]
 
+[package.optional-dependencies]
+all = [
+    { name = "gcsfs" },
+    { name = "prefect" },
+]
+gcs = [
+    { name = "gcsfs" },
+]
+prefect = [
+    { name = "prefect" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "fsspec", specifier = ">=2025.3.0" },
-    { name = "gcsfs", specifier = ">=2026.4.0" },
+    { name = "gcsfs", marker = "extra == 'all'", specifier = ">=2026.4.0" },
+    { name = "gcsfs", marker = "extra == 'gcs'", specifier = ">=2026.4.0" },
     { name = "hydra-core", specifier = ">=1.3.0" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "pandas", specifier = ">=2.0.0" },
-    { name = "prefect", specifier = ">=3.0.0" },
+    { name = "prefect", marker = "extra == 'all'", specifier = ">=3.0.0" },
+    { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.0.0" },
     { name = "pyarrow", specifier = ">=14.0.0" },
     { name = "radiologist-utils", editable = "radiologist-utils" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "scikit-image", specifier = ">=0.24.0" },
     { name = "webdataset", specifier = ">=0.2.0" },
 ]
+provides-extras = ["gcs", "prefect", "all"]
 
 [[package]]
 name = "radiologist-utils"
@@ -4900,21 +4951,54 @@ version = "0.1.0"
 source = { editable = "radiologist-utils" }
 dependencies = [
     { name = "fsspec" },
-    { name = "gcsfs" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pillow" },
     { name = "rich" },
 ]
 
+[package.optional-dependencies]
+all = [
+    { name = "gcsfs" },
+    { name = "hydra-core" },
+    { name = "lightning" },
+    { name = "omegaconf" },
+    { name = "torch" },
+    { name = "wandb" },
+]
+gcs = [
+    { name = "gcsfs" },
+]
+ml = [
+    { name = "hydra-core" },
+    { name = "lightning" },
+    { name = "omegaconf" },
+    { name = "torch" },
+]
+wandb = [
+    { name = "wandb" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "fsspec", specifier = ">=2025.3.0" },
-    { name = "gcsfs", specifier = ">=2025.3.0" },
+    { name = "gcsfs", marker = "extra == 'all'", specifier = ">=2026.4.0" },
+    { name = "gcsfs", marker = "extra == 'gcs'", specifier = ">=2026.4.0" },
+    { name = "hydra-core", marker = "extra == 'all'", specifier = ">=1.3.0" },
+    { name = "hydra-core", marker = "extra == 'ml'", specifier = ">=1.3.0" },
+    { name = "lightning", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "lightning", marker = "extra == 'ml'", specifier = ">=2.0.0" },
     { name = "numpy", specifier = ">=1.24.0" },
+    { name = "omegaconf", marker = "extra == 'all'", specifier = ">=2.3.0" },
+    { name = "omegaconf", marker = "extra == 'ml'", specifier = ">=2.3.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "rich", specifier = ">=13.0.0" },
+    { name = "torch", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "torch", marker = "extra == 'ml'", specifier = ">=2.0.0" },
+    { name = "wandb", marker = "extra == 'all'", specifier = ">=0.18.0" },
+    { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.18.0" },
 ]
+provides-extras = ["all", "gcs", "ml", "wandb"]
 
 [[package]]
 name = "readchar"
