@@ -1,7 +1,7 @@
 # @package module
 loss:
   _target_: radiologist.core.FocalLoss
-  to_onehot_y: false
+  to_onehot_y: true
   gamma: 2
   alpha: 1
   reduction: mean

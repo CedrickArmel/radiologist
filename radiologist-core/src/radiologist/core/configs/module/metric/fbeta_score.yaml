@@ -3,7 +3,7 @@ metric:
   _target_: torchmetrics.classification.MulticlassFBetaScore
   _partial_: true
   beta: 1.0
-  num_classes: ${datamodule.num_classes}
+  num_classes: ${module.net.num_classes}
   average: macro
   multidim_average: global
   top_k: 1
