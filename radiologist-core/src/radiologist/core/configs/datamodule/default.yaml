@@ -1,15 +1,15 @@
 # @package _global_
 datamodule:
   _target_: radiologist.core.WebDatasetDataModule
-  shard_root: ???
-  split_manifest_uri: ???
-  batch_size: ???
+  shard_root: gs://radiologist-liora-gcs/shards/
+  split_manifest_uri: gs://radiologist-liora-gcs/pipelines/manifests/manifest-cac06487078e0dfa.jsonl
+  batch_size: 10
   seed: ${seed}
   shardshuffle: 100
   label_map:
     normal: healthy
-    pneumonia: viral
-    COVID: viral
+    viral_pneumonia: viral
+    covid: viral
     lung_opacity: opacity
   classes: [healthy, viral, opacity]
   class_weights: null
@@ -17,35 +17,37 @@ datamodule:
   train_transform:
     _target_: torchvision.transforms.v2.Compose
     transforms:
-      - {_target_: torchvision.transforms.ToImage}
-      - {_target_: torchvision.transforms.Resize, size: 256}
-      - {_target_: torchvision.transforms.RandomApply, p: 0.0, transforms: [{_target_: torchvision.transforms.RandomResizedCrop, size: 256, scale: [0.9, 1.1]}]}
-      - {_target_: torchvision.transforms.RandomApply, p: 0.0, transforms: [{_target_: torchvision.transforms.ColorJitter, brightness: 0.1, contrast: 0.2}]}
-      - _target_: torchvision.transforms.ToTensor
-      - {_target_: torchvision.transforms.Normalize, mean: [128], std: [65]}
+      - {_target_: torchvision.transforms.v2.Grayscale, num_output_channels: 3}
+      - {_target_: torchvision.transforms.v2.Resize, size: 256}
+      - {_target_: torchvision.transforms.v2.RandomApply, p: 1.0, transforms: [{_target_: torchvision.transforms.v2.RandomResizedCrop, size: 256, scale: [0.9, 1.1]}]}
+      - {_target_: torchvision.transforms.v2.RandomApply, p: 1.0, transforms: [{_target_: torchvision.transforms.v2.ColorJitter, brightness: 0.1, contrast: 0.2}]}
+      - _target_: torchvision.transforms.v2.ToImage
+      - {_target_: torchvision.transforms.v2.ToDtype, dtype: {_target_: radiologist.core.data.dtypes.torch_float_32}, scale: true}
+      - {_target_: torchvision.transforms.v2.Normalize, mean: [128], std: [65]}
   eval_transform:
     _target_: torchvision.transforms.v2.Compose
     transforms:
-      - {_target_: torchvision.transforms.ToImage}
-      - {_target_: torchvision.transforms.Resize, size: 256}
-      - _target_: torchvision.transforms.ToTensor
-      - {_target_: torchvision.transforms.Normalize, mean: [128], std: [65]}
+      - {_target_: torchvision.transforms.v2.Grayscale, num_output_channels: 3}
+      - {_target_: torchvision.transforms.v2.Resize, size: 256}
+      - _target_: torchvision.transforms.v2.ToImage
+      - {_target_: torchvision.transforms.v2.ToDtype, dtype: {_target_: radiologist.core.data.dtypes.torch_float_32}, scale: true}
+      - {_target_: torchvision.transforms.v2.Normalize, mean: [128], std: [65]}
   train_loader:
     _target_: webdataset.WebLoader
     _partial_: true
     num_workers: 4
     pin_memory: false
-    worker_init_fn:
+    worker_init_fn: {_target_: radiologist.utils.ml.seed_worker, _partial_: true}
     generator:
-      _target_: radiologist.utils.get_seeded_generator
+      _target_: radiologist.utils.ml.get_seeded_generator
       seed: ${seed}
   eval_loader:
     _target_: webdataset.WebLoader
     _partial_: true
     num_workers: 4
     pin_memory: false
-    worker_init_fn: {_target_: radiologist.utils.seed_worker}
+    worker_init_fn: {_target_: radiologist.utils.ml.seed_worker, _partial_: true}
     generator:
-      _target_: radiologist.utils.get_seeded_generator
+      _target_: radiologist.utils.ml.get_seeded_generator
       seed: ${seed}
   storage_options: null

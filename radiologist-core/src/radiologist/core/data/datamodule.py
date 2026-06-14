@@ -23,11 +23,12 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import lightning as L  # type: ignore[import-untyped]
 import torch
 import webdataset as wds  # type: ignore[import-untyped]
+from webdataset.filters import default_collation_fn
 
 from radiologist.core.data.shards import (
     _discover_shards,
@@ -130,7 +131,7 @@ class WebDatasetDataModule(L.LightningDataModule):
             splits = ["train", "val"]
 
         self._records = records_reader(self._split_manifest_uri, self._opts)
-        self._shards = _discover_shards(self.shard_root, splits)
+        self._shards = _discover_shards(self.shard_root, splits, self._opts)
 
         for split, by_label in self._shards.items():
             for label in by_label:
@@ -162,7 +163,7 @@ class WebDatasetDataModule(L.LightningDataModule):
                         if (
                             not r.excluded
                             and r.split == "train"
-                            and pathjoin(self.shard_root, r.shard) == p
+                            and p in pathjoin(self.shard_root, r.shard)
                         )
                     ]
                 )
@@ -180,10 +181,28 @@ class WebDatasetDataModule(L.LightningDataModule):
             img = Image.open(_io.BytesIO(sample["png"])).convert("RGB")
             tensor = transform(img)
             label_str = sample["cls"].decode("utf-8").strip()
-            target = torch.tensor(resolve(label_str), dtype=torch.int64)
+            target = torch.tensor(resolve(label_str), dtype=torch.long)
             return {"input": tensor, "target": target, "key": sample["__key__"]}
 
         return decode_sample
+
+    def _collation_fn(
+        self,
+        samples: list[dict[str, Any] | tuple],
+        combine_tensors: bool = True,
+        combine_scalars: bool = True,
+    ):
+        result = default_collation_fn(
+            samples=samples,
+            combine_tensors=combine_tensors,
+            combine_scalars=combine_scalars,
+        )
+        if isinstance(result, dict):
+            return {
+                k: (v.squeeze() if isinstance(v, torch.Tensor) else v)
+                for k, v in result.items()
+            }
+        return result
 
     def _build_pipeline(
         self, shards_by_label: Dict[str, List[str]], transform: Callable, shuffle: bool
@@ -201,7 +220,7 @@ class WebDatasetDataModule(L.LightningDataModule):
             )
             .compose(wds.split_by_node, wds.split_by_worker)
             .map(self._make_sample_mapper(transform))
-            .batched(self.batch_size)
+            .batched(batchsize=self.batch_size, collation_fn=self._collation_fn)
         )
         return ds
 
@@ -224,7 +243,7 @@ class WebDatasetDataModule(L.LightningDataModule):
                 )
                 .compose(wds.split_by_node, wds.split_by_worker)
                 .map(self._make_sample_mapper(transform))
-                .batched(self.batch_size)
+                .batched(batchsize=self.batch_size, collation_fn=self._collation_fn)
             )
             if cls_idx not in pipelines:
                 pipelines[cls_idx] = ds
@@ -245,9 +264,8 @@ class WebDatasetDataModule(L.LightningDataModule):
         loader = (
             self._train_loader(mixed)
             .unbatched()
-            .unbatched()
             .shuffle(1000)
-            .batched(self.batch_size)
+            .batched(batchsize=self.batch_size, collation_fn=self._collation_fn)
             .repeat(2)
             .with_epoch(self.train_size // self.batch_size)
         )

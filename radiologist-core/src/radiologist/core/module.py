@@ -58,10 +58,14 @@ class LModule(L.LightningModule):
         priors: Optional[List[float]] = None,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=["net", "loss", "metric"])
+        self.save_hyperparameters(
+            ignore=["net", "loss", "metric", "optimizer", "scheduler"]
+        )
 
         self.net = net
         self.criterion = loss
+        self.optimizer = optimizer
+        self.scheduler = scheduler
 
         self.val_score: Metric = metric()
         self.test_score: Metric = metric()
@@ -177,10 +181,9 @@ class LModule(L.LightningModule):
         return self.net(x)
 
     def configure_optimizers(self) -> Any:
-        _opt_factory: partial = self.hparams["optimizer"]  # type: ignore[index]
-        _sched_factory: Optional[partial] = self.hparams.get(  # type: ignore[union-attr]
-            "scheduler", None
-        )
+        _opt_factory: partial = self.optimizer  # type: ignore[index]
+        _sched_factory: Optional[partial] = self.scheduler
+
         optimizer = _opt_factory(params=self.parameters())
         if _sched_factory is None:
             return {"optimizer": optimizer}

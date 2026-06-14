@@ -20,39 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import glob
 import re
-import tarfile
 from typing import Callable, Dict, List
 
 import fsspec  # type: ignore[import-untyped]
 from braceexpand import braceexpand  # type: ignore[import-untyped]
 
+from radiologist.utils import pathjoin
+
 _WILDCARD_RE = re.compile(r"[*?\[]")
-
-
-def _expand_spec(spec: str) -> List[str]:
-    """Expand a shard spec to a sorted unique list of fully-qualified URLs.
-
-    Args:
-        spec: A brace-range spec, a wildcard glob, or a literal URL/path.
-
-    Returns:
-        Sorted unique list of expanded paths or URLs.
-    """
-    if "{" in spec:
-        expanded = list(braceexpand(spec))
-        wildcards = [p for p in expanded if _WILDCARD_RE.search(p)]
-        literals = [p for p in expanded if not _WILDCARD_RE.search(p)]
-        resolved: List[str] = list(literals)
-        for pattern in wildcards:
-            fs, path = fsspec.core.url_to_fs(pattern)
-            resolved.extend(fs.glob(path))
-        return sorted(set(resolved))
-    if _WILDCARD_RE.search(spec):
-        fs, path = fsspec.core.url_to_fs(spec)
-        return sorted(set(fs.glob(path)))
-    return [spec]
 
 
 def _label_from_path(path: str) -> str:
@@ -91,7 +67,7 @@ def _group_by_label(paths: List[str]) -> Dict[str, List[str]]:
 
 
 def _discover_shards(
-    shard_root: str, splits: List[str]
+    shard_root: str, splits: List[str], storage_options: dict | None = None
 ) -> Dict[str, Dict[str, List[str]]]:
     """Discover tar shards under {shard_root}/{split}/{label}/*.tar.
 
@@ -109,31 +85,41 @@ def _discover_shards(
     Raises:
         FileNotFoundError: If a required split has no matching shards.
     """
+    opts = storage_options or {}
     result: Dict[str, Dict[str, List[str]]] = {}
 
-    if "{" in shard_root or _WILDCARD_RE.search(shard_root):
-        all_paths = _expand_spec(shard_root)
-        for split in splits:
-            split_paths = (
-                [p for p in all_paths if _split_from_path(p) == split]
-                if split
-                else list(all_paths)
-            )
-            if not split_paths:
-                raise FileNotFoundError(
-                    f"No shards found for split '{split}' under '{shard_root}'"
-                )
-            result[split] = _group_by_label(split_paths)
-        return result
+    fs, path = fsspec.url_to_fs(shard_root, **opts)
+    remote = "local" not in fs.protocol
+
+    all_paths = []
+
+    braceexpanded = list(braceexpand(shard_root))
+    istarfile = shard_root.endswith(".tar")
+
+    if _WILDCARD_RE.search(shard_root):
+        for p in braceexpanded:
+            all_paths.extend(fs.glob(p))
+    else:
+        for p in braceexpanded:
+            if not istarfile:
+                for split in splits:
+                    pattern = pathjoin(p, split, "*", "*.tar")
+                    all_paths.extend(fs.glob(pattern))
+            else:
+                all_paths = braceexpanded
 
     for split in splits:
-        pattern = f"{shard_root}/{split}/*/*.tar"
-        paths = sorted(glob.glob(pattern))
-        if not paths:
+        split_paths = [
+            (fs.unstrip_protocol(p) if remote else p)
+            for p in sorted(all_paths)
+            if _split_from_path(p) == split
+        ]
+        if not split_paths:
             raise FileNotFoundError(
-                f"No shards found for split '{split}' under '{shard_root}/{split}'"
+                f"No shards found for split '{split}' under '{shard_root}'"
             )
-        result[split] = _group_by_label(paths)
+        result[split] = _group_by_label(split_paths)
+
     return result
 
 
@@ -164,22 +150,3 @@ def _make_label_resolver(
         return class_index[label_str]
 
     return resolve
-
-
-def _count_samples(tar_path: str) -> int:
-    """Count samples in a tar shard by counting '.cls' member files.
-
-    Args:
-        tar_path: Path to a WebDataset tar shard.
-
-    Returns:
-        Number of samples (one per .cls file).
-    """
-    count = 0
-    fs, path = fsspec.url_to_fs(tar_path)
-    with fs.open(path, "rb") as f:
-        with tarfile.open(fileobj=f, mode="r|*") as tf:
-            for member in tf:
-                if member.name.endswith(".cls"):
-                    count += 1
-    return count

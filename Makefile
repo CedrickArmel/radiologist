@@ -1,0 +1,244 @@
+SHELL := /bin/bash
+
+UV_VERSION     ?= 0.7.13
+PYTHON_VERSION ?= 3.10.16
+VENV           ?= radiologist
+PYENV_GIT_TAG  ?= v2.6.3
+
+PKG_CORE  := radiologist-core
+PKG_ETL   := radiologist-etl
+PKG_UTILS := radiologist-utils
+
+PYTEST_FLAGS ?= -q
+
+define GPUENVVARS
+# Hydra debug
+export HYDRA_FULL_ERROR=1
+
+# Set environment variables for GPU
+export CUDA_HOME="/usr/local/cuda"
+export CUDA_VERSION="12.5.1"
+export CUDA_MAJOR_VERSION="12"
+export CUDA_MINOR_VERSION="5"
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+export LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64/stubs"
+export LIBRARY_PATH="/usr/local/cuda/lib64/stubs"
+
+export NVARCH="x86_64"
+
+export NVIDIA_VISIBLE_DEVICES="all"
+export NVIDIA_DRIVER_CAPABILITIES="compute,utility"
+
+export NV_CUDA_CUDART_VERSION="12.5.82-1"
+export NV_CUDA_CUDART_DEV_VERSION="12.5.82-1"
+export NV_CUDA_LIB_VERSION="12.5.1-1"
+export NV_CUDA_NSIGHT_COMPUTE_VERSION="12.5.1-1"
+export NV_CUDA_NSIGHT_COMPUTE_DEV_PACKAGE="cuda-nsight-compute-12-5=12.5.1-1"
+export NV_NVTX_VERSION="12.5.82-1"
+export NV_NVPROF_VERSION="12.5.82-1"
+export NV_NVPROF_DEV_PACKAGE="cuda-nvprof-12-5=12.5.82-1"
+
+# cuDNN
+export NV_CUDNN_VERSION="9.2.1.18-1"
+export NV_CUDNN_PACKAGE="libcudnn9-cuda-12=9.2.1.18-1"
+export NV_CUDNN_PACKAGE_DEV="libcudnn9-dev-cuda-12=9.2.1.18-1"
+
+# cuBLAS
+export NV_LIBCUBLAS_VERSION="12.5.3.2-1"
+export NV_LIBCUBLAS_PACKAGE="libcublas-12-5=12.5.3.2-1"
+export NV_LIBCUBLAS_PACKAGE_NAME="libcublas-12-5"
+export NV_LIBCUBLAS_DEV_VERSION="12.5.3.2-1"
+export NV_LIBCUBLAS_DEV_PACKAGE="libcublas-dev-12-5=12.5.3.2-1"
+export NV_LIBCUBLAS_DEV_PACKAGE_NAME="libcublas-dev-12-5"
+
+# NCCL (for multi-GPU)
+export NCCL_VERSION="2.22.3-1"
+export NV_LIBNCCL_PACKAGE="libnccl2=2.22.3-1+cuda12.5"
+export NV_LIBNCCL_PACKAGE_NAME="libnccl2"
+export NV_LIBNCCL_PACKAGE_VERSION="2.22.3-1"
+export NV_LIBNCCL_DEV_PACKAGE="libnccl-dev=2.22.3-1+cuda12.5"
+export NV_LIBNCCL_DEV_PACKAGE_NAME="libnccl-dev"
+export NV_LIBNCCL_DEV_PACKAGE_VERSION="2.22.3-1"
+endef
+
+
+define TPUENVVARS
+# Unset environment variables that are not needed
+for var in MASTER_ADDR MASTER_PORT TPU_PROCESS_ADDRESSES XRT_TPU_CONFIG; do
+    unset $var
+done
+
+# Hydra debug
+export HYDRA_FULL_ERROR=1
+
+# Set environment variables for TPU
+export ISTPUVM=1
+export PJRT_DEVICE=TPU
+export PT_XLA_DEBUG_LEVEL=1
+export TF_CPP_MIN_LOG_LEVEL=2
+export TPU_ACCELERATOR_TYPE=v5litepod-8
+export TPU_CHIPS_PER_HOST_BOUNDS=2,4,1
+export TPU_HOST_BOUNDS=1,1,1
+export TPU_RUNTIME_METRICS_PORTS=8431,8432,8433,8434,8435,8436,8437,8438
+export TPU_SKIP_MDS_QUERY=1
+export TPU_WORKER_HOSTNAMES=localhost
+export TPU_WORKER_ID=0
+export XLA_TENSOR_ALLOCATOR_MAXSIZE=100000000
+endef
+
+
+define PYENVINIT
+# Pyenv setup
+
+export PYENV_ROOT="$$HOME/.pyenv"
+[[ -d $$PYENV_ROOT/bin ]] && export PATH="$$PYENV_ROOT/bin:$$PATH"
+eval "$$(pyenv init - bash)"
+eval "$$(pyenv virtualenv-init -)"
+endef
+
+define UVALIASES
+# uv aliases
+
+alias uvadd="uv add --active"
+alias uvsync="uv sync --active"
+endef
+
+export GPUENVVARS
+export TPUENVVARS
+export PYENVINIT
+export PYENV_GIT_TAG
+export UVALIASES
+
+.DEFAULT_GOAL := help
+
+.PHONY: help \
+        tpusetup gpusetup cpusetup \
+        uv pyenv venv remove-tf tpuenvs gpuenvs reload \
+        sync sync-all sync-registry dev-install \
+        test test-core test-etl test-utils \
+        lint format type-check \
+        clean
+
+# --------------------------------------------------------------------------- #
+#  Help                                                                        #
+# --------------------------------------------------------------------------- #
+
+help:  ## show available targets
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+# --------------------------------------------------------------------------- #
+#  Environment bootstrap (new machine / remote VM)                             #
+# --------------------------------------------------------------------------- #
+
+tpusetup: tpuenvs remove-tf uv pyenv venv reload  ## full TPU VM bootstrap
+gpusetup: gpuenvs remove-tf uv pyenv venv reload  ## full GPU machine bootstrap
+cpusetup: uv pyenv venv reload                    ## CPU-only bootstrap
+
+uv:  ## install / upgrade uv to $(UV_VERSION)
+	@echo "Installing uv $(UV_VERSION)..."
+	@grep -q '# uv setup' ~/.bashrc || echo '# uv setup' >> ~/.bashrc
+	@curl -LsSf https://astral.sh/uv/$(UV_VERSION)/install.sh | sh
+	@grep -q 'uv generate-shell-completion bash' ~/.bashrc || echo 'eval "$$(uv generate-shell-completion bash)"' >> ~/.bashrc
+	@grep -q 'uvx --generate-shell-completion bash' ~/.bashrc || echo 'eval "$$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+	@grep -q '# uv aliases' ~/.bashrc || echo "$$UVALIASES" >> ~/.bashrc
+	@echo "✅ uv installed!"
+
+pyenv:  ## install pyenv
+	@echo "Installing pyenv..."
+	@curl https://pyenv.run | bash
+	@grep -q 'pyenv init' ~/.bashrc || echo "$$PYENVINIT" >> ~/.bashrc
+	@echo "✅ pyenv installed!"
+
+venv:  ## create Python $(PYTHON_VERSION) virtualenv '$(VENV)' via pyenv
+	@echo "Creating virtualenv '$(VENV)' (Python $(PYTHON_VERSION))..."
+	@export PYENV_ROOT="$$HOME/.pyenv" && export PATH="$$PYENV_ROOT/bin:$$PATH" && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
+	if ! pyenv versions --bare | grep -q "^$(PYTHON_VERSION)$$"; \
+	then pyenv install $(PYTHON_VERSION); \
+	else echo "✅ Python $(PYTHON_VERSION) already installed"; fi
+	@export PYENV_ROOT="$$HOME/.pyenv" && export PATH="$$PYENV_ROOT/bin:$$PATH" && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
+	if ! pyenv virtualenvs --bare | grep -q "^$(VENV)$$"; \
+	then pyenv virtualenv $(PYTHON_VERSION) $(VENV); \
+	else echo "✅ Virtualenv '$(VENV)' already exists"; fi
+	@echo "✅ Virtualenv ready — run: pyenv activate $(VENV)"
+
+remove-tf:  ## uninstall tensorflow family to avoid conflicts
+	@echo "Removing tensorflow packages..."
+	@uv pip uninstall tensorflow tensorflow-tpu tensorboard -y 2>/dev/null || true
+	@echo "✅ tensorflow packages removed"
+
+tpuenvs:  ## append TPU env vars to ~/.bashrc
+	@echo "Setting up TPU environment variables..."
+	@grep -q '# Set environment variables for TPU' ~/.bashrc || echo "$$TPUENVVARS" >> ~/.bashrc
+	@echo "✅ TPU env vars written"
+
+gpuenvs:  ## append GPU / CUDA env vars to ~/.bashrc
+	@echo "Setting up GPU environment variables..."
+	@grep -q '# Set environment variables for GPU' ~/.bashrc || echo "$$GPUENVVARS" >> ~/.bashrc
+	@echo "✅ GPU env vars written"
+
+reload:  ## remind to reload shell
+	@echo "⏭️  Run: source ~/.bashrc"
+
+# --------------------------------------------------------------------------- #
+#  Day-to-day dev                                                              #
+# --------------------------------------------------------------------------- #
+
+sync:  ## sync all dep-groups — core deps + test/lint/typing (no optional extras)
+	@uv sync --active --all-groups
+
+sync-all:  ## sync all dep-groups + all optional extras (wandb, onnx, captum, gcsfs, prefect)
+	@uv sync --active --all-groups --extra all
+
+sync-registry:  ## sync with ONNX registry extra only (onnx, onnxruntime, onnxscript)
+	@uv sync --active --all-groups --extra registry
+
+dev-install: sync-all  ## sync deps + install pre-commit hooks (run once after clone)
+	@uv run --active pre-commit install
+	@uv run --active pre-commit install --install-hooks -t commit-msg
+	@echo "✅ Dev environment ready!"
+
+# --------------------------------------------------------------------------- #
+#  Tests                                                                       #
+# --------------------------------------------------------------------------- #
+
+test:  ## run all package tests
+	@uv run --active pytest $(PYTEST_FLAGS)
+
+test-core:  ## run radiologist-core tests only
+	@uv run --active pytest $(PKG_CORE)/tests $(PYTEST_FLAGS)
+
+test-etl:  ## run radiologist-etl tests only
+	@uv run --active pytest $(PKG_ETL)/tests $(PYTEST_FLAGS)
+
+test-utils:  ## run radiologist-utils tests only
+	@uv run --active pytest $(PKG_UTILS)/tests $(PYTEST_FLAGS)
+
+# --------------------------------------------------------------------------- #
+#  Code quality                                                                #
+# --------------------------------------------------------------------------- #
+
+lint:  ## run all pre-commit hooks on every file
+	@uv run --active pre-commit run --all-files
+
+format:  ## run black + isort in-place
+	@uv run --active black .
+	@uv run --active isort .
+
+type-check:  ## run mypy across all packages
+	@uv run --active mypy $(PKG_CORE)/src $(PKG_ETL)/src $(PKG_UTILS)/src
+
+# --------------------------------------------------------------------------- #
+#  Maintenance                                                                 #
+# --------------------------------------------------------------------------- #
+
+clean:  ## remove __pycache__, .pytest_cache, .mypy_cache, .coverage
+	@find . -type d \( -name '__pycache__' -o -name '.pytest_cache' -o -name '.mypy_cache' \) \
+		-not -path './.git/*' -exec rm -rf {} + 2>/dev/null || true
+	@rm -f .coverage coverage.xml
+	@echo "✅ Clean!"
+
+gcloud:
+	@curl https://sdk.cloud.google.com | bash
