@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import re
-from typing import Callable, Dict, List
+from typing import Dict, List
 
 import fsspec  # type: ignore[import-untyped]
 from braceexpand import braceexpand  # type: ignore[import-untyped]
@@ -121,32 +121,3 @@ def _discover_shards(
         result[split] = _group_by_label(split_paths)
 
     return result
-
-
-def _make_label_resolver(
-    label_map: Dict[str, str], classes: List[str]
-) -> Callable[[str], int]:
-    """Build a function that maps raw ETL label strings to integer class indices.
-
-    Args:
-        label_map: Maps raw ETL label -> class name.
-        classes: Ordered list of class names; index = integer target.
-
-    Returns:
-        Callable that takes a raw label string and returns its class index.
-
-    Raises:
-        KeyError: At build time if a label_map value is not in classes.
-    """
-    class_index: Dict[str, int] = {}
-    for raw, cls_name in label_map.items():
-        if cls_name not in classes:
-            raise KeyError(
-                f"Label map value '{cls_name}' not found in classes {classes}"
-            )
-        class_index[raw] = classes.index(cls_name)
-
-    def resolve(label_str: str) -> int:
-        return class_index[label_str]
-
-    return resolve

@@ -11,7 +11,7 @@ defaults:
   - module/optimizer: adamw
   - datamodule: default
   - strategy: auto
-  - loggers: null
+  - loggers: wandb
   - callbacks: default
   - debug: null
   - profiler: null

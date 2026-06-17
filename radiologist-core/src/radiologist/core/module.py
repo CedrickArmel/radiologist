@@ -199,10 +199,7 @@ class LModule(L.LightningModule):
         self.log("grad_norm", grad_norm, on_step=True, prog_bar=False)
 
     def on_save_checkpoint(self, checkpoint):
-        checkpoint["precision"] = self.precision
-
-    def on_load_checkpoint(self, checkpoint):
-        self.precision = checkpoint.get("precision", self.precision)
+        checkpoint["precision"] = self.trainer.precision
 
     def configure_gradient_clipping(
         self,

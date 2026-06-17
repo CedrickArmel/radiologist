@@ -3,41 +3,41 @@ build-backend = "uv_build"
 requires = ["uv_build>=0.9.28,<0.10.0"]
 
 [project]
+dependencies = [
+    "Pillow>=12.2.0",
+    "radiologist-etl>=0.1.0",
+    "radiologist-utils>=0.1.0",
+    "torch>=2.12.0",
+    "torchvision>=0.27.0",
+    "webdataset>=1.0.0",
+    "lightning>=2.6.0",
+    "torchmetrics>=1.9.0",
+    "hydra-core>=1.3.0",
+    "omegaconf>=2.3.0",
+    "fsspec>=2026.4.0",
+]
 name = "radiologist-core"
 version = "0.1.0"
 description = "Modeling library for the radiologist pipeline"
 license = { file = "../LICENSE" }
 requires-python = ">=3.10"
-dependencies = [
-    "Pillow>=10.0.0",
-    "radiologist-etl",
-    "radiologist-utils",
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
-    "webdataset>=0.2.86",
-    "lightning>=2.0.0",
-    "torchmetrics>=1.0.0",
-    "hydra-core>=1.3.0",
-    "omegaconf>=2.3.0",
-    "fsspec>=2023.1.0",
-]
 
 [project.optional-dependencies]
 all = [
     "captum>=0.9.0",
     "gcsfs>=2026.4.0",
-    "onnx>=1.14.0",
-    "onnxruntime>=1.18.0,<1.24.0",
-    "onnxscript>=0.1.0",
-    "wandb>=0.18.0",
+    "onnx>=1.21.0",
+    "onnxruntime~=1.23.2",
+    "onnxscript>=0.7.0",
+    "wandb>=0.27.0",
 ]
 gcs = ["gcsfs>=2026.4.0"]
 registry = [
-    "onnx>=1.14.0",
-    "onnxruntime>=1.18.0,<1.24.0",
-    "onnxscript>=0.1.0",
+    "onnx>=1.21.0",
+    "onnxruntime~=1.23.0",
+    "onnxscript>=0.7.0",
 ]
-wandb = ["wandb>=0.18.0"]
+wandb = ["wandb>=0.27.0"]
 xai = ["captum>=0.9.0"]
 
 [tool.commitizen]
