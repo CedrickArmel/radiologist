@@ -1,8 +1,8 @@
 # @package _global_
 datamodule:
   _target_: radiologist.core.WebDatasetDataModule
-  shard_root: gs://radiologist-liora-gcs/shards/
-  split_manifest_uri: gs://radiologist-liora-gcs/pipelines/manifests/manifest-cac06487078e0dfa.jsonl
+  shard_root: ???
+  split_manifest_uri: ???
   batch_size: 10
   seed: ${seed}
   shardshuffle: 100
@@ -35,7 +35,8 @@ datamodule:
   train_loader:
     _target_: webdataset.WebLoader
     _partial_: true
-    num_workers: 4
+    batch_size: null
+    num_workers: 0
     pin_memory: false
     worker_init_fn: {_target_: radiologist.utils.ml.seed_worker, _partial_: true}
     generator:
@@ -44,10 +45,12 @@ datamodule:
   eval_loader:
     _target_: webdataset.WebLoader
     _partial_: true
-    num_workers: 4
+    batch_size: null
+    num_workers: 0
     pin_memory: false
     worker_init_fn: {_target_: radiologist.utils.ml.seed_worker, _partial_: true}
     generator:
       _target_: radiologist.utils.ml.get_seeded_generator
       seed: ${seed}
   storage_options: null
+  cache_dir: null

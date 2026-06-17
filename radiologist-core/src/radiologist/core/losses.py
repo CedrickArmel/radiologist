@@ -69,10 +69,7 @@ class FocalLoss(nn.Module):
         Returns:
             Scalar loss (reduction "mean"/"sum") or ``(N,)`` tensor ("none").
         """
-        print(logits.size())
-        print(logits.size(1))
-        print(target.size())
-        print(target.size(1))
+
         num_classes = logits.size(1)
 
         if self.use_softmax:

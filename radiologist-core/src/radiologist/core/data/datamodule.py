@@ -30,12 +30,52 @@ import torch
 import webdataset as wds  # type: ignore[import-untyped]
 from webdataset.filters import default_collation_fn
 
-from radiologist.core.data.shards import (
-    _discover_shards,
-    _make_label_resolver,
-)
+from radiologist.core.data.shards import _discover_shards
 from radiologist.etl import records_reader
 from radiologist.utils import pathjoin
+
+
+def _make_label_resolver(
+    label_map: Dict[str, str], classes: List[str]
+) -> dict[str, int]:
+    """Build a function that maps raw ETL label strings to integer class indices.
+
+    Args:
+        label_map: Maps raw ETL label -> class name.
+        classes: Ordered list of class names; index = integer target.
+
+    Returns:
+        Callable that takes a raw label string and returns its class index.
+
+    Raises:
+        KeyError: At build time if a label_map value is not in classes.
+    """
+    class_index: Dict[str, int] = {}
+    for raw, cls_name in label_map.items():
+        if cls_name not in classes:
+            raise KeyError(
+                f"Label map value '{cls_name}' not found in classes {classes}"
+            )
+        class_index[raw] = classes.index(cls_name)
+
+    return class_index
+
+
+class _SampleMapper:
+    def __init__(self, transform: Callable, label_map, classes) -> None:
+        self._transform = transform
+        self._resolve = _make_label_resolver(label_map, classes)
+
+    def __call__(self, sample: dict) -> dict:
+        import io as _io
+
+        from PIL import Image  # type: ignore[import-untyped]
+
+        img = Image.open(_io.BytesIO(sample["png"])).convert("RGB")
+        tensor = self._transform(img)
+        label_str = sample["cls"].decode("utf-8").strip()
+        target = torch.tensor(self._resolve[label_str], dtype=torch.long)
+        return {"input": tensor, "target": target, "key": sample["__key__"]}
 
 
 class WebDatasetDataModule(L.LightningDataModule):
@@ -70,6 +110,8 @@ class WebDatasetDataModule(L.LightningDataModule):
         classes: Optional[List[str]] = None,
         class_weights: Optional[List[float]] = None,
         priors: Optional[List[float]] = None,
+        cache_size: int = -1,
+        cache_dir: str | None = None,
         shardshuffle: int = 100,
         seed: int = 42,
         storage_options: dict | None = None,
@@ -92,6 +134,8 @@ class WebDatasetDataModule(L.LightningDataModule):
         self._eval_loader = eval_loader
         self._shards: Optional[Dict[str, Dict[str, List[str]]]] = None
         self._split_manifest_uri = split_manifest_uri
+        self._cache_dir = cache_dir
+        self._cache_size = cache_size
 
     @property
     def num_classes(self) -> int:
@@ -171,20 +215,9 @@ class WebDatasetDataModule(L.LightningDataModule):
         return [counts[cls] / total for cls in self.classes]
 
     def _make_sample_mapper(self, transform: Callable) -> Callable:
-        import io as _io
-
-        from PIL import Image  # type: ignore[import-untyped]
-
-        resolve = _make_label_resolver(self.label_map, self.classes)
-
-        def decode_sample(sample: dict) -> dict:
-            img = Image.open(_io.BytesIO(sample["png"])).convert("RGB")
-            tensor = transform(img)
-            label_str = sample["cls"].decode("utf-8").strip()
-            target = torch.tensor(resolve(label_str), dtype=torch.long)
-            return {"input": tensor, "target": target, "key": sample["__key__"]}
-
-        return decode_sample
+        return _SampleMapper(
+            transform=transform, label_map=self.label_map, classes=self.classes
+        )
 
     def _collation_fn(
         self,
@@ -215,8 +248,11 @@ class WebDatasetDataModule(L.LightningDataModule):
             wds.WebDataset(
                 all_shards,
                 shardshuffle=self.shardshuffle if shuffle else False,
+                resampled=True,
                 nodesplitter=None,
                 workersplitter=None,
+                cache_dir=self._cache_dir,
+                cache_size=self._cache_size,
             )
             .compose(wds.split_by_node, wds.split_by_worker)
             .map(self._make_sample_mapper(transform))
@@ -240,6 +276,8 @@ class WebDatasetDataModule(L.LightningDataModule):
                     shardshuffle=self.shardshuffle,
                     nodesplitter=None,
                     workersplitter=None,
+                    cache_dir=self._cache_dir,
+                    cache_size=self._cache_size,
                 )
                 .compose(wds.split_by_node, wds.split_by_worker)
                 .map(self._make_sample_mapper(transform))
@@ -266,8 +304,8 @@ class WebDatasetDataModule(L.LightningDataModule):
             .unbatched()
             .shuffle(1000)
             .batched(batchsize=self.batch_size, collation_fn=self._collation_fn)
-            .repeat(2)
             .with_epoch(self.train_size // self.batch_size)
+            .with_length(self.train_size // self.batch_size)
         )
         return loader
 
@@ -279,8 +317,8 @@ class WebDatasetDataModule(L.LightningDataModule):
         )
         loader = (
             self._eval_loader(pipeline)
-            .repeat(2)
             .with_epoch(self.val_size // self.batch_size)
+            .with_length(self.val_size // self.batch_size)
         )
         return loader
 
@@ -292,7 +330,7 @@ class WebDatasetDataModule(L.LightningDataModule):
         )
         loader = (
             self._eval_loader(pipeline)
-            .repeat(2)
             .with_epoch(self.test_size // self.batch_size)
+            .with_length(self.test_size // self.batch_size)
         )
         return loader

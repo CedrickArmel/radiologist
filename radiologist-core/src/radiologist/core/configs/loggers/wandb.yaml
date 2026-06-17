@@ -3,7 +3,8 @@ loggers:
   wandb:
     _target_: lightning.pytorch.loggers.WandbLogger
     _partial_: false
-    project: radiologist
+    project: ???
+    entity: ???
     name: null
     save_dir: ${paths.output_dir}
     offline: false

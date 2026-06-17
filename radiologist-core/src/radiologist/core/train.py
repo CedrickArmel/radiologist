@@ -59,6 +59,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     Returns:
         Tuple of (metric_dict, object_dict).
     """
+
     if cfg.get("seed"):
         set_seed(cfg.seed)
 
@@ -100,6 +101,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
                 model=module, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path")
             )
 
+        # Snapshot fit-phase metrics (e.g. best_val_score) before test overwrites them.
+        metric_dict = {**trainer.callback_metrics}
+
         if cfg.get("test"):
             log.info("Starting test stage...")
             ckpt_path = (
@@ -115,9 +119,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
             )
 
             trainer.test(model=module, datamodule=datamodule, ckpt_path=ckpt_path)
+            metric_dict.update(trainer.callback_metrics)
 
         log_hyperparameters(object_dict)
-        metric_dict = {**trainer.callback_metrics}
 
     return metric_dict, object_dict
 
