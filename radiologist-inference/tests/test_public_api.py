@@ -148,17 +148,6 @@ def test_score_cam_returns_saliency_map_in_0_1():
     assert result.max() <= 1.0
 
 
-def test_mc_dropout_predict_raises_not_implemented():
-    """mc_dropout_predict must raise NotImplementedError (not yet implemented)."""
-    from radiologist.inference import mc_dropout_predict
-
-    with pytest.raises(NotImplementedError):
-        mc_dropout_predict(
-            session=object(),
-            image=np.zeros((1, 3, 224, 224), dtype=np.float32),
-        )
-
-
 def test_pull_model_raises_runtime_error_when_wandb_absent():
     """pull_model raises RuntimeError naming 'registry' when wandb is absent."""
     import radiologist.inference._stubs as stubs
