@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from radiologist.inference._stubs import (
+from radiologist.inference.predictor import (
     Explanation,
     ModelMetadata,
     Prediction,

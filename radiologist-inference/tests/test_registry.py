@@ -125,7 +125,7 @@ class TestPullModel:
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         with patch.object(stubs, "_wandb", mock_wandb):
             result = pull_model(
@@ -142,7 +142,7 @@ class TestPullModel:
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         with patch.object(stubs, "_wandb", mock_wandb):
             result = pull_model(
@@ -154,7 +154,7 @@ class TestPullModel:
 
     def test_pull_model_raises_runtime_error_when_wandb_absent(self, tmp_path):
         """pull_model raises RuntimeError naming 'registry' when wandb is absent."""
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         with patch.object(stubs, "_wandb", None):
             with pytest.raises(RuntimeError, match="registry"):
@@ -172,7 +172,7 @@ class TestPredictorFromRegistry:
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         with patch.object(stubs, "_wandb", mock_wandb):
             predictor = Predictor.from_registry(
@@ -189,7 +189,7 @@ class TestPredictorFromRegistry:
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         with patch.object(stubs, "_wandb", mock_wandb):
             predictor = Predictor.from_registry(
@@ -208,7 +208,7 @@ class TestPredictorFromRegistry:
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         with patch.object(stubs, "_wandb", mock_wandb):
             registry_predictor = Predictor.from_registry(
@@ -229,7 +229,7 @@ class TestPredictorFromRegistry:
 
     def test_from_registry_raises_runtime_error_when_wandb_absent(self, tmp_path):
         """from_registry raises RuntimeError naming 'registry' when wandb absent."""
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         with patch.object(stubs, "_wandb", None):
             with pytest.raises(RuntimeError, match="registry"):
