@@ -18,6 +18,7 @@ Each active package has a README that is the primary reference for its responsib
 - `radiologist-utils/README.md` — filesystem helpers, logging, ML utilities
 - `radiologist-etl/README.md` — ETL pipeline stages, Haralick GLCM, sharding
 - `radiologist-core/README.md` — training loop, datamodule, callbacks, ONNX registry
+- `radiologist-inference/README.md` — ONNX inference, W&B Registry pull, Score-CAM, MC-Dropout, FastAPI serving, CLI
 
 ### Repository layout
 
@@ -28,7 +29,7 @@ This project adopts a mono-repo layout managed by `UV`.
 | `radiologist-app/` | UI |
 | `radiologist-core/` | Modeling library — datamodule, VGG-11 backbone, focal loss, training loop |
 | `radiologist-etl/` | Data preparation — outlier removal (Haralick GLCM), ImageFolder builder |
-| `radiologist-inference/` | Raw and processed X-ray images (tracked by DVC, stored on Google Drive) |
+| `radiologist-inference/` | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server, Typer CLI |
 | `radiologist-utils/` | Useful helpers |
 
 ```text
@@ -85,7 +86,7 @@ This project adopts a mono-repo layout managed by `UV`.
 
 ### uv workspace
 
-Three active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`. `radiologist-app` and `radiologist-inference` are **planned but not yet implemented** — their directories do not exist.
+Four active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`, `radiologist-inference`. `radiologist-app` is **planned but not yet implemented** — its directory does not exist.
 
 Each package uses `namespace = true` (no `__init__.py` at the `radiologist/` level). Add new members to `[tool.uv.workspace] members` and `[tool.uv.sources]` in the root `pyproject.toml`.
 
