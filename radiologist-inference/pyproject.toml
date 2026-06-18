@@ -30,6 +30,9 @@ serve = [
     "python-multipart>=0.0.9",
 ]
 
+[project.scripts]
+radiologist = "radiologist.inference._cli:main"
+
 [tool.commitizen]
 name = "cz_conventional_commits"
 version = "0.1.0"
