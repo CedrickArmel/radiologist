@@ -121,15 +121,17 @@ def test_predictor_predict_with_uncertainty_raises_not_implemented():
         )
 
 
-def test_score_cam_raises_not_implemented():
-    """score_cam must raise NotImplementedError (not yet implemented)."""
+def test_score_cam_returns_saliency_map_in_0_1():
+    """score_cam must return a numpy array with all values in [0, 1]."""
     from radiologist.inference import score_cam
 
-    with pytest.raises(NotImplementedError):
-        score_cam(
-            feature_maps=np.zeros((64, 7, 7), dtype=np.float32),
-            logits=np.zeros((2,), dtype=np.float32),
-        )
+    result = score_cam(
+        feature_maps=np.random.rand(64, 7, 7).astype(np.float32),
+        logits=np.array([0.3, 0.7], dtype=np.float32),
+    )
+    assert isinstance(result, np.ndarray)
+    assert result.min() >= 0.0
+    assert result.max() <= 1.0
 
 
 def test_mc_dropout_predict_raises_not_implemented():

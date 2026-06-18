@@ -35,6 +35,8 @@ import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
+from radiologist.inference._cam import score_cam as _score_cam
+from radiologist.inference._cam import score_cam_with_session as _score_cam_with_session
 from radiologist.inference._optional import _fastapi, _typer, _wandb  # noqa: F401
 
 
@@ -239,7 +241,44 @@ class Predictor:
         image: Union[str, np.ndarray, PILImage.Image],
     ) -> Explanation:
         """Produce a Score-CAM saliency map for the given image."""
-        raise NotImplementedError
+        if not hasattr(self, "_state"):
+            raise NotImplementedError
+
+        if isinstance(image, str):
+            pil_orig = PILImage.open(image).convert("RGB")
+        elif isinstance(image, np.ndarray):
+            pil_orig = PILImage.fromarray(image).convert("RGB")
+        else:
+            pil_orig = image.convert("RGB")
+        original_w, original_h = pil_orig.size
+
+        meta = self._state.metadata
+        classes: List[str] = json.loads(meta["classes"])
+        input_shape: List[int] = json.loads(meta["input_shape"])
+
+        preprocessed = _preprocess_image(image, input_shape)
+
+        session = self._state.det_session
+        input_name = session.get_inputs()[0].name
+        outputs = session.run(["logits", "feature_maps"], {input_name: preprocessed})
+        logits_raw: np.ndarray = outputs[0][0]
+        feature_maps: np.ndarray = outputs[1][0]
+
+        saliency = _score_cam_with_session(
+            session=session,
+            preprocessed=preprocessed,
+            feature_maps=feature_maps,
+            original_h=original_h,
+            original_w=original_w,
+        )
+
+        probs = logits_raw.astype(np.float64)
+        probs = probs - probs.max()
+        probs = np.exp(probs)
+        probs = probs / probs.sum()
+        predicted = classes[int(np.argmax(probs))]
+
+        return Explanation(saliency_map=saliency, predicted_class=predicted)
 
     def predict_with_uncertainty(
         self,
@@ -284,7 +323,7 @@ def score_cam(
     Returns:
         Saliency map of shape (H, W) with values in [0, 1].
     """
-    raise NotImplementedError
+    return _score_cam(feature_maps=feature_maps, logits=logits)
 
 
 def mc_dropout_predict(
