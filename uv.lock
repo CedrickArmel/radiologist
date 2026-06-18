@@ -4586,6 +4586,15 @@ wheels = [
 ]
 
 [[package]]
+name = "python-multipart"
+version = "0.0.32"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/42/55c32bb9b12693c092ad250a0e82edb5b31ddeda6eb772de5f308b3804ad/python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e", size = 46881, upload-time = "2026-06-04T16:18:58.647Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23", size = 30042, upload-time = "2026-06-04T16:18:57.319Z" },
+]
+
+[[package]]
 name = "python-slugify"
 version = "8.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -4758,6 +4767,7 @@ name = "radiologist"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "python-multipart" },
     { name = "radiologist-core" },
     { name = "radiologist-utils", extra = ["ml"] },
 ]
@@ -4796,6 +4806,7 @@ typing = [
 
 [package.metadata]
 requires-dist = [
+    { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "radiologist-core", editable = "radiologist-core" },
     { name = "radiologist-core", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-core" },
     { name = "radiologist-core", extras = ["registry"], marker = "extra == 'registry'", editable = "radiologist-core" },
@@ -4967,6 +4978,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "fastapi" },
+    { name = "python-multipart" },
     { name = "typer" },
     { name = "uvicorn" },
     { name = "wandb" },
@@ -4979,6 +4991,7 @@ registry = [
 ]
 serve = [
     { name = "fastapi" },
+    { name = "python-multipart" },
     { name = "uvicorn" },
 ]
 
@@ -4989,6 +5002,8 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "onnxruntime", specifier = ">=1.18.0" },
     { name = "pillow", specifier = ">=12.2.0" },
+    { name = "python-multipart", marker = "extra == 'all'", specifier = ">=0.0.9" },
+    { name = "python-multipart", marker = "extra == 'serve'", specifier = ">=0.0.9" },
     { name = "typer", marker = "extra == 'all'", specifier = ">=0.9.0" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.9.0" },
     { name = "uvicorn", marker = "extra == 'all'", specifier = ">=0.23.0" },
