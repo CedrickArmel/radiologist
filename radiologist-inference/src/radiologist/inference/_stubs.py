@@ -189,8 +189,20 @@ class Predictor:
         artifact_path: str,
         local_dir: str,
     ) -> "Predictor":
-        """Download model from W&B registry and load as Predictor."""
-        raise NotImplementedError
+        """Download model from W&B registry and load as Predictor.
+
+        Args:
+            artifact_path: W&B artifact path (entity/project/name:version).
+            local_dir: Local directory where the ONNX file will be saved.
+
+        Returns:
+            Loaded Predictor instance.
+
+        Raises:
+            RuntimeError: When the ``registry`` extra (wandb) is not installed.
+        """
+        det_path = pull_model(artifact_path=artifact_path, local_dir=local_dir)
+        return cls.from_path(det_path=det_path)
 
     def predict(
         self,
@@ -301,13 +313,27 @@ def pull_model(artifact_path: str, local_dir: str) -> str:
 
     Raises:
         RuntimeError: When the ``registry`` extra (wandb) is not installed.
+        FileNotFoundError: When no .onnx file is found in the downloaded artifact.
     """
     if _wandb is None:
         raise RuntimeError(
             "The 'registry' extra is required to use pull_model. "
             "Install it with: pip install radiologist-inference[registry]"
         )
-    raise NotImplementedError
+    import os
+
+    api = _wandb.Api()
+    artifact = api.artifact(artifact_path)
+    download_dir = artifact.download(local_dir)
+
+    for fname in os.listdir(download_dir):
+        if fname.endswith(".onnx"):
+            return os.path.join(download_dir, fname)
+
+    raise FileNotFoundError(
+        f"No .onnx file found in artifact '{artifact_path}' downloaded to"
+        f" '{download_dir}'"
+    )
 
 
 def score_cam(
