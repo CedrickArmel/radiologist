@@ -108,7 +108,7 @@ def test_predictor_predict_with_uncertainty_raises_when_no_mcd_session():
     import onnxruntime as ort
 
     from radiologist.inference import Predictor
-    from radiologist.inference._stubs import _PredictorState
+    from radiologist.inference.predictor import _PredictorState
 
     mock_meta = MagicMock()
     mock_meta.custom_metadata_map = {
@@ -150,7 +150,7 @@ def test_score_cam_returns_saliency_map_in_0_1():
 
 def test_pull_model_raises_runtime_error_when_wandb_absent():
     """pull_model raises RuntimeError naming 'registry' when wandb is absent."""
-    import radiologist.inference._stubs as stubs
+    import radiologist.inference.predictor as stubs
 
     with patch.object(stubs, "_wandb", None):
         with pytest.raises(RuntimeError, match="registry"):
@@ -159,7 +159,7 @@ def test_pull_model_raises_runtime_error_when_wandb_absent():
 
 def test_create_app_raises_runtime_error_when_fastapi_absent():
     """create_app raises RuntimeError naming 'serve' when fastapi is absent."""
-    import radiologist.inference._stubs as stubs
+    import radiologist.inference.predictor as stubs
 
     with patch.object(stubs, "_fastapi", None):
         with pytest.raises(RuntimeError, match="serve"):

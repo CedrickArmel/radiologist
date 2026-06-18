@@ -32,7 +32,7 @@ from fastapi.testclient import TestClient
 from PIL import Image as PILImage
 
 from radiologist.inference import Prediction, UncertaintyResult, create_app
-from radiologist.inference._stubs import Explanation
+from radiologist.inference.predictor import Explanation
 
 
 def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
@@ -256,7 +256,7 @@ class TestCreateAppRuntimeErrorWhenFastapiAbsent:
     def test_create_app_raises_runtime_error_naming_serve_extra(
         self, monkeypatch: Any
     ) -> None:
-        import radiologist.inference._stubs as stubs
+        import radiologist.inference.predictor as stubs
 
         monkeypatch.setattr(stubs, "_fastapi", None)
         with pytest.raises(RuntimeError, match="serve"):

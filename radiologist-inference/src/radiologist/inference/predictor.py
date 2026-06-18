@@ -35,10 +35,10 @@ import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
-from radiologist.inference._app import _build_app
-from radiologist.inference._cam import score_cam as _score_cam
-from radiologist.inference._cam import score_cam_with_session as _score_cam_with_session
-from radiologist.inference._optional import _fastapi, _typer, _wandb  # noqa: F401
+from radiologist.inference.app import _build_app
+from radiologist.inference.cam import score_cam as _score_cam
+from radiologist.inference.cam import score_cam_with_session as _score_cam_with_session
+from radiologist.inference.optional import _fastapi, _typer, _wandb  # noqa: F401
 
 
 @dataclass

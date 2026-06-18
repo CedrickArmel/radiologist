@@ -28,8 +28,8 @@ Entry points: predict <image> --model <det_path>
 
 from typing import Optional
 
-from radiologist.inference._optional import _typer
-from radiologist.inference._stubs import Predictor, pull_model
+from radiologist.inference.optional import _typer
+from radiologist.inference.predictor import Predictor, pull_model
 
 if _typer is not None:
     import typer
