@@ -35,6 +35,7 @@ import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
+from radiologist.inference._app import _build_app
 from radiologist.inference._cam import score_cam as _score_cam
 from radiologist.inference._cam import score_cam_with_session as _score_cam_with_session
 from radiologist.inference._optional import _fastapi, _typer, _wandb  # noqa: F401
@@ -422,4 +423,4 @@ def create_app(predictor: Optional["Predictor"] = None) -> Any:
             "The 'serve' extra is required to use create_app. "
             "Install it with: pip install radiologist-inference[serve]"
         )
-    raise NotImplementedError
+    return _build_app(_fastapi, predictor)

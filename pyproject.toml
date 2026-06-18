@@ -23,6 +23,7 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
+    "python-multipart>=0.0.32",
     "radiologist-core",
     "radiologist-utils[ml]",
 ]
