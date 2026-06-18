@@ -91,16 +91,6 @@ def test_result_dataclasses_are_importable():
     assert meta.classes == ["a", "b"]
 
 
-def test_predictor_from_registry_raises_not_implemented():
-    """Predictor.from_registry must raise NotImplementedError (not yet implemented)."""
-    from radiologist.inference import Predictor
-
-    with pytest.raises(NotImplementedError):
-        Predictor.from_registry(
-            artifact_path="entity/project/name:v0", local_dir="/tmp"
-        )
-
-
 def test_predictor_explain_raises_not_implemented():
     """Predictor.explain must raise NotImplementedError (not yet implemented)."""
     from radiologist.inference import Predictor
@@ -110,12 +100,36 @@ def test_predictor_explain_raises_not_implemented():
         predictor.explain(image=np.zeros((224, 224, 3), dtype=np.uint8))
 
 
-def test_predictor_predict_with_uncertainty_raises_not_implemented():
-    """Predictor.predict_with_uncertainty raises NotImplementedError."""
+def test_predictor_predict_with_uncertainty_raises_when_no_mcd_session():
+    """predict_with_uncertainty raises RuntimeError when no mcd_session is set."""
+    import json
+    from unittest.mock import MagicMock
+
+    import onnxruntime as ort
+
     from radiologist.inference import Predictor
+    from radiologist.inference._stubs import _PredictorState
+
+    mock_meta = MagicMock()
+    mock_meta.custom_metadata_map = {
+        "classes": json.dumps(["NORMAL", "ABNORMAL"]),
+        "input_shape": json.dumps([1, 3, 224, 224]),
+        "cam_target_layer": "features.28",
+        "output_names": json.dumps(["logits"]),
+    }
+    mock_session = MagicMock(spec=ort.InferenceSession)
+    mock_session.get_modelmeta.return_value = mock_meta
 
     predictor = object.__new__(Predictor)
-    with pytest.raises(NotImplementedError):
+    predictor._state = _PredictorState(
+        det_session=mock_session,
+        metadata={
+            "classes": json.dumps(["NORMAL", "ABNORMAL"]),
+            "input_shape": json.dumps([1, 3, 224, 224]),
+        },
+        mcd_session=None,
+    )
+    with pytest.raises(RuntimeError, match="mcd_path"):
         predictor.predict_with_uncertainty(
             image=np.zeros((224, 224, 3), dtype=np.uint8)
         )
