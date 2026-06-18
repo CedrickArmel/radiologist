@@ -27,10 +27,12 @@ Entry points that require optional extras raise RuntimeError naming the extra
 when that extra is absent.
 """
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
 from radiologist.inference._optional import _fastapi, _typer, _wandb  # noqa: F401
@@ -73,8 +75,72 @@ class ModelMetadata:
     mc_dropout: bool
 
 
+def _read_metadata(session: ort.InferenceSession) -> Dict[str, str]:
+    """Extract custom_metadata_map from an ONNX InferenceSession."""
+    return dict(session.get_modelmeta().custom_metadata_map)
+
+
+def _preprocess_image(
+    image: Union[str, np.ndarray, PILImage.Image],
+    input_shape: List[int],
+) -> np.ndarray:
+    """Load, resize, and normalize image to a float32 NCHW array.
+
+    Args:
+        image: File path, numpy HWC uint8 array, or PIL Image.
+        input_shape: [N, C, H, W] as stored in model metadata.
+
+    Returns:
+        Float32 array of shape (1, C, H, W) with values in [0, 1].
+    """
+    _, _, h, w = input_shape
+    if isinstance(image, str):
+        pil_img = PILImage.open(image).convert("RGB")
+    elif isinstance(image, np.ndarray):
+        pil_img = PILImage.fromarray(image).convert("RGB")
+    else:
+        pil_img = image.convert("RGB")
+
+    pil_img = pil_img.resize((w, h), PILImage.Resampling.BILINEAR)
+    arr = np.array(pil_img, dtype=np.float32) / 255.0
+    arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
+    return arr
+
+
+def _apply_prior_correction(
+    softmax: np.ndarray,
+    classes: List[str],
+    prior: Dict[str, float],
+) -> np.ndarray:
+    """Scale softmax by deployment prior weights and renormalize.
+
+    Args:
+        softmax: 1-D array of class probabilities (length == len(classes)).
+        classes: Ordered class names matching softmax positions.
+        prior: Deployment prior probability per class name.
+
+    Returns:
+        Renormalized 1-D float32 array.
+    """
+    weights = np.array([prior[c] for c in classes], dtype=np.float32)
+    corrected = softmax * weights
+    total = corrected.sum()
+    if total > 0:
+        corrected = corrected / total
+    return corrected
+
+
+@dataclass
+class _PredictorState:
+    det_session: ort.InferenceSession
+    metadata: Dict[str, str]
+    mcd_session: Optional[ort.InferenceSession] = field(default=None)
+
+
 class Predictor:
     """Facade for ONNX-backed chest X-ray classification."""
+
+    _state: _PredictorState
 
     @classmethod
     def from_path(
@@ -82,8 +148,38 @@ class Predictor:
         det_path: str,
         mcd_path: Optional[str] = None,
     ) -> "Predictor":
-        """Load Predictor from local ONNX file paths."""
-        raise NotImplementedError
+        """Load Predictor from local ONNX file paths.
+
+        Args:
+            det_path: Path to the deterministic ONNX model file.
+            mcd_path: Optional path to the MC-Dropout ONNX model file.
+
+        Returns:
+            Loaded Predictor instance.
+
+        Raises:
+            FileNotFoundError: If det_path does not exist.
+            onnxruntime.capi.onnxruntime_pybind11_state.InvalidGraph: If file is
+                not a valid ONNX model.
+        """
+        try:
+            det_session = ort.InferenceSession(det_path)
+        except Exception:
+            raise
+
+        metadata = _read_metadata(det_session)
+
+        mcd_session: Optional[ort.InferenceSession] = None
+        if mcd_path is not None:
+            mcd_session = ort.InferenceSession(mcd_path)
+
+        instance = cls.__new__(cls)
+        instance._state = _PredictorState(
+            det_session=det_session,
+            metadata=metadata,
+            mcd_session=mcd_session,
+        )
+        return instance
 
     @classmethod
     def from_registry(
@@ -99,8 +195,44 @@ class Predictor:
         image: Union[str, np.ndarray, PILImage.Image],
         deployment_prior: Optional[Dict[str, float]] = None,
     ) -> Prediction:
-        """Run deterministic inference and return class probabilities."""
-        raise NotImplementedError
+        """Run deterministic inference and return class probabilities.
+
+        Args:
+            image: Input as file path, HWC numpy uint8 array, or PIL Image.
+            deployment_prior: Optional per-class deployment prior probabilities.
+                When supplied, overrides any embedded training prior in the model.
+                When omitted, the model-embedded training_prior is used if present;
+                otherwise raw softmax probabilities are returned.
+
+        Returns:
+            Prediction with per-class probabilities and predicted class label.
+        """
+        meta = self._state.metadata
+        classes: List[str] = json.loads(meta["classes"])
+        input_shape: List[int] = json.loads(meta["input_shape"])
+
+        arr = _preprocess_image(image, input_shape)
+
+        session = self._state.det_session
+        input_name = session.get_inputs()[0].name
+        outputs = session.run(["logits"], {input_name: arr})
+        logits: np.ndarray = outputs[0][0]
+
+        softmax = logits.astype(np.float64)
+        softmax = softmax - softmax.max()
+        softmax = np.exp(softmax)
+        softmax = (softmax / softmax.sum()).astype(np.float32)
+
+        effective_prior: Optional[Dict[str, float]] = deployment_prior
+        if effective_prior is None and "training_prior" in meta:
+            effective_prior = json.loads(meta["training_prior"])
+
+        if effective_prior is not None:
+            softmax = _apply_prior_correction(softmax, classes, effective_prior)
+
+        probs = {c: float(softmax[i]) for i, c in enumerate(classes)}
+        predicted = max(probs, key=probs.__getitem__)
+        return Prediction(probabilities=probs, predicted_class=predicted)
 
     def explain(
         self,

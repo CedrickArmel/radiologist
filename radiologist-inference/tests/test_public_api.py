@@ -91,14 +91,6 @@ def test_result_dataclasses_are_importable():
     assert meta.classes == ["a", "b"]
 
 
-def test_predictor_from_path_raises_not_implemented():
-    """Predictor.from_path must raise NotImplementedError (not yet implemented)."""
-    from radiologist.inference import Predictor
-
-    with pytest.raises(NotImplementedError):
-        Predictor.from_path(det_path="fake.onnx")
-
-
 def test_predictor_from_registry_raises_not_implemented():
     """Predictor.from_registry must raise NotImplementedError (not yet implemented)."""
     from radiologist.inference import Predictor
@@ -107,15 +99,6 @@ def test_predictor_from_registry_raises_not_implemented():
         Predictor.from_registry(
             artifact_path="entity/project/name:v0", local_dir="/tmp"
         )
-
-
-def test_predictor_predict_raises_not_implemented():
-    """Predictor.predict must raise NotImplementedError (not yet implemented)."""
-    from radiologist.inference import Predictor
-
-    predictor = object.__new__(Predictor)
-    with pytest.raises(NotImplementedError):
-        predictor.predict(image=np.zeros((224, 224, 3), dtype=np.uint8))
 
 
 def test_predictor_explain_raises_not_implemented():
