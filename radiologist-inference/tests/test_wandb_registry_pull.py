@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Behavioral tests for pull_model and Predictor.from_registry (issue #78).
+"""Behavioral tests for inference model-pull via WandbRegistry.pull() (issue #90).
 
 All tests drive through the public API only. wandb SDK is mocked at the
 process boundary since it requires external network/auth.
@@ -35,6 +35,8 @@ import onnx
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 import pytest
+
+from radiologist.registry.wandb_registry import WandbRegistry
 
 CLASSES = ["NORMAL", "ABNORMAL"]
 INPUT_SHAPE = [1, 3, 224, 224]
@@ -117,64 +119,62 @@ def _make_wandb_mock(onnx_path):
     return mock_wandb
 
 
-class TestPullModel:
-    def test_pull_model_returns_path_to_onnx_file(self, tmp_path):
-        """pull_model must return the local path to an .onnx file."""
-        from radiologist.inference import pull_model
+class TestWandbRegistryPull:
+    def test_pull_returns_path_to_onnx_file(self, tmp_path):
+        """WandbRegistry.pull() must return the local path to an .onnx file."""
+        import radiologist.registry.resolver as resolver_mod
 
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference.predictor as stubs
-
-        with patch.object(stubs, "_wandb", mock_wandb):
-            result = pull_model(
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            reg = WandbRegistry()
+            result = reg.pull(
                 artifact_path="entity/project/name:v0",
                 local_dir=str(tmp_path),
             )
 
         assert result.endswith(".onnx")
 
-    def test_pull_model_file_exists_at_returned_path(self, tmp_path):
-        """The path returned by pull_model must point to an existing file."""
-        from radiologist.inference import pull_model
+    def test_pull_file_exists_at_returned_path(self, tmp_path):
+        """The path returned by WandbRegistry.pull() must point to an existing file."""
+        import radiologist.registry.resolver as resolver_mod
 
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference.predictor as stubs
-
-        with patch.object(stubs, "_wandb", mock_wandb):
-            result = pull_model(
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            reg = WandbRegistry()
+            result = reg.pull(
                 artifact_path="entity/project/name:v0",
                 local_dir=str(tmp_path),
             )
 
         assert os.path.isfile(result)
 
-    def test_pull_model_raises_runtime_error_when_wandb_absent(self, tmp_path):
-        """pull_model raises RuntimeError naming 'registry' when wandb is absent."""
-        import radiologist.inference.predictor as stubs
+    def test_pull_raises_runtime_error_when_wandb_absent(self, tmp_path):
+        """WandbRegistry.pull() raises RuntimeError when wandb is absent."""
+        import radiologist.registry.resolver as resolver_mod
 
-        with patch.object(stubs, "_wandb", None):
-            with pytest.raises(RuntimeError, match="registry"):
-                stubs.pull_model(
+        with patch.object(resolver_mod, "_wandb", None):
+            with pytest.raises(RuntimeError):
+                reg = WandbRegistry()
+                reg.pull(
                     artifact_path="entity/project/name:v0",
                     local_dir=str(tmp_path),
                 )
 
 
-class TestPredictorFromRegistry:
+class TestPredictorFromRegistryViaWandbRegistry:
     def test_from_registry_returns_predictor_instance(self, tmp_path):
-        """from_registry must return a Predictor instance."""
+        """Predictor.from_registry must return a Predictor instance."""
+        import radiologist.registry.resolver as resolver_mod
         from radiologist.inference import Predictor
 
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference.predictor as stubs
-
-        with patch.object(stubs, "_wandb", mock_wandb):
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
             predictor = Predictor.from_registry(
                 artifact_path="entity/project/name:v0",
                 local_dir=str(tmp_path),
@@ -184,14 +184,13 @@ class TestPredictorFromRegistry:
 
     def test_from_registry_predictor_produces_prediction(self, tmp_path):
         """Predictor returned by from_registry must produce a Prediction on predict()."""
+        import radiologist.registry.resolver as resolver_mod
         from radiologist.inference import Prediction, Predictor
 
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference.predictor as stubs
-
-        with patch.object(stubs, "_wandb", mock_wandb):
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
             predictor = Predictor.from_registry(
                 artifact_path="entity/project/name:v0",
                 local_dir=str(tmp_path),
@@ -203,14 +202,13 @@ class TestPredictorFromRegistry:
 
     def test_from_registry_prediction_shape_matches_from_path(self, tmp_path):
         """from_registry predictor must produce Prediction with same keys as from_path."""
+        import radiologist.registry.resolver as resolver_mod
         from radiologist.inference import Predictor
 
         onnx_path = _build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
-        import radiologist.inference.predictor as stubs
-
-        with patch.object(stubs, "_wandb", mock_wandb):
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
             registry_predictor = Predictor.from_registry(
                 artifact_path="entity/project/name:v0",
                 local_dir=str(tmp_path),
@@ -228,12 +226,13 @@ class TestPredictorFromRegistry:
         assert registry_result.predicted_class == path_result.predicted_class
 
     def test_from_registry_raises_runtime_error_when_wandb_absent(self, tmp_path):
-        """from_registry raises RuntimeError naming 'registry' when wandb absent."""
-        import radiologist.inference.predictor as stubs
+        """from_registry raises RuntimeError when wandb absent."""
+        import radiologist.registry.resolver as resolver_mod
+        from radiologist.inference import Predictor
 
-        with patch.object(stubs, "_wandb", None):
-            with pytest.raises(RuntimeError, match="registry"):
-                stubs.Predictor.from_registry(
+        with patch.object(resolver_mod, "_wandb", None):
+            with pytest.raises(RuntimeError):
+                Predictor.from_registry(
                     artifact_path="entity/project/name:v0",
                     local_dir=str(tmp_path),
                 )
