@@ -22,15 +22,41 @@
 
 from typing import List
 
+from radiologist.registry.optional import _wandb
+
+_WANDB_MISSING_MSG = (
+    "wandb is required for registry operations. "
+    "Install with: pip install 'radiologist-registry[wandb]'"
+)
+
 
 class _WandbAliasManager:
     """W&B seam for artifact alias management operations."""
 
     def get_aliases(self, artifact_path: str) -> List[str]:
-        raise NotImplementedError
+        """Return a snapshot of the artifact's current alias list."""
+        if _wandb is None:
+            raise RuntimeError(_WANDB_MISSING_MSG)
+        api = _wandb.Api()
+        art = api.artifact(artifact_path)
+        return list(art.aliases)
 
     def set_alias(self, artifact_path: str, alias: str) -> None:
-        raise NotImplementedError
+        """Add alias to the artifact; no-op if already present."""
+        if _wandb is None:
+            raise RuntimeError(_WANDB_MISSING_MSG)
+        api = _wandb.Api()
+        art = api.artifact(artifact_path)
+        if alias not in art.aliases:
+            art.aliases.append(alias)
+            art.save()
 
     def remove_alias(self, artifact_path: str, alias: str) -> None:
-        raise NotImplementedError
+        """Remove alias from the artifact; no-op if absent."""
+        if _wandb is None:
+            raise RuntimeError(_WANDB_MISSING_MSG)
+        api = _wandb.Api()
+        art = api.artifact(artifact_path)
+        if alias in art.aliases:
+            art.aliases.remove(alias)
+            art.save()
