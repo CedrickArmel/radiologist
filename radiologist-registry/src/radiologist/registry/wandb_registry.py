@@ -46,13 +46,21 @@ class WandbRegistry:
         version: Optional[str] = None,
         include_sweeps: bool = False,
     ) -> ArtifactRef:
-        raise NotImplementedError
+        return self._resolver.resolve(
+            path=path,
+            run_id=run_id,
+            groups=groups,
+            tags=tags,
+            metric=metric,
+            version=version,
+            include_sweeps=include_sweeps,
+        )
 
     def download(self, ref: ArtifactRef, local_dir: str) -> str:
-        raise NotImplementedError
+        return self._resolver.download(ref, local_dir)
 
     def pull(self, artifact_path: str, local_dir: str) -> str:
-        raise NotImplementedError
+        return self._resolver.pull(artifact_path, local_dir)
 
     def promote(
         self,
@@ -63,10 +71,10 @@ class WandbRegistry:
         raise NotImplementedError
 
     def get_aliases(self, artifact_path: str) -> List[str]:
-        raise NotImplementedError
+        return self._alias_manager.get_aliases(artifact_path)
 
     def set_alias(self, artifact_path: str, alias: str) -> None:
-        raise NotImplementedError
+        self._alias_manager.set_alias(artifact_path, alias)
 
     def remove_alias(self, artifact_path: str, alias: str) -> None:
-        raise NotImplementedError
+        self._alias_manager.remove_alias(artifact_path, alias)
