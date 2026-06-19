@@ -20,9 +20,34 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import glob
+import os
 from typing import List, Optional, Union
 
 from radiologist.registry.models import ArtifactRef
+from radiologist.registry.optional import _wandb
+
+_WANDB_MISSING_MSG = (
+    "wandb is required for registry operations. "
+    "Install with: pip install 'radiologist-registry[wandb]'"
+)
+
+
+def _guard_wandb() -> None:
+    if _wandb is None:
+        raise RuntimeError(_WANDB_MISSING_MSG)
+
+
+def _artifact_ref(art: object, run_id: str) -> ArtifactRef:
+    qualified_name: str = art.qualified_name  # type: ignore[attr-defined]
+    version: str = art.version  # type: ignore[attr-defined]
+    artifact_name = qualified_name.split("/")[-1].split(":")[0]
+    return ArtifactRef(
+        qualified_name=qualified_name,
+        run_id=run_id,
+        artifact_name=artifact_name,
+        version=version,
+    )
 
 
 class _WandbResolver:
@@ -38,10 +63,69 @@ class _WandbResolver:
         version: Optional[str] = None,
         include_sweeps: bool = False,
     ) -> ArtifactRef:
-        raise NotImplementedError
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
+
+        if run_id:
+            art = api.artifact(
+                type="model",
+                name=f"{path}/model-{run_id}:{version or 'best'}",
+            )
+            return _artifact_ref(art, run_id)
+
+        if tags:
+            if isinstance(tags, str):
+                tags = [tags]
+            filters: dict = {"tags": {"$in": tags}}
+            if groups:
+                if isinstance(groups, str):
+                    groups = [groups]
+                filters["group"] = {"$in": groups}
+            runs = api.runs(
+                path=path,
+                filters=filters,
+                order=f"-summary_metric.{metric or 'best_val_score'}",
+                include_sweeps=include_sweeps,
+            )
+            best_run = max(
+                runs,
+                key=lambda run: run.summary.get(metric or "best_val_score", 0),
+            )
+            art = api.artifact(
+                type="model",
+                name=f"{path}/model-{best_run.id}:{version or 'best'}",
+            )
+            return _artifact_ref(art, best_run.id)
+
+        art = api.artifact(path)
+        return _artifact_ref(art, art.logged_by().id)
 
     def download(self, ref: ArtifactRef, local_dir: str) -> str:
-        raise NotImplementedError
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
+        art = api.artifact(ref.qualified_name)
+        download_dir = art.download(root=local_dir)
+        ckpt_files = glob.glob(
+            os.path.join(download_dir, "**", "*.ckpt"), recursive=True
+        )
+        if not ckpt_files:
+            raise FileNotFoundError(
+                f"No .ckpt file found in artifact downloaded to {download_dir!r}"
+            )
+        return ckpt_files[0]
 
     def pull(self, artifact_path: str, local_dir: str) -> str:
-        raise NotImplementedError
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
+        art = api.artifact(artifact_path)
+        download_dir = art.download(local_dir)
+        onnx_files = [
+            os.path.join(download_dir, f)
+            for f in os.listdir(download_dir)
+            if f.endswith(".onnx")
+        ]
+        if not onnx_files:
+            raise FileNotFoundError(
+                f"No .onnx file found in artifact downloaded to {download_dir!r}"
+            )
+        return onnx_files[0]
