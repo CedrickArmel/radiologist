@@ -6,6 +6,7 @@ requires = ["uv_build>=0.9.28,<0.10.0"]
 dependencies = [
     "Pillow>=12.2.0",
     "radiologist-etl>=0.1.0",
+    "radiologist-registry>=0.1.0",
     "radiologist-utils>=0.1.0",
     "torch>=2.12.0",
     "torchvision>=0.27.0",
@@ -50,6 +51,11 @@ update_changelog_on_bump = true
 [tool.uv.build-backend]
 namespace = true
 module-name = "radiocovid.core"
+
+[tool.uv.sources]
+radiologist-etl = { workspace = true }
+radiologist-registry = { workspace = true }
+radiologist-utils = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
