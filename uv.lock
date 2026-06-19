@@ -26,6 +26,7 @@ members = [
     "radiologist-core",
     "radiologist-etl",
     "radiologist-inference",
+    "radiologist-registry",
     "radiologist-utils",
 ]
 
@@ -5012,6 +5013,26 @@ requires-dist = [
     { name = "wandb", marker = "extra == 'registry'", specifier = ">=0.27.0" },
 ]
 provides-extras = ["all", "cli", "registry", "serve"]
+
+[[package]]
+name = "radiologist-registry"
+version = "0.1.0"
+source = { editable = "radiologist-registry" }
+dependencies = [
+    { name = "radiologist-utils" },
+]
+
+[package.optional-dependencies]
+wandb = [
+    { name = "wandb" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "radiologist-utils", editable = "radiologist-utils" },
+    { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.16" },
+]
+provides-extras = ["wandb"]
 
 [[package]]
 name = "radiologist-utils"
