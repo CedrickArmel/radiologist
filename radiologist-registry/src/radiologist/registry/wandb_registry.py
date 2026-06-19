@@ -68,7 +68,7 @@ class WandbRegistry:
         collection: str,
         alias: str,
     ) -> PromoteResult:
-        raise NotImplementedError
+        return self._uploader.promote(export_result, collection, alias)
 
     def get_aliases(self, artifact_path: str) -> List[str]:
         return self._alias_manager.get_aliases(artifact_path)
