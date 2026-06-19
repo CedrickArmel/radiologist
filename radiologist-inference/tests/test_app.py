@@ -24,15 +24,14 @@
 
 import io
 from typing import Any
-from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+from conftest import build_det_onnx, build_mcd_onnx
 from fastapi.testclient import TestClient
 from PIL import Image as PILImage
 
-from radiologist.inference import Prediction, UncertaintyResult, create_app
-from radiologist.inference.predictor import Explanation
+from radiologist.inference import Predictor, create_app
 
 
 def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
@@ -44,28 +43,15 @@ def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
 
 
 @pytest.fixture()
-def mock_predictor() -> MagicMock:
-    p = MagicMock()
-    p.predict.return_value = Prediction(
-        probabilities={"NORMAL": 0.8, "ABNORMAL": 0.2},
-        predicted_class="NORMAL",
-    )
-    saliency = np.zeros((64, 64), dtype=np.float32)
-    p.explain.return_value = Explanation(
-        saliency_map=saliency, predicted_class="NORMAL"
-    )
-    p.predict_with_uncertainty.return_value = UncertaintyResult(
-        mean_probabilities={"NORMAL": 0.7, "ABNORMAL": 0.3},
-        std_per_class={"NORMAL": 0.05, "ABNORMAL": 0.05},
-        predictive_entropy=0.42,
-        n_passes=30,
-    )
-    return p
+def predictor(tmp_path) -> Predictor:
+    det_path = build_det_onnx(tmp_path, filename="det.onnx")
+    mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+    return Predictor.from_path(det_path=det_path, mcd_path=mcd_path)
 
 
 @pytest.fixture()
-def client(mock_predictor: MagicMock) -> TestClient:
-    app = create_app(predictor=mock_predictor)
+def client(predictor: Predictor) -> TestClient:
+    app = create_app(predictor=predictor)
     return TestClient(app)
 
 
