@@ -1,0 +1,28 @@
+[project]
+name = "radiologist-registry"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "radiologist-utils>=0.1.0",
+]
+
+[project.optional-dependencies]
+wandb = ["wandb>=0.16"]
+
+[build-system]
+requires = ["uv_build>=0.9.28,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+namespace = true
+module-name = "radiocovid.registry"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "${version}-radiologist-registry"
+ignored_tag_formats = ["${version}-radiologist-*"]
+update_changelog_on_bump = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

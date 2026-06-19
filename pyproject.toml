@@ -130,6 +130,7 @@ testpaths = [
     "radiologist-etl/tests",
     "radiologist-core/tests",
     "radiologist-inference/tests",
+    "radiologist-registry/tests",
 ]
 addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 
@@ -142,6 +143,7 @@ members = [
     "radiologist-etl",
     "radiologist-core",
     "radiologist-inference",
+    "radiologist-registry",
 ]
 
 [tool.uv.sources]
@@ -149,3 +151,4 @@ radiologist-utils = { workspace = true }
 radiologist-etl = { workspace = true }
 radiologist-core = { workspace = true }
 radiologist-inference = { workspace = true }
+radiologist-registry = { workspace = true }
