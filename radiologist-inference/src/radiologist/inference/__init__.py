@@ -28,13 +28,11 @@ from radiologist.inference.predictor import (
     UncertaintyResult,
     create_app,
     mc_dropout_predict,
-    pull_model,
     score_cam,
 )
 
 __all__ = [
     "Predictor",
-    "pull_model",
     "score_cam",
     "mc_dropout_predict",
     "Prediction",

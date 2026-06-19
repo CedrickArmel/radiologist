@@ -42,7 +42,6 @@ def test_all_public_names_present():
 
     expected = {
         "Predictor",
-        "pull_model",
         "score_cam",
         "mc_dropout_predict",
         "Prediction",
@@ -54,6 +53,19 @@ def test_all_public_names_present():
     assert set(pkg.__all__) == expected
     for name in expected:
         assert hasattr(pkg, name), f"Missing public name: {name}"
+
+
+def test_pull_model_absent_from_public_api():
+    """pull_model must not appear in radiologist.inference.__all__ (removed in #90)."""
+    import radiologist.inference as pkg
+
+    assert "pull_model" not in pkg.__all__
+
+
+def test_pull_model_import_raises_import_error():
+    """Importing pull_model from radiologist.inference must raise ImportError."""
+    with pytest.raises(ImportError):
+        from radiologist.inference import pull_model  # noqa: F401
 
 
 def test_result_dataclasses_are_importable():
@@ -146,15 +158,6 @@ def test_score_cam_returns_saliency_map_in_0_1():
     assert isinstance(result, np.ndarray)
     assert result.min() >= 0.0
     assert result.max() <= 1.0
-
-
-def test_pull_model_raises_runtime_error_when_wandb_absent():
-    """pull_model raises RuntimeError naming 'registry' when wandb is absent."""
-    import radiologist.inference.predictor as stubs
-
-    with patch.object(stubs, "_wandb", None):
-        with pytest.raises(RuntimeError, match="registry"):
-            stubs.pull_model(artifact_path="entity/project/name:v0", local_dir="/tmp")
 
 
 def test_create_app_raises_runtime_error_when_fastapi_absent():

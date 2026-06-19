@@ -28,7 +28,6 @@ from radiologist.core.callbacks import (
 from radiologist.core.data import WebDatasetDataModule
 from radiologist.core.losses import FocalLoss
 from radiologist.core.module import LModule
-from radiologist.core.registry import promote_to_registry, pull_checkpoint
 
 __all__ = [
     "AttributionCallback",
@@ -37,6 +36,4 @@ __all__ = [
     "LModule",
     "WandbDefineSummaryCallback",
     "WebDatasetDataModule",
-    "pull_checkpoint",
-    "promote_to_registry",
 ]

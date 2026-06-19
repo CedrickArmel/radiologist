@@ -74,8 +74,10 @@ def test_pull_exits_0_on_valid_artifact(tmp_path):
     """pull command downloads model and exits 0 when artifact is retrievable."""
     runner, app = _get_runner_and_app()
 
-    with patch("radiologist.inference.cli.pull_model") as mock_pull:
-        mock_pull.return_value = str(tmp_path / "model.onnx")
+    with patch("radiologist.inference.cli.WandbRegistry") as MockRegistry:
+        mock_instance = MagicMock()
+        mock_instance.pull.return_value = str(tmp_path / "model.onnx")
+        MockRegistry.return_value = mock_instance
 
         result = runner.invoke(
             app,
@@ -83,7 +85,7 @@ def test_pull_exits_0_on_valid_artifact(tmp_path):
         )
 
     assert result.exit_code == 0
-    mock_pull.assert_called_once()
+    mock_instance.pull.assert_called_once()
 
 
 def test_predict_exits_1_on_unreadable_image(tmp_path):
@@ -126,8 +128,10 @@ def test_pull_exits_1_on_unretrievable_artifact(tmp_path):
     """pull command exits 1 when artifact cannot be retrieved."""
     runner, app = _get_runner_and_app()
 
-    with patch("radiologist.inference.cli.pull_model") as mock_pull:
-        mock_pull.side_effect = RuntimeError("W&B download failed")
+    with patch("radiologist.inference.cli.WandbRegistry") as MockRegistry:
+        mock_instance = MagicMock()
+        mock_instance.pull.side_effect = RuntimeError("W&B download failed")
+        MockRegistry.return_value = mock_instance
 
         result = runner.invoke(
             app,

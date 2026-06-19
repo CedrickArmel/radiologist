@@ -29,7 +29,8 @@ Entry points: predict <image> --model <det_path>
 from typing import Optional
 
 from radiologist.inference.optional import _typer
-from radiologist.inference.predictor import Predictor, pull_model
+from radiologist.inference.predictor import Predictor
+from radiologist.registry.wandb_registry import WandbRegistry
 
 if _typer is not None:
     import typer
@@ -70,7 +71,7 @@ if _typer is not None:
     ) -> None:
         """Download an ONNX model from the W&B Model Registry."""
         try:
-            path = pull_model(artifact_path=artifact, local_dir=local_dir)
+            path = WandbRegistry().pull(artifact_path=artifact, local_dir=local_dir)
         except Exception as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(code=1)

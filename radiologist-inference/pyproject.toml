@@ -7,6 +7,7 @@ dependencies = [
     "numpy>=1.24.0",
     "Pillow>=12.2.0",
     "onnxruntime>=1.18.0",
+    "radiologist-registry>=0.1.0",
 ]
 name = "radiologist-inference"
 version = "0.1.0"
@@ -39,6 +40,9 @@ version = "0.1.0"
 tag_format = "${version}-radiologist-inference"
 ignored_tag_formats = ["${version}-radiologist-*"]
 update_changelog_on_bump = true
+
+[tool.uv.sources]
+radiologist-registry = { workspace = true }
 
 [tool.uv.build-backend]
 namespace = true
