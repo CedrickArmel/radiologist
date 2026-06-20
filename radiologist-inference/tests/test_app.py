@@ -27,10 +27,10 @@ from typing import Any
 
 import numpy as np
 import pytest
-from conftest import build_det_onnx, build_mcd_onnx
 from fastapi.testclient import TestClient
 from PIL import Image as PILImage
 
+from conftest import build_det_onnx, build_mcd_onnx
 from radiologist.inference import Predictor, create_app
 
 

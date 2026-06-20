@@ -176,8 +176,6 @@ class TestPriors:
         for p in dm.priors:
             assert abs(p - 0.5) < 1e-6
 
-
-
     def test_no_shard_scan_when_explicit_priors_provided(
         self,
         shard_root,
