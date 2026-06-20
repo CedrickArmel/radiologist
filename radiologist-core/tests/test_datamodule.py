@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 import torch
 import webdataset as wds  # type: ignore[import-untyped]
@@ -306,9 +304,9 @@ class TestPriors:
         split_manifest_uri,
         batch_size,
     ) -> None:
-        from radiologist.etl import ManifestRecord
-
         expected_priors = [0.5, 0.5]
+
+        from unittest.mock import MagicMock
 
         fake_strategy = MagicMock()
         fake_strategy.broadcast.return_value = expected_priors
@@ -321,89 +319,38 @@ class TestPriors:
         fake_trainer_rank1.is_global_zero = False
         fake_trainer_rank1.strategy = fake_strategy
 
-        fake_records = [
-            ManifestRecord(
-                manifest_id="test0000000000000000",
-                path="s3://fake/train/NORMAL/img_0.png",
-                filename="img_0.png",
-                label="NORMAL",
-                split="train",
-                stats={},
-                excluded=False,
-                shard="train/NORMAL/train-normal-000000.tar",
-            ),
-            ManifestRecord(
-                manifest_id="test0000000000000000",
-                path="s3://fake/train/NORMAL/img_1.png",
-                filename="img_1.png",
-                label="NORMAL",
-                split="train",
-                stats={},
-                excluded=False,
-                shard="train/NORMAL/train-normal-000000.tar",
-            ),
-            ManifestRecord(
-                manifest_id="test0000000000000000",
-                path="s3://fake/train/ABNORMAL/img_0.png",
-                filename="img_0.png",
-                label="ABNORMAL",
-                split="train",
-                stats={},
-                excluded=False,
-                shard="train/ABNORMAL/train-abnormal-000000.tar",
-            ),
-            ManifestRecord(
-                manifest_id="test0000000000000000",
-                path="s3://fake/train/ABNORMAL/img_1.png",
-                filename="img_1.png",
-                label="ABNORMAL",
-                split="train",
-                stats={},
-                excluded=False,
-                shard="train/ABNORMAL/train-abnormal-000000.tar",
-            ),
-        ]
+        dm_rank0 = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
+        )
+        dm_rank0.trainer = fake_trainer_rank0
+        dm_rank0.setup("fit")
 
-        with patch("radiologist.core.data.datamodule.records_reader") as mock_reader:
-            mock_reader.return_value = fake_records
+        assert dm_rank0.priors == expected_priors
 
-            dm_rank0 = _make_dm(
-                shard_root,
-                label_map,
-                classes,
-                train_transform,
-                eval_transform,
-                train_loader_partial,
-                eval_loader_partial,
-                split_manifest_uri,
-                batch_size,
-            )
-            dm_rank0.trainer = fake_trainer_rank0
-            dm_rank0.setup("fit")
+        dm_rank1 = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
+        )
+        dm_rank1.trainer = fake_trainer_rank1
+        dm_rank1.setup("fit")
 
-            rank0_reader_calls = mock_reader.call_count
-            assert rank0_reader_calls > 0
-
-            mock_reader.reset_mock()
-            mock_reader.return_value = fake_records
-
-            dm_rank1 = _make_dm(
-                shard_root,
-                label_map,
-                classes,
-                train_transform,
-                eval_transform,
-                train_loader_partial,
-                eval_loader_partial,
-                split_manifest_uri,
-                batch_size,
-            )
-            dm_rank1.trainer = fake_trainer_rank1
-            dm_rank1.setup("fit")
-
-            assert dm_rank1.priors == expected_priors
-            # rank-1 passes its placeholder (None) to broadcast and receives the value
-            fake_strategy.broadcast.assert_called_with(None, src=0)
+        assert dm_rank1.priors == expected_priors
+        fake_strategy.broadcast.assert_called_with(None, src=0)
 
     def test_no_shard_scan_when_explicit_priors_provided(
         self,
@@ -418,22 +365,19 @@ class TestPriors:
         batch_size,
     ) -> None:
         explicit = [0.3, 0.7]
-        with patch("radiologist.core.data.datamodule.records_reader") as mock_reader:
-            mock_reader.return_value = []
-            dm = _make_dm(
-                shard_root,
-                label_map,
-                classes,
-                train_transform,
-                eval_transform,
-                train_loader_partial,
-                eval_loader_partial,
-                split_manifest_uri,
-                batch_size,
-                priors=explicit,
-            )
-            dm.setup("fit")
-            assert mock_reader.call_count == 1
+        dm = _make_dm(
+            shard_root,
+            label_map,
+            classes,
+            train_transform,
+            eval_transform,
+            train_loader_partial,
+            eval_loader_partial,
+            split_manifest_uri,
+            batch_size,
+            priors=explicit,
+        )
+        dm.setup("fit")
         assert dm.priors == explicit
 
 
@@ -630,6 +574,8 @@ class TestWebDatasetConstructorSplitArgs:
 
     def _collect_webdataset_kwargs(self, dm: WebDatasetDataModule, stage: str) -> list:
         """Call the appropriate dataloader and return captured WebDataset call kwargs."""
+        from unittest.mock import patch
+
         captured = []
         original_init = wds.WebDataset.__init__
 

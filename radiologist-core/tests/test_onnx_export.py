@@ -23,74 +23,34 @@
 from __future__ import annotations
 
 import json
-from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
-if TYPE_CHECKING:
-    from radiologist.core import LModule
-
 import pytest
-import torch
-import torch.nn as nn
-from torchmetrics.classification import MulticlassFBetaScore
 
 # ---------------------------------------------------------------------------
-# Helpers — minimal net and LModule (same as test_registry.py)
-# ---------------------------------------------------------------------------
-
-
-def _make_tiny_net() -> nn.Sequential:
-    """Tiny net with a Dropout so MCD export can find it."""
-    return nn.Sequential(
-        nn.Conv2d(3, 4, 3, padding=1),
-        nn.ReLU(),
-        nn.Dropout(p=0.5),
-        nn.AdaptiveAvgPool2d((1, 1)),
-        nn.Flatten(),
-        nn.Linear(4, 2),
-    )
-
-
-def _make_lmodule(net: nn.Module) -> "LModule":
-    from radiologist.core import FocalLoss, LModule
-
-    return LModule(
-        net=net,
-        loss=FocalLoss(),
-        metric=partial(MulticlassFBetaScore, beta=1.0, num_classes=2),
-        optimizer=partial(torch.optim.Adam, lr=1e-3),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Fixture: run export_onnx with a real tiny model
+# Fixture: run export_onnx with a real tiny model loaded from ckpt_path
 # ---------------------------------------------------------------------------
 
 INPUT_SHAPE = (1, 3, 8, 8)
 CLASSES = ["healthy", "sick"]
 RUN_ID = "testrun001"
-CAM_TARGET_LAYER = "2"  # Dropout layer in the sequential net
+CAM_TARGET_LAYER = "2"  # Dropout layer index in the lmodule fixture net
 
 
 @pytest.fixture()
-def export_result(tmp_path: Path):
-    """Run export_onnx against a real tiny LModule; return (result, tmp_path)."""
-    import radiologist.core.registry.export as export_mod
+def export_result(ckpt_path: str, tmp_path: Path):
+    """Run export_onnx with a real checkpoint; no load_from_checkpoint patch."""
+    from radiologist.core.registry import export_onnx
 
-    net = _make_tiny_net()
-    lm = _make_lmodule(net)
-
-    with patch.object(export_mod.LModule, "load_from_checkpoint", return_value=lm):
-        result = export_mod.export_onnx(
-            ckpt_path="fake_ckpt.ckpt",
-            run_id=RUN_ID,
-            input_shape=INPUT_SHAPE,
-            classes=CLASSES,
-            cam_target_layer=CAM_TARGET_LAYER,
-            out_dir=str(tmp_path),
-        )
+    result = export_onnx(
+        ckpt_path=ckpt_path,
+        run_id=RUN_ID,
+        input_shape=INPUT_SHAPE,
+        classes=CLASSES,
+        cam_target_layer=CAM_TARGET_LAYER,
+        out_dir=str(tmp_path),
+    )
     return result, tmp_path
 
 
@@ -163,19 +123,13 @@ def test_mcd_onnx_retains_dropout_nodes_and_has_mc_dropout_metadata(export_resul
 # ---------------------------------------------------------------------------
 
 
-def test_export_onnx_does_not_import_or_call_wandb(tmp_path: Path):
+def test_export_onnx_does_not_import_or_call_wandb(ckpt_path: str, tmp_path: Path):
     """Patch wandb to None at module level; export_onnx must still succeed."""
     import radiologist.core.registry.export as export_mod
 
-    net = _make_tiny_net()
-    lm = _make_lmodule(net)
-
-    with (
-        patch.object(export_mod, "wandb", None, create=True),
-        patch.object(export_mod.LModule, "load_from_checkpoint", return_value=lm),
-    ):
+    with patch.object(export_mod, "wandb", None, create=True):
         result = export_mod.export_onnx(
-            ckpt_path="fake_ckpt.ckpt",
+            ckpt_path=ckpt_path,
             run_id=RUN_ID,
             input_shape=INPUT_SHAPE,
             classes=CLASSES,
@@ -203,19 +157,17 @@ def test_export_onnx_importable_from_core_registry():
 # ---------------------------------------------------------------------------
 
 
-def test_export_onnx_raises_attribute_error_for_bad_cam_layer(tmp_path: Path):
-    import radiologist.core.registry.export as export_mod
+def test_export_onnx_raises_attribute_error_for_bad_cam_layer(
+    ckpt_path: str, tmp_path: Path
+):
+    from radiologist.core.registry import export_onnx
 
-    net = _make_tiny_net()
-    lm = _make_lmodule(net)
-
-    with patch.object(export_mod.LModule, "load_from_checkpoint", return_value=lm):
-        with pytest.raises(AttributeError):
-            export_mod.export_onnx(
-                ckpt_path="fake_ckpt.ckpt",
-                run_id=RUN_ID,
-                input_shape=INPUT_SHAPE,
-                classes=CLASSES,
-                cam_target_layer="nonexistent.deep.layer",
-                out_dir=str(tmp_path),
-            )
+    with pytest.raises(AttributeError):
+        export_onnx(
+            ckpt_path=ckpt_path,
+            run_id=RUN_ID,
+            input_shape=INPUT_SHAPE,
+            classes=CLASSES,
+            cam_target_layer="nonexistent.deep.layer",
+            out_dir=str(tmp_path),
+        )

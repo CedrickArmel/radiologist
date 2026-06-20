@@ -118,12 +118,12 @@ def eval_transform(transform: T.Compose) -> T.Compose:
 
 @pytest.fixture()
 def train_loader_partial() -> partial:
-    return partial(wds.WebLoader, batch_size=2, num_workers=0)
+    return partial(wds.WebLoader, batch_size=None, num_workers=0)
 
 
 @pytest.fixture()
 def eval_loader_partial() -> partial:
-    return partial(wds.WebLoader, batch_size=2, num_workers=0)
+    return partial(wds.WebLoader, batch_size=None, num_workers=0)
 
 
 @pytest.fixture(scope="session")
@@ -220,16 +220,42 @@ def lmodule():
 
 @pytest.fixture()
 def ckpt_path(tmp_path, lmodule):
-    import pytorch_lightning as pl
-    import torch
+    """Real Lightning checkpoint loadable via LModule.load_from_checkpoint.
 
+    Stores full constructor kwargs in hyper_parameters so Lightning can
+    reconstruct the module without patching load_from_checkpoint.
+    """
+    import lightning as L
+    import torch
+    import torch.nn as nn
+    from torchmetrics.classification import (
+        MulticlassFBetaScore,  # type: ignore[import-untyped]
+    )
+
+    from radiologist.core import FocalLoss
+
+    net = nn.Sequential(
+        nn.Conv2d(3, 4, 3, padding=1),
+        nn.ReLU(),
+        nn.Dropout(p=0.5),
+        nn.AdaptiveAvgPool2d((1, 1)),
+        nn.Flatten(),
+        nn.Linear(4, 2),
+    )
     path = str(tmp_path / "test.ckpt")
     ckpt = {
         "epoch": 0,
         "global_step": 0,
-        "pytorch-lightning_version": pl.__version__,
+        "pytorch-lightning_version": L.__version__,
         "state_dict": lmodule.state_dict(),
-        "hyper_parameters": {},
+        "hyper_parameters": {
+            "net": net,
+            "loss": FocalLoss(),
+            "metric": partial(MulticlassFBetaScore, beta=1.0, num_classes=2),
+            "optimizer": partial(torch.optim.Adam, lr=1e-3),
+            "trainable_layers": None,
+            "priors": None,
+        },
     }
     torch.save(ckpt, path)
     return path

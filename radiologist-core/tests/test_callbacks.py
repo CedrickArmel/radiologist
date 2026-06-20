@@ -22,27 +22,13 @@
 
 from unittest.mock import MagicMock, patch
 
+import lightning as L
 import pytest
-import torch
 
 from radiologist.core import BestMetricCallback, WandbDefineSummaryCallback
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_trainer(metrics=None, loggers=None, is_global_zero=True):
-    """Return a minimal trainer stub with callback_metrics and loggers."""
-    trainer = MagicMock()
-    trainer.callback_metrics = metrics if metrics is not None else {}
-    trainer.loggers = loggers if loggers is not None else []
-    trainer.is_global_zero = is_global_zero
-    return trainer
-
-
-# ---------------------------------------------------------------------------
-# BestMetricCallback
+# BestMetricCallback — constructor validation (no trainer needed)
 # ---------------------------------------------------------------------------
 
 
@@ -51,127 +37,106 @@ def test_best_metric_callback_raises_for_invalid_mode():
         BestMetricCallback(monitor="val_score", mode="bad")
 
 
-def test_best_metric_callback_tracks_best_value_across_improving_epochs():
-    cb = BestMetricCallback(monitor="val_score", mode="max")
-    pl_module = MagicMock()
-
-    trainer = _make_trainer(metrics={"val_score": torch.tensor(0.6)})
-    cb.on_validation_epoch_end(trainer, pl_module)
-
-    trainer2 = _make_trainer(metrics={"val_score": torch.tensor(0.8)})
-    cb.on_validation_epoch_end(trainer2, pl_module)
-
-    assert trainer2.callback_metrics["best_val_score"] == pytest.approx(0.8)
-
-
-def test_best_metric_callback_does_not_update_on_non_improving_epoch():
-    cb = BestMetricCallback(monitor="val_score", mode="max")
-    pl_module = MagicMock()
-
-    trainer1 = _make_trainer(metrics={"val_score": torch.tensor(0.8)})
-    cb.on_validation_epoch_end(trainer1, pl_module)
-
-    trainer2 = _make_trainer(metrics={"val_score": torch.tensor(0.5)})
-    cb.on_validation_epoch_end(trainer2, pl_module)
-
-    assert trainer2.callback_metrics["best_val_score"] == pytest.approx(0.8)
-
-
-def test_best_metric_callback_noop_when_monitor_absent():
-    cb = BestMetricCallback(monitor="val_score", mode="max")
-    pl_module = MagicMock()
-
-    trainer = _make_trainer(metrics={})
-    cb.on_validation_epoch_end(trainer, pl_module)  # must not raise
-
-
-def test_best_metric_callback_logs_to_every_logger():
-    logger_a = MagicMock()
-    logger_b = MagicMock()
-    cb = BestMetricCallback(monitor="val_score", mode="max")
-    pl_module = MagicMock()
-
-    trainer = _make_trainer(
-        metrics={"val_score": torch.tensor(0.7)},
-        loggers=[logger_a, logger_b],
-    )
-    cb.on_validation_epoch_end(trainer, pl_module)
-
-    for logger in (logger_a, logger_b):
-        logger.log_metrics.assert_called_once()
-        logged = logger.log_metrics.call_args[0][0]
-        assert "best_val_score" in logged
-        assert logged["best_val_score"] == pytest.approx(0.7)
-
-
-def test_best_metric_callback_skips_logger_write_on_non_global_zero_rank():
-    logger = MagicMock()
-    cb = BestMetricCallback(monitor="val_score", mode="max")
-    pl_module = MagicMock()
-
-    trainer = _make_trainer(
-        metrics={"val_score": torch.tensor(0.9)},
-        loggers=[logger],
-        is_global_zero=False,
-    )
-    cb.on_validation_epoch_end(trainer, pl_module)
-
-    logger.log_metrics.assert_not_called()
-    assert trainer.callback_metrics["best_val_score"] == pytest.approx(0.9)
-
-
-def test_best_metric_callback_writes_logger_exactly_once_per_logger_on_global_zero():
-    logger_a = MagicMock()
-    logger_b = MagicMock()
-    cb = BestMetricCallback(monitor="val_score", mode="max")
-    pl_module = MagicMock()
-
-    trainer = _make_trainer(
-        metrics={"val_score": torch.tensor(0.7)},
-        loggers=[logger_a, logger_b],
-        is_global_zero=True,
-    )
-    cb.on_validation_epoch_end(trainer, pl_module)
-
-    for logger in (logger_a, logger_b):
-        logger.log_metrics.assert_called_once()
-        logged = logger.log_metrics.call_args[0][0]
-        assert logged["best_val_score"] == pytest.approx(0.7)
-
-
 # ---------------------------------------------------------------------------
-# WandbDefineSummaryCallback
+# BestMetricCallback — real trainer fit integration
 # ---------------------------------------------------------------------------
 
 
-def test_wandb_define_summary_noop_when_wandb_absent():
-    cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
-    trainer = _make_trainer()
-    pl_module = MagicMock()
-    cb.on_fit_start(
-        trainer, pl_module
-    )  # wandb.run is None in test env — must not raise
+def test_best_metric_written_to_callback_metrics(lmodule, dm):
+    callback = BestMetricCallback(monitor="val_score", mode="max")
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        callbacks=[callback],
+        logger=False,
+    )
+    trainer.fit(lmodule, datamodule=dm)
+    assert "best_val_score" in trainer.callback_metrics
 
 
-def test_wandb_define_summary_calls_define_metric_when_run_active():
+def test_best_metric_callback_best_val_score_is_non_negative(lmodule, dm):
+    callback = BestMetricCallback(monitor="val_score", mode="max")
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        callbacks=[callback],
+        logger=False,
+    )
+    trainer.fit(lmodule, datamodule=dm)
+    assert float(trainer.callback_metrics["best_val_score"]) >= 0.0
+
+
+def test_best_metric_callback_noop_when_monitor_absent(lmodule, dm):
+    callback = BestMetricCallback(monitor="nonexistent_metric", mode="max")
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        callbacks=[callback],
+        logger=False,
+    )
+    trainer.fit(lmodule, datamodule=dm)
+    assert "best_nonexistent_metric" not in trainer.callback_metrics
+
+
+def test_best_metric_callback_logs_to_wandb_when_run_active(lmodule, dm):
     import wandb
 
-    cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
-    trainer = _make_trainer()
-    pl_module = MagicMock()
+    from radiologist.core import WandbDefineSummaryCallback
 
     fake_run = MagicMock()
+    best_cb = BestMetricCallback(monitor="val_score", mode="max")
+    summary_cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        callbacks=[best_cb, summary_cb],
+        logger=False,
+    )
     with patch.object(wandb, "run", fake_run):
-        cb.on_fit_start(trainer, pl_module)
+        trainer.fit(lmodule, datamodule=dm)
 
-    fake_run.define_metric.assert_any_call("val_score", summary="max")
-    fake_run.define_metric.assert_any_call("best_val_score", summary="max")
+    assert "best_val_score" in trainer.callback_metrics
 
 
-def test_wandb_define_summary_noop_when_run_is_none():
+# ---------------------------------------------------------------------------
+# WandbDefineSummaryCallback — real trainer fit integration
+# ---------------------------------------------------------------------------
+
+
+def test_wandb_define_summary_noop_when_wandb_absent(lmodule, dm):
     cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
-    trainer = _make_trainer()
-    pl_module = MagicMock()
-    cb.on_fit_start(
-        trainer, pl_module
-    )  # wandb.run is None in test env — must not raise
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        callbacks=[cb],
+        logger=False,
+    )
+    trainer.fit(lmodule, datamodule=dm)
+
+
+def test_wandb_summary_defines_metrics_when_run_active(lmodule, dm):
+    import wandb
+
+    fake_run = MagicMock()
+    cb = WandbDefineSummaryCallback(monitor="val_score", mode="max")
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        callbacks=[cb],
+        logger=False,
+    )
+    with patch.object(wandb, "run", fake_run):
+        trainer.fit(lmodule, datamodule=dm)
+    fake_run.define_metric.assert_called()

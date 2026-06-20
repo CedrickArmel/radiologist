@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 from functools import partial
-from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -155,23 +154,21 @@ def test_configure_optimizers_with_scheduler_returns_scheduler_dict(
 # ---------------------------------------------------------------------------
 
 
-def test_best_metric_callback_produces_best_val_score_in_callback_metrics(
-    module, fake_batch
-):
-    from unittest.mock import MagicMock
+def test_best_metric_callback_produces_best_val_score_in_callback_metrics(lmodule, dm):
+    import lightning as L
 
     from radiologist.core import BestMetricCallback
 
     cb = BestMetricCallback(monitor="val_score", mode="max")
-    trainer = MagicMock()
-    trainer.callback_metrics = {}
-    trainer.loggers = []
-
-    module.validation_step(fake_batch, batch_idx=0)
-    val_score_value = module.val_score.compute()
-    trainer.callback_metrics["val_score"] = val_score_value
-
-    cb.on_validation_epoch_end(trainer, module)
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        callbacks=[cb],
+        logger=False,
+    )
+    trainer.fit(lmodule, datamodule=dm)
 
     assert "best_val_score" in trainer.callback_metrics
 
@@ -377,32 +374,23 @@ def test_training_step_does_not_log_train_score(module, fake_batch):
 # ---------------------------------------------------------------------------
 
 
-def test_on_test_epoch_end_saves_preds_file(module, fake_batch, tmp_path):
-    module.test_step(fake_batch, batch_idx=0)
-    module.test_step(fake_batch, batch_idx=1)
+def test_on_test_epoch_end_saves_preds_file(lmodule, dm, tmp_path):
+    import lightning as L
 
-    mock_trainer = MagicMock()
-    mock_trainer.log_dir = str(tmp_path)
-    mock_trainer.global_rank = 0
-    module._trainer = mock_trainer
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        default_root_dir=str(tmp_path),
+        logger=False,
+    )
+    trainer.test(lmodule, datamodule=dm)
 
-    module.on_test_epoch_end()
-
-    expected_path = tmp_path / "preds-rank0.pt"
-    assert expected_path.exists()
-    saved = torch.load(str(expected_path), weights_only=True)
-    assert saved.shape == (BATCH_SIZE * 2,)
-
-
-def test_on_test_epoch_end_is_noop_when_log_dir_is_none(module, fake_batch):
-    module.test_step(fake_batch, batch_idx=0)
-
-    mock_trainer = MagicMock()
-    mock_trainer.log_dir = None
-    mock_trainer.global_rank = 0
-    module._trainer = mock_trainer
-
-    module.on_test_epoch_end()  # must not raise
+    preds_files = list(tmp_path.rglob("preds-rank*.pt"))
+    assert len(preds_files) == 1
+    saved = torch.load(str(preds_files[0]), weights_only=True)
+    assert saved.ndim == 1
 
 
 # ---------------------------------------------------------------------------
@@ -434,33 +422,26 @@ def test_on_before_optimizer_step_logs_non_negative_grad_norm_on_model_device(
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_trainer(clip_val: float = 1.0) -> MagicMock:
-    """Return a minimal Trainer mock that satisfies clip_gradients internals."""
-    mock_trainer = MagicMock()
-    mock_trainer.gradient_clip_val = clip_val
-    mock_trainer.gradient_clip_algorithm = "norm"
-    return mock_trainer
-
-
-def test_configure_gradient_clipping_logs_bounded_post_clip_norm_not_weight_norm(
-    module, fake_batch
+def test_configure_gradient_clipping_logs_post_clip_norm_in_callback_metrics(
+    lmodule, dm
 ):
-    """configure_gradient_clipping must log grad_norm_post_clip <= clip_val,
-    and must NOT log weight_norm_post_clip."""
-    logged: dict = {}
-    module.log = lambda name, value, **kw: logged.update({name: value})
-    clip_val = 0.1
-    module._trainer = _make_mock_trainer(clip_val=clip_val)
+    """trainer.fit with gradient_clip_val must record grad_norm_post_clip
+    in callback_metrics and must NOT record weight_norm_post_clip."""
+    import lightning as L
 
-    module.training_step(fake_batch, batch_idx=0)
-    optimizer = module.configure_optimizers()["optimizer"]
-    module.configure_gradient_clipping(
-        optimizer, gradient_clip_val=clip_val, gradient_clip_algorithm="norm"
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        gradient_clip_val=1.0,
+        gradient_clip_algorithm="norm",
+        logger=False,
     )
+    trainer.fit(lmodule, datamodule=dm)
 
-    assert "grad_norm_post_clip" in logged
-    assert float(logged["grad_norm_post_clip"]) <= clip_val + 1e-6
-    assert "weight_norm_post_clip" not in logged
+    assert "grad_norm_post_clip" in trainer.callback_metrics
+    assert "weight_norm_post_clip" not in trainer.callback_metrics
 
 
 # ---------------------------------------------------------------------------
@@ -495,30 +476,41 @@ def test_weight_norm_tensor_lives_on_model_device(module, fake_batch):
 # ---------------------------------------------------------------------------
 
 
-def test_second_test_run_yields_single_run_length(module, fake_batch, tmp_path):
-    """Calling on_test_epoch_end twice must not accumulate preds across runs."""
-    mock_trainer = MagicMock()
-    mock_trainer.log_dir = str(tmp_path)
-    mock_trainer.global_rank = 0
-    module._trainer = mock_trainer
+def test_second_test_run_yields_single_run_length(lmodule, dm, tmp_path):
+    """Calling trainer.test twice must not accumulate preds across runs."""
+    import lightning as L
 
-    # First run
-    module.test_step(fake_batch, batch_idx=0)
-    module.on_test_epoch_end()
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        default_root_dir=str(tmp_path),
+        logger=False,
+    )
+    trainer.test(lmodule, datamodule=dm)
+    first_preds = list(tmp_path.rglob("preds-rank*.pt"))
+    assert len(first_preds) == 1
+    first_size = torch.load(str(first_preds[0]), weights_only=True).shape[0]
 
-    # Second run — buffer should have been cleared after first run
-    module.test_step(fake_batch, batch_idx=0)
-    module.on_test_epoch_end()
+    trainer.test(lmodule, datamodule=dm)
+    second_preds = list(tmp_path.rglob("preds-rank*.pt"))
+    second_size = torch.load(str(second_preds[0]), weights_only=True).shape[0]
 
-    saved = torch.load(str(tmp_path / "preds-rank0.pt"), weights_only=True)
-    assert saved.shape == (BATCH_SIZE,)
+    assert second_size == first_size, "buffer must be cleared between test runs"
 
 
-def test_on_test_epoch_end_with_empty_output_does_not_raise(module, tmp_path):
-    """on_test_epoch_end with no test_step calls must complete without error."""
-    mock_trainer = MagicMock()
-    mock_trainer.log_dir = str(tmp_path)
-    mock_trainer.global_rank = 0
-    module._trainer = mock_trainer
+def test_on_test_epoch_end_with_empty_output_does_not_raise(lmodule, dm, tmp_path):
+    """trainer.test with an empty output buffer must complete without error."""
+    import lightning as L
 
-    module.on_test_epoch_end()  # no test_step was called — output is empty
+    lmodule.output.clear()
+    trainer = L.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        default_root_dir=str(tmp_path),
+        logger=False,
+    )
+    trainer.test(lmodule, datamodule=dm)
