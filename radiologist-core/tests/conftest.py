@@ -22,7 +22,6 @@
 
 import io
 import json
-import sys
 import tarfile
 from functools import partial
 from pathlib import Path
@@ -30,8 +29,6 @@ from pathlib import Path
 import pytest
 import torchvision.transforms as T  # type: ignore[import-untyped]
 import webdataset as wds  # type: ignore[import-untyped]
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def _make_png_bytes() -> bytes:
@@ -94,24 +91,29 @@ def shard_root(tmp_path: Path) -> Path:
     return root
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def label_map() -> dict:
     return {"NORMAL": "normal", "ABNORMAL": "abnormal"}
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def classes() -> list:
     return ["abnormal", "normal"]
 
 
-@pytest.fixture()
-def train_transform() -> T.Compose:
+@pytest.fixture(scope="session")
+def transform() -> T.Compose:
     return T.Compose([T.Resize((8, 8)), T.ToTensor()])
 
 
-@pytest.fixture()
-def eval_transform() -> T.Compose:
-    return T.Compose([T.Resize((8, 8)), T.ToTensor()])
+@pytest.fixture(scope="session")
+def train_transform(transform: T.Compose) -> T.Compose:
+    return transform
+
+
+@pytest.fixture(scope="session")
+def eval_transform(transform: T.Compose) -> T.Compose:
+    return transform
 
 
 @pytest.fixture()
@@ -124,7 +126,7 @@ def eval_loader_partial() -> partial:
     return partial(wds.WebLoader, batch_size=2, num_workers=0)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def batch_size() -> int:
     return 2
 
@@ -162,3 +164,72 @@ def split_manifest_uri(tmp_path: Path, shard_root: Path) -> str:
         for rec in records:
             f.write(json.dumps(rec) + "\n")
     return str(manifest_path)
+
+
+@pytest.fixture()
+def dm(
+    split_manifest_uri,
+    transform,
+    label_map,
+    classes,
+    train_loader_partial,
+    eval_loader_partial,
+    batch_size,
+    shard_root,
+):
+    from radiologist.core import WebDatasetDataModule
+
+    return WebDatasetDataModule(
+        shard_root=str(shard_root),
+        split_manifest_uri=split_manifest_uri,
+        label_map=label_map,
+        train_transform=transform,
+        eval_transform=transform,
+        train_loader=train_loader_partial,
+        eval_loader=eval_loader_partial,
+        batch_size=batch_size,
+        classes=classes,
+    )
+
+
+@pytest.fixture()
+def lmodule():
+    import torch
+    import torch.nn as nn
+    from torchmetrics.classification import (
+        MulticlassFBetaScore,  # type: ignore[import-untyped]
+    )
+
+    from radiologist.core import FocalLoss, LModule
+
+    net = nn.Sequential(
+        nn.Conv2d(3, 4, 3, padding=1),
+        nn.ReLU(),
+        nn.Dropout(p=0.5),
+        nn.AdaptiveAvgPool2d((1, 1)),
+        nn.Flatten(),
+        nn.Linear(4, 2),
+    )
+    return LModule(
+        net=net,
+        loss=FocalLoss(),
+        metric=partial(MulticlassFBetaScore, beta=1.0, num_classes=2),
+        optimizer=partial(torch.optim.Adam, lr=1e-3),
+    )
+
+
+@pytest.fixture()
+def ckpt_path(tmp_path, lmodule):
+    import pytorch_lightning as pl
+    import torch
+
+    path = str(tmp_path / "test.ckpt")
+    ckpt = {
+        "epoch": 0,
+        "global_step": 0,
+        "pytorch-lightning_version": pl.__version__,
+        "state_dict": lmodule.state_dict(),
+        "hyper_parameters": {},
+    }
+    torch.save(ckpt, path)
+    return path

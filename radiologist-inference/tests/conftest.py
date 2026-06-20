@@ -21,8 +21,6 @@
 # SOFTWARE.
 
 import json
-import sys
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -30,8 +28,6 @@ import onnx
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 CLASSES = ["NORMAL", "ABNORMAL"]
 INPUT_SHAPE = [1, 3, 224, 224]
@@ -62,11 +58,13 @@ def build_det_onnx(
     tmp_path,
     priors: Optional[dict] = None,
     filename: str = "model_det.onnx",
+    feat_nonzero: bool = False,
 ) -> str:
     """Build a minimal deterministic 2-class ONNX classifier for tests.
 
     Outputs: logits (1, N_CLASSES) via Softmax, feature_maps (1, 64, 7, 7) constant.
     Embeds required metadata keys. Optional training_prior embedded when priors given.
+    When feat_nonzero=True, feature_maps filled with a deterministic non-zero constant.
     """
     np.random.seed(42)
     W = np.random.randn(N_CLASSES, N_FEATURES).astype(np.float32)
@@ -74,9 +72,12 @@ def build_det_onnx(
 
     W_init = onh.from_array(W, name="W")
     b_init = onh.from_array(b, name="b")
-    feat_const = onh.from_array(
-        np.zeros((1, 64, 7, 7), dtype=np.float32), name="feat_const"
+    feat_value = (
+        np.ones((1, 64, 7, 7), dtype=np.float32) * 0.5
+        if feat_nonzero
+        else np.zeros((1, 64, 7, 7), dtype=np.float32)
     )
+    feat_const = onh.from_array(feat_value, name="feat_const")
     shape_data = onh.from_array(
         np.array([1, N_FEATURES], dtype=np.int64), name="reshape_shape"
     )
@@ -160,5 +161,32 @@ def det_onnx_path(tmp_path):
 
 
 @pytest.fixture()
+def det_onnx_path_nonzero(tmp_path):
+    return build_det_onnx(tmp_path, feat_nonzero=True)
+
+
+@pytest.fixture()
 def mcd_onnx_path(tmp_path):
     return build_mcd_onnx(tmp_path)
+
+
+@pytest.fixture()
+def predictor_with_mcd(tmp_path):
+    from radiologist.inference import Predictor
+
+    det = build_det_onnx(tmp_path, filename="det.onnx")
+    mcd = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+    return Predictor.from_path(det_path=det, mcd_path=mcd)
+
+
+@pytest.fixture()
+def predictor_without_mcd(tmp_path):
+    from radiologist.inference import Predictor
+
+    det = build_det_onnx(tmp_path, filename="det_only.onnx")
+    return Predictor.from_path(det_path=det)
+
+
+@pytest.fixture()
+def sample_image():
+    return np.zeros((224, 224, 3), dtype=np.uint8)
