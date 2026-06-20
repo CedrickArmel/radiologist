@@ -2,6 +2,6 @@
 _target_: radiologist.core.LModule
 net:
   _target_: torchvision.models.resnet50
-  num_classes: 3
+  num_classes: ???
 trainable_layers: null
 priors: null

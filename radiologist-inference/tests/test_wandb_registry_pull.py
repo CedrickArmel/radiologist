@@ -26,83 +26,14 @@ All tests drive through the public API only. wandb SDK is mocked at the
 process boundary since it requires external network/auth.
 """
 
-import json
 import os
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import onnx
-import onnx.helper as oh
-import onnx.numpy_helper as onh
 import pytest
+from _helpers import build_det_onnx
 
-from radiologist.registry.wandb_registry import WandbRegistry
-
-CLASSES = ["NORMAL", "ABNORMAL"]
-INPUT_SHAPE = [1, 3, 224, 224]
-N_FEATURES = 3 * 224 * 224
-N_CLASSES = len(CLASSES)
-
-
-def _build_det_onnx(tmp_path, filename="model_det.onnx"):
-    np.random.seed(42)
-    W = np.random.randn(N_CLASSES, N_FEATURES).astype(np.float32)
-    b = np.zeros(N_CLASSES, dtype=np.float32)
-
-    W_init = onh.from_array(W, name="W")
-    b_init = onh.from_array(b, name="b")
-    feat_const = onh.from_array(
-        np.zeros((1, 64, 7, 7), dtype=np.float32), name="feat_const"
-    )
-    shape_data = onh.from_array(
-        np.array([1, N_FEATURES], dtype=np.int64), name="reshape_shape"
-    )
-
-    FLOAT = onnx.TensorProto.FLOAT
-    logits_vi = oh.make_tensor_value_info("logits", FLOAT, [1, N_CLASSES])
-    feature_maps_vi = oh.make_tensor_value_info("feature_maps", FLOAT, [1, 64, 7, 7])
-
-    graph = oh.make_graph(
-        nodes=[
-            oh.make_node(
-                "Reshape",
-                inputs=["input", "reshape_shape"],
-                outputs=["reshape_out"],
-            ),
-            oh.make_node(
-                "Gemm",
-                inputs=["reshape_out", "W", "b"],
-                outputs=["gemm_out"],
-                transB=1,
-            ),
-            oh.make_node("Softmax", inputs=["gemm_out"], outputs=["logits"], axis=1),
-            oh.make_node("Identity", inputs=["feat_const"], outputs=["feature_maps"]),
-        ],
-        name="det_classifier",
-        inputs=[
-            oh.make_tensor_value_info("input", FLOAT, INPUT_SHAPE),
-        ],
-        outputs=[logits_vi, feature_maps_vi],
-        initializer=[W_init, b_init, shape_data, feat_const],
-    )
-    model = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 17)])
-    model.ir_version = 8
-
-    base_meta = {
-        "classes": json.dumps(CLASSES),
-        "input_shape": json.dumps(INPUT_SHAPE),
-        "cam_target_layer": "features.28",
-        "output_names": json.dumps(["logits", "feature_maps"]),
-    }
-    del model.metadata_props[:]
-    for k, v in base_meta.items():
-        e = model.metadata_props.add()
-        e.key = k
-        e.value = v
-
-    path = str(tmp_path / filename)
-    onnx.save(model, path)
-    return path
+from radiologist.registry import WandbRegistry
 
 
 def _make_wandb_mock(onnx_path):
@@ -124,7 +55,7 @@ class TestWandbRegistryPull:
         """WandbRegistry.pull() must return the local path to an .onnx file."""
         import radiologist.registry.resolver as resolver_mod
 
-        onnx_path = _build_det_onnx(tmp_path)
+        onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
         with patch.object(resolver_mod, "_wandb", mock_wandb):
@@ -140,7 +71,7 @@ class TestWandbRegistryPull:
         """The path returned by WandbRegistry.pull() must point to an existing file."""
         import radiologist.registry.resolver as resolver_mod
 
-        onnx_path = _build_det_onnx(tmp_path)
+        onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
         with patch.object(resolver_mod, "_wandb", mock_wandb):
@@ -171,7 +102,7 @@ class TestPredictorFromRegistryViaWandbRegistry:
         import radiologist.registry.resolver as resolver_mod
         from radiologist.inference import Predictor
 
-        onnx_path = _build_det_onnx(tmp_path)
+        onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
         with patch.object(resolver_mod, "_wandb", mock_wandb):
@@ -187,7 +118,7 @@ class TestPredictorFromRegistryViaWandbRegistry:
         import radiologist.registry.resolver as resolver_mod
         from radiologist.inference import Prediction, Predictor
 
-        onnx_path = _build_det_onnx(tmp_path)
+        onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
         with patch.object(resolver_mod, "_wandb", mock_wandb):
@@ -205,7 +136,7 @@ class TestPredictorFromRegistryViaWandbRegistry:
         import radiologist.registry.resolver as resolver_mod
         from radiologist.inference import Predictor
 
-        onnx_path = _build_det_onnx(tmp_path)
+        onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
 
         with patch.object(resolver_mod, "_wandb", mock_wandb):

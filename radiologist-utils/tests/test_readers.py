@@ -30,7 +30,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from radiologist.utils.readers import (
+from radiologist.utils import (
     BaseImageReader,
     ImageReader,
     LocalImageReader,
@@ -56,20 +56,6 @@ def image_dir(tmp_path: Path) -> Path:
 @pytest.fixture()
 def empty_dir(tmp_path: Path) -> Path:
     return tmp_path
-
-
-@pytest.fixture()
-def mock_remote_fs():
-    """Return an in-memory mock of an fsspec filesystem with one PNG file."""
-    fs = MagicMock()
-    remote_root = "bucket/radiology"
-    image_path = f"{remote_root}/scan.png"
-
-    fs.exists.return_value = True
-    fs.find.return_value = [image_path]
-    fs.unstrip_protocol.side_effect = lambda p: f"gs://{p}"
-
-    return fs, remote_root
 
 
 def test_base_reader_is_abstract() -> None:
@@ -108,23 +94,48 @@ def test_local_reader_file_not_dir_raises(tmp_path: Path) -> None:
         list(reader.iterate())
 
 
-_DUMMY_RECORD = (
-    np.zeros((10, 10, 3), dtype=np.uint8),
-    {"path": "gs://bucket/radiology/scan.png", "filename": "scan.png"},
-)
+def _make_fs_with_png(image_path: str) -> MagicMock:
+    """Return a mock fsspec filesystem whose open() yields real PNG bytes."""
+    fs = MagicMock()
+    fs.exists.return_value = True
+    fs.find.return_value = [image_path]
+    fs.unstrip_protocol.side_effect = lambda p: f"gs://{p}"
+
+    ctx = MagicMock()
+    ctx.__enter__ = lambda s: io.BytesIO(_png_bytes())
+    ctx.__exit__ = MagicMock(return_value=False)
+    fs.open.return_value = ctx
+    return fs
 
 
-def test_remote_reader_returns_arrays_and_metadata(mock_remote_fs) -> None:
-    fs, remote_root = mock_remote_fs
+def _url_to_fs_side_effect(fs: MagicMock, root: str, image_path: str):
+    """Side-effect factory: first call returns (fs, root); subsequent calls
+    return (fs, image_path) so read_image resolves the correct extension."""
+
+    def _fn(uri: str, **kwargs):
+        if uri.endswith(Path(image_path).name):
+            return (fs, image_path)
+        return (fs, root)
+
+    return _fn
+
+
+def test_remote_reader_returns_arrays_and_metadata() -> None:
+    root = "bucket/radiology"
+    image_path = f"{root}/scan.png"
+    fs = _make_fs_with_png(image_path)
     with patch(
-        "radiologist.utils.readers.fsspec.url_to_fs", return_value=(fs, remote_root)
+        "radiologist.utils.readers.fsspec.url_to_fs",
+        side_effect=_url_to_fs_side_effect(fs, root, image_path),
     ):
-        with patch("radiologist.utils.readers.read_image", return_value=_DUMMY_RECORD):
-            results = list(RemoteImageReader(source="gs://bucket/radiology").iterate())
+        results = list(RemoteImageReader(source="gs://bucket/radiology").iterate())
 
     assert len(results) == 1
-    _, meta = results[0]
+    array, meta = results[0]
+    assert isinstance(array, np.ndarray)
+    assert array.shape == (10, 10, 3)
     assert meta["filename"] == "scan.png"
+    assert meta["path"] == "gs://bucket/radiology/scan.png"
 
 
 def test_remote_reader_missing_path_raises() -> None:
@@ -155,35 +166,36 @@ def test_remote_reader_forwards_storage_options() -> None:
 
 
 def test_remote_reader_skips_non_image_files() -> None:
-    fs = MagicMock()
-    fs.exists.return_value = True
-    fs.find.return_value = ["bucket/path/doc.pdf", "bucket/path/img.png"]
-    fs.unstrip_protocol.side_effect = lambda p: f"gs://{p}"
+    root = "bucket/path"
+    image_path = f"{root}/img.png"
+    fs = _make_fs_with_png(image_path)
+    fs.find.return_value = [f"{root}/doc.pdf", image_path]
 
     with patch(
-        "radiologist.utils.readers.fsspec.url_to_fs", return_value=(fs, "bucket/path")
+        "radiologist.utils.readers.fsspec.url_to_fs",
+        side_effect=_url_to_fs_side_effect(fs, root, image_path),
     ):
-        with patch(
-            "radiologist.utils.readers.read_image", return_value=_DUMMY_RECORD
-        ) as mock_read:
-            list(RemoteImageReader(source="gs://bucket/path").iterate())
+        results = list(RemoteImageReader(source="gs://bucket/path").iterate())
 
-    mock_read.assert_called_once_with("gs://bucket/path/img.png", storage_options={})
+    assert len(results) == 1
+    array, meta = results[0]
+    assert isinstance(array, np.ndarray)
+    assert meta["filename"] == "img.png"
 
 
-def test_remote_reader_calls_read_image_with_full_uri(mock_remote_fs) -> None:
-    fs, remote_root = mock_remote_fs
+def test_remote_reader_passes_full_uri_to_read_image() -> None:
+    root = "bucket/radiology"
+    image_path = f"{root}/scan.png"
+    fs = _make_fs_with_png(image_path)
     with patch(
-        "radiologist.utils.readers.fsspec.url_to_fs", return_value=(fs, remote_root)
+        "radiologist.utils.readers.fsspec.url_to_fs",
+        side_effect=_url_to_fs_side_effect(fs, root, image_path),
     ):
-        with patch(
-            "radiologist.utils.readers.read_image", return_value=_DUMMY_RECORD
-        ) as mock_read:
-            list(RemoteImageReader(source="gs://bucket/radiology").iterate())
+        results = list(RemoteImageReader(source="gs://bucket/radiology").iterate())
 
-    mock_read.assert_called_once_with(
-        "gs://bucket/radiology/scan.png", storage_options={}
-    )
+    assert len(results) == 1
+    _, meta = results[0]
+    assert meta["path"] == "gs://bucket/radiology/scan.png"
 
 
 @pytest.mark.parametrize("source", ["/local/path", "./relative", "no-scheme"])

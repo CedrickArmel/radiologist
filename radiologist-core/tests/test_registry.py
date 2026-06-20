@@ -30,46 +30,9 @@ W&B promote behavior moved to radiologist-registry tests.
 from __future__ import annotations
 
 import json
-from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
-from unittest.mock import patch
-
-if TYPE_CHECKING:
-    from radiologist.core import LModule
 
 import pytest
-import torch
-import torch.nn as nn
-from torchmetrics.classification import MulticlassFBetaScore
-
-# ---------------------------------------------------------------------------
-# Helpers — minimal net and LModule
-# ---------------------------------------------------------------------------
-
-
-def _make_tiny_net() -> nn.Sequential:
-    """Tiny net with a Dropout so MCD export can find it."""
-    return nn.Sequential(
-        nn.Conv2d(3, 4, 3, padding=1),
-        nn.ReLU(),
-        nn.Dropout(p=0.5),
-        nn.AdaptiveAvgPool2d((1, 1)),
-        nn.Flatten(),
-        nn.Linear(4, 2),
-    )
-
-
-def _make_lmodule(net: nn.Module) -> "LModule":
-    from radiologist.core import FocalLoss, LModule
-
-    return LModule(
-        net=net,
-        loss=FocalLoss(),
-        metric=partial(MulticlassFBetaScore, beta=1.0, num_classes=2),
-        optimizer=partial(torch.optim.Adam, lr=1e-3),
-    )
-
 
 # ---------------------------------------------------------------------------
 # AC: pull_checkpoint absent from core registry __all__
@@ -145,51 +108,41 @@ def test_export_onnx_importable_from_core_registry():
 # ---------------------------------------------------------------------------
 
 
-def test_export_onnx_creates_deterministic_and_mcd_onnx_files(tmp_path):
+def test_export_onnx_creates_deterministic_and_mcd_onnx_files(ckpt_path, tmp_path):
     """export_onnx must produce det and mcd ONNX files on disk."""
-    import radiologist.core.registry.export as export_mod
     from radiologist.core.registry import export_onnx
 
-    net = _make_tiny_net()
-    lm = _make_lmodule(net)
     run_id = "abc123"
-
-    with patch.object(export_mod.LModule, "load_from_checkpoint", return_value=lm):
-        result = export_onnx(
-            ckpt_path="unused.ckpt",
-            run_id=run_id,
-            input_shape=(1, 3, 8, 8),
-            classes=["healthy", "sick"],
-            cam_target_layer="2",
-            out_dir=str(tmp_path),
-            opset=17,
-        )
+    result = export_onnx(
+        ckpt_path=ckpt_path,
+        run_id=run_id,
+        input_shape=(1, 3, 8, 8),
+        classes=["healthy", "sick"],
+        cam_target_layer="2",
+        out_dir=str(tmp_path),
+        opset=17,
+    )
 
     assert Path(result.det_path).exists()
     assert Path(result.mcd_path).exists()
 
 
-def test_export_onnx_det_has_required_metadata(tmp_path):
+def test_export_onnx_det_has_required_metadata(ckpt_path, tmp_path):
     """export_onnx deterministic model must embed required metadata keys."""
     import onnx
 
-    import radiologist.core.registry.export as export_mod
     from radiologist.core.registry import export_onnx
 
-    net = _make_tiny_net()
-    lm = _make_lmodule(net)
     run_id = "abc123"
-
-    with patch.object(export_mod.LModule, "load_from_checkpoint", return_value=lm):
-        result = export_onnx(
-            ckpt_path="unused.ckpt",
-            run_id=run_id,
-            input_shape=(1, 3, 8, 8),
-            classes=["healthy", "sick"],
-            cam_target_layer="2",
-            out_dir=str(tmp_path),
-            opset=17,
-        )
+    result = export_onnx(
+        ckpt_path=ckpt_path,
+        run_id=run_id,
+        input_shape=(1, 3, 8, 8),
+        classes=["healthy", "sick"],
+        cam_target_layer="2",
+        out_dir=str(tmp_path),
+        opset=17,
+    )
 
     model = onnx.load(result.det_path)
     props = {p.key: p.value for p in model.metadata_props}
@@ -203,27 +156,22 @@ def test_export_onnx_det_has_required_metadata(tmp_path):
     assert "feature_maps" in output_names
 
 
-def test_export_onnx_mcd_has_required_metadata(tmp_path):
+def test_export_onnx_mcd_has_required_metadata(ckpt_path, tmp_path):
     """export_onnx MCD model must embed mc_dropout=true in metadata."""
     import onnx
 
-    import radiologist.core.registry.export as export_mod
     from radiologist.core.registry import export_onnx
 
-    net = _make_tiny_net()
-    lm = _make_lmodule(net)
     run_id = "abc123"
-
-    with patch.object(export_mod.LModule, "load_from_checkpoint", return_value=lm):
-        result = export_onnx(
-            ckpt_path="unused.ckpt",
-            run_id=run_id,
-            input_shape=(1, 3, 8, 8),
-            classes=["healthy", "sick"],
-            cam_target_layer="2",
-            out_dir=str(tmp_path),
-            opset=17,
-        )
+    result = export_onnx(
+        ckpt_path=ckpt_path,
+        run_id=run_id,
+        input_shape=(1, 3, 8, 8),
+        classes=["healthy", "sick"],
+        cam_target_layer="2",
+        out_dir=str(tmp_path),
+        opset=17,
+    )
 
     model = onnx.load(result.mcd_path)
     props = {p.key: p.value for p in model.metadata_props}
@@ -234,22 +182,17 @@ def test_export_onnx_mcd_has_required_metadata(tmp_path):
     assert props.get("mc_dropout") == "true"
 
 
-def test_export_onnx_raises_attribute_error_for_bad_cam_layer(tmp_path):
+def test_export_onnx_raises_attribute_error_for_bad_cam_layer(ckpt_path, tmp_path):
     """export_onnx raises AttributeError when cam_target_layer does not exist."""
-    import radiologist.core.registry.export as export_mod
     from radiologist.core.registry import export_onnx
 
-    net = _make_tiny_net()
-    lm = _make_lmodule(net)
-
-    with patch.object(export_mod.LModule, "load_from_checkpoint", return_value=lm):
-        with pytest.raises(AttributeError):
-            export_onnx(
-                ckpt_path="unused.ckpt",
-                run_id="abc123",
-                input_shape=(1, 3, 8, 8),
-                classes=["healthy", "sick"],
-                cam_target_layer="nonexistent.deep.layer",
-                out_dir=str(tmp_path),
-                opset=17,
-            )
+    with pytest.raises(AttributeError):
+        export_onnx(
+            ckpt_path=ckpt_path,
+            run_id="abc123",
+            input_shape=(1, 3, 8, 8),
+            classes=["healthy", "sick"],
+            cam_target_layer="nonexistent.deep.layer",
+            out_dir=str(tmp_path),
+            opset=17,
+        )

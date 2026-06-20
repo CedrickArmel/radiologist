@@ -19,3 +19,16 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).parent
+for _pkg in (
+    "radiologist-utils",
+    "radiologist-etl",
+    "radiologist-core",
+    "radiologist-inference",
+    "radiologist-registry",
+):
+    sys.path.insert(0, str(_ROOT / _pkg / "src"))
