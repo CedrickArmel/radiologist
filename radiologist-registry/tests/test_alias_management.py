@@ -132,19 +132,19 @@ class TestRemoveAlias:
 
 class TestWandbNotInstalled:
     def test_get_aliases_raises_runtime_error_when_wandb_missing(self) -> None:
-        with patch("radiologist.registry.alias_manager._wandb", None):
+        with patch("radiologist.registry.optional._wandb", None):
             registry = WandbRegistry()
             with pytest.raises(RuntimeError, match="wandb"):
                 registry.get_aliases("entity/project/model:v1")
 
     def test_set_alias_raises_runtime_error_when_wandb_missing(self) -> None:
-        with patch("radiologist.registry.alias_manager._wandb", None):
+        with patch("radiologist.registry.optional._wandb", None):
             registry = WandbRegistry()
             with pytest.raises(RuntimeError, match="wandb"):
                 registry.set_alias("entity/project/model:v1", "production")
 
     def test_remove_alias_raises_runtime_error_when_wandb_missing(self) -> None:
-        with patch("radiologist.registry.alias_manager._wandb", None):
+        with patch("radiologist.registry.optional._wandb", None):
             registry = WandbRegistry()
             with pytest.raises(RuntimeError, match="wandb"):
                 registry.remove_alias("entity/project/model:v1", "staging")

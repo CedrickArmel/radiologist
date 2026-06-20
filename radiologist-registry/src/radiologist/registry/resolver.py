@@ -25,17 +25,7 @@ import os
 from typing import List, Optional, Union
 
 from radiologist.registry.models import ArtifactRef
-from radiologist.registry.optional import _wandb
-
-_WANDB_MISSING_MSG = (
-    "wandb is required for registry operations. "
-    "Install with: pip install 'radiologist-registry[wandb]'"
-)
-
-
-def _guard_wandb() -> None:
-    if _wandb is None:
-        raise RuntimeError(_WANDB_MISSING_MSG)
+from radiologist.registry.optional import _guard_wandb, _wandb
 
 
 def _artifact_ref(art: object, run_id: str) -> ArtifactRef:
@@ -81,16 +71,15 @@ class _WandbResolver:
                 if isinstance(groups, str):
                     groups = [groups]
                 filters["group"] = {"$in": groups}
-            runs = api.runs(
-                path=path,
-                filters=filters,
-                order=f"-summary_metric.{metric or 'best_val_score'}",
-                include_sweeps=include_sweeps,
-            )
-            best_run = max(
-                runs,
-                key=lambda run: run.summary.get(metric or "best_val_score", 0),
-            )
+            kwargs: dict = {
+                "path": path,
+                "filters": filters,
+                "include_sweeps": include_sweeps,
+            }
+            if metric is not None:
+                kwargs["order"] = f"-summary_metric.{metric}"
+            runs = api.runs(**kwargs)
+            best_run = next(iter(runs))
             art = api.artifact(
                 type="model",
                 name=f"{path}/model-{best_run.id}:{version or 'best'}",
@@ -98,7 +87,9 @@ class _WandbResolver:
             return _artifact_ref(art, best_run.id)
 
         art = api.artifact(path)
-        return _artifact_ref(art, art.logged_by().id)
+        run = art.logged_by()
+        run_id = run.id if run is not None else ""
+        return _artifact_ref(art, run_id)
 
     def download(self, ref: ArtifactRef, local_dir: str) -> str:
         _guard_wandb()

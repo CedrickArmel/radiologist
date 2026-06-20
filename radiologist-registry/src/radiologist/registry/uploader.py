@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 from radiologist.registry.models import ExportResult, PromoteResult
-from radiologist.registry.optional import _wandb
+from radiologist.registry.optional import _guard_wandb, _wandb
 
 
 class _WandbUploader:
@@ -33,25 +33,24 @@ class _WandbUploader:
         collection: str,
         alias: str,
     ) -> PromoteResult:
-        if _wandb is None:
-            raise RuntimeError(
-                "wandb is required for registry operations. "
-                "Install with: pip install 'radiologist-registry[wandb]'"
+        _guard_wandb()
+        run = _wandb.init(job_type="registry-promote")  # type: ignore[union-attr]
+        try:
+            run_id = export_result.run_id
+
+            det_art = _wandb.Artifact(f"model-{run_id}", type="model")  # type: ignore[union-attr]
+            det_art.add_file(export_result.det_path)
+            run.log_artifact(det_art)
+            det_linked = run.link_artifact(det_art, collection, aliases=[alias])
+
+            mcd_art = _wandb.Artifact(f"model-{run_id}-mcd", type="model")  # type: ignore[union-attr]
+            mcd_art.add_file(export_result.mcd_path)
+            run.log_artifact(mcd_art)
+            mcd_linked = run.link_artifact(mcd_art, collection, aliases=[alias])
+
+            return PromoteResult(
+                det_qualified_name=det_linked.qualified_name,
+                mcd_qualified_name=mcd_linked.qualified_name,
             )
-        run = _wandb.init(job_type="registry-promote")
-        run_id = export_result.run_id
-
-        det_art = _wandb.Artifact(f"model-{run_id}", type="model")
-        det_art.add_file(export_result.det_path)
-        run.log_artifact(det_art)
-        det_linked = run.link_artifact(det_art, collection, aliases=[alias])
-
-        mcd_art = _wandb.Artifact(f"model-{run_id}-mcd", type="model")
-        mcd_art.add_file(export_result.mcd_path)
-        run.log_artifact(mcd_art)
-        mcd_linked = run.link_artifact(mcd_art, collection, aliases=[alias])
-
-        return PromoteResult(
-            det_qualified_name=det_linked.qualified_name,
-            mcd_qualified_name=mcd_linked.qualified_name,
-        )
+        finally:
+            run.finish()

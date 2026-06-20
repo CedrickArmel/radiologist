@@ -20,12 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Internal helpers shared between export.py and (historically) promote_to_registry.
-
-promote_to_registry was removed in issue #90 — W&B coupling lives in
-radiologist-registry. Only the ONNX-construction helpers remain here.
-"""
-
 from __future__ import annotations
 
 from typing import Optional, Tuple

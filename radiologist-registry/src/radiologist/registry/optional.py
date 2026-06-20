@@ -24,3 +24,13 @@ try:
     import wandb as _wandb  # type: ignore[import-untyped]
 except ImportError:
     _wandb = None  # type: ignore[assignment]
+
+_WANDB_MISSING_MSG = (
+    "wandb is required for registry operations. "
+    "Install with: pip install 'radiologist-registry[wandb]'"
+)
+
+
+def _guard_wandb() -> None:
+    if _wandb is None:
+        raise RuntimeError(_WANDB_MISSING_MSG)
