@@ -162,7 +162,16 @@ Import public APIs in the `__init__.py` of their module and add them to `__all__
 
 ### Use `conftest.py` to share fixtures
 
-Fixtures defined in a `conftest.py` can be used by any test in that package without needing to import them (pytest will automatically discover them).
+Fixtures defined in a `conftest.py` can be used by any test in that package without needing to import them (pytest will automatically discover them). A root-level `conftest.py` handles the `sys.path` shim for all 5 packages — do not re-add it per-package.
+
+### Testing philosophy — classist outside-in TDD
+
+**Never mock owned code** (`radiologist.*` or any locally importable module). Only mock true process boundaries: W&B SDK, HTTP, OS/network, external filesystem (fsspec), clock.
+
+- **Lightning components** (`DataModule`, `LightningModule`, `Trainer`) always use real instances — no `MagicMock`, no `SimpleNamespace`. A real `pl.Trainer(fast_dev_run=True, accelerator="cpu", enable_progress_bar=False, enable_model_summary=False)` + `trainer.fit(lm, datamodule=dm)` is the test pattern; assert on side-effects after the real fit loop fires hooks.
+- **`LModule.load_from_checkpoint`** — use the `ckpt_path` fixture in `radiologist-core/tests/conftest.py` instead of patching. It saves a real Lightning checkpoint to `tmp_path`.
+- **Tests drive through public APIs** exported from each package's `__init__.py`, not internal submodules. Patch targets may reference internal paths (e.g. `resolver._wandb`) but the object under test must be the public type.
+- **W&B sentinel pattern** — each submodule that calls the W&B SDK exposes a `_wandb` sentinel (e.g. `radiologist.registry.resolver._wandb`). Patch that sentinel, not the whole class that uses it.
 
 ### Git
 
