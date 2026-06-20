@@ -4777,6 +4777,7 @@ dependencies = [
 all = [
     { name = "radiologist-core", extra = ["all"] },
     { name = "radiologist-etl", extra = ["all"] },
+    { name = "radiologist-inference", extra = ["all"] },
     { name = "radiologist-utils", extra = ["all"] },
 ]
 etl = [
@@ -4814,6 +4815,7 @@ requires-dist = [
     { name = "radiologist-etl", marker = "extra == 'etl'", editable = "radiologist-etl" },
     { name = "radiologist-etl", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-etl" },
     { name = "radiologist-etl", extras = ["prefect"], marker = "extra == 'prefect'", editable = "radiologist-etl" },
+    { name = "radiologist-inference", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-inference" },
     { name = "radiologist-utils", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-utils" },
     { name = "radiologist-utils", extras = ["ml"], editable = "radiologist-utils" },
 ]
@@ -4889,7 +4891,7 @@ requires-dist = [
     { name = "onnx", marker = "extra == 'all'", specifier = ">=1.21.0" },
     { name = "onnx", marker = "extra == 'registry'", specifier = ">=1.21.0" },
     { name = "onnxruntime", marker = "extra == 'all'", specifier = "~=1.23.2" },
-    { name = "onnxruntime", marker = "extra == 'registry'", specifier = "~=1.23.0" },
+    { name = "onnxruntime", marker = "extra == 'registry'", specifier = "~=1.23.2" },
     { name = "onnxscript", marker = "extra == 'all'", specifier = ">=0.7.0" },
     { name = "onnxscript", marker = "extra == 'registry'", specifier = ">=0.7.0" },
     { name = "pillow", specifier = ">=12.2.0" },
@@ -4930,13 +4932,6 @@ all = [
     { name = "gcsfs" },
     { name = "prefect" },
 ]
-dependencies = [
-    { name = "fsspec" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pillow" },
-    { name = "rich" },
-]
 gcs = [
     { name = "gcsfs" },
 ]
@@ -4947,25 +4942,21 @@ prefect = [
 [package.metadata]
 requires-dist = [
     { name = "fsspec", specifier = ">=2026.4.0" },
-    { name = "fsspec", marker = "extra == 'dependencies'", specifier = ">=2026.4.0" },
     { name = "gcsfs", marker = "extra == 'all'", specifier = ">=2026.4.0" },
     { name = "gcsfs", marker = "extra == 'gcs'", specifier = ">=2026.4.0" },
     { name = "hydra-core", specifier = ">=1.3.0" },
     { name = "numpy", specifier = ">=2.2.0" },
-    { name = "numpy", marker = "extra == 'dependencies'", specifier = ">=2.2.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "pandas", specifier = ">=2.3.0" },
-    { name = "pillow", marker = "extra == 'dependencies'", specifier = ">=12.2.0" },
     { name = "prefect", marker = "extra == 'all'", specifier = ">=3.7.0" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.0" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "radiologist-utils", editable = "radiologist-utils" },
     { name = "rich", specifier = ">=15.0.0" },
-    { name = "rich", marker = "extra == 'dependencies'", specifier = ">=15.0.0" },
     { name = "scikit-image", specifier = ">=0.25.0" },
     { name = "webdataset", specifier = ">=1.0.0" },
 ]
-provides-extras = ["gcs", "prefect", "all", "dependencies"]
+provides-extras = ["gcs", "prefect", "all"]
 
 [[package]]
 name = "radiologist-inference"
@@ -5003,7 +4994,7 @@ serve = [
 requires-dist = [
     { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.100.0" },
     { name = "fastapi", marker = "extra == 'serve'", specifier = ">=0.100.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "numpy", specifier = ">=2.2.0" },
     { name = "onnxruntime", specifier = ">=1.18.0" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "python-multipart", marker = "extra == 'all'", specifier = ">=0.0.9" },
@@ -5034,7 +5025,7 @@ wandb = [
 [package.metadata]
 requires-dist = [
     { name = "radiologist-utils", editable = "radiologist-utils" },
-    { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.16" },
+    { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.27.0" },
 ]
 provides-extras = ["wandb"]
 
