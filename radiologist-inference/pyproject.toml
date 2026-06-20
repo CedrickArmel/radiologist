@@ -4,7 +4,7 @@ requires = ["uv_build>=0.9.28,<0.10.0"]
 
 [project]
 dependencies = [
-    "numpy>=1.24.0",
+    "numpy>=2.2.0",
     "Pillow>=12.2.0",
     "onnxruntime>=1.18.0",
     "radiologist-registry>=0.1.0",
@@ -46,7 +46,7 @@ radiologist-registry = { workspace = true }
 
 [tool.uv.build-backend]
 namespace = true
-module-name = "radiocovid.inference"
+module-name = "radiologist.inference"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

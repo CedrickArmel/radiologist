@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image  # type: ignore[import-untyped]
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
