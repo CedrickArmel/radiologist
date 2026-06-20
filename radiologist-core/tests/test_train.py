@@ -166,9 +166,9 @@ def test_config_yaml_exists(rel_path: str) -> None:
             ),
         ),
         (
-            "module_interpolation",
-            "module/resnet50.yaml references ${datamodule.num_classes}",
-            lambda: "${datamodule.num_classes}"
+            "module_num_classes_mandatory",
+            "module/resnet50.yaml declares num_classes as mandatory (???)",
+            lambda: "num_classes: ???"
             in (_CONFIGS_DIR / "module" / "resnet50.yaml").read_text(),
         ),
     ],
