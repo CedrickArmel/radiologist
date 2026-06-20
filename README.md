@@ -48,7 +48,8 @@ This is a UV workspace mono-repo. Each package is independently installable and 
 | [`radiologist-etl`](radiologist-etl/README.md) | Data preparation — Haralick GLCM, IQR filtering, sharding |
 | [`radiologist-core`](radiologist-core/README.md) | Model training, evaluation, attribution, registry promotion |
 | `radiologist-app` | Streamlit / FastAPI serving UI *(planned)* |
-| `radiologist-inference` | DVC-tracked raw and processed images *(planned)* |
+| [`radiologist-inference`](radiologist-inference/README.md) | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server, Typer CLI |
+| [`radiologist-registry`](radiologist-registry/README.md) | W&B model registry — promote, resolve, download ONNX artifacts |
 
 ## Tech stack
 
@@ -70,9 +71,7 @@ This is a UV workspace mono-repo. Each package is independently installable and 
 
 ```bash
 pyenv activate radiologist
-uv sync --active --extra all --all-groups
-pre-commit install
-pre-commit install --hook-stage commit-msg
+make dev-install
 ```
 
 ### 2 — Prepare the data
@@ -116,8 +115,8 @@ This exports two ONNX models — deterministic (with GradCAM activation output) 
 ### 5 — Run the test suite
 
 ```bash
-uv run --active pytest -q -p no:warnings                          # all packages
-uv run --active pytest radiologist-core/tests -q -p no:warnings   # single package
+make test           # all packages
+make test-core      # radiologist-core only
 ```
 
 ## Key design decisions

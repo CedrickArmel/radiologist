@@ -31,6 +31,7 @@ This project adopts a mono-repo layout managed by `UV`.
 | `radiologist-etl/` | Data preparation — outlier removal (Haralick GLCM), ImageFolder builder |
 | `radiologist-inference/` | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server, Typer CLI |
 | `radiologist-utils/` | Useful helpers |
+| `radiologist-registry/` | W&B model registry — promote, resolve, download ONNX artifacts |
 
 ```text
 ├── data.dvc
@@ -79,6 +80,7 @@ This project adopts a mono-repo layout managed by `UV`.
 │   │           ├── __init__.py
 │   │           └── ...
 │   └── tests/
+├── radiologist-registry
 ├── README.md
 ├── tox.ini
 └── uv.lock
@@ -86,7 +88,7 @@ This project adopts a mono-repo layout managed by `UV`.
 
 ### uv workspace
 
-Four active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`, `radiologist-inference`. `radiologist-app` is **planned but not yet implemented** — its directory does not exist.
+Five active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`, `radiologist-inference`, `radiologist-registry`. `radiologist-app` is **planned but not yet implemented** — its directory does not exist.
 
 Each package uses `namespace = true` (no `__init__.py` at the `radiologist/` level). Add new members to `[tool.uv.workspace] members` and `[tool.uv.sources]` in the root `pyproject.toml`.
 
@@ -109,10 +111,8 @@ pyenv virtualenv 3.10.16 radiologist
 Setup the envionment running the following:
 
 ```bash
-
-pyenv activate radiologist && uv sync --active [--extra all] --all-groups  # verify extra all or install all optional individually
-pre-commit install                  # install git hooks (required once per clone)
-pre-commit install --hook-stage commit-msg
+pyenv activate radiologist
+make dev-install   # sync all deps + extras + install pre-commit hooks
 ```
 
 **ALWAYS** use the `--active` options for `UV` commands so that `venv` managed locally by PyEnv is used.
@@ -136,8 +136,12 @@ When an subagent ends his work in a worktree:
 ### Running tests
 
 ```bash
-uv run --active pytest -q                          # all packages
-uv run --active pytest radiologist-core/tests -q   # single package
+make test            # all packages
+make test-core       # radiologist-core only
+make test-etl        # radiologist-etl only
+make test-utils      # radiologist-utils only
+make test-inference  # radiologist-inference only
+make test-registry   # radiologist-registry only
 ```
 
 ### Code style — PEP 8
@@ -170,7 +174,7 @@ Fixtures defined in a `conftest.py` can be used by any test in that package with
 
 ## Gotchas
 
-- **[Packages]** `radiologist-app/` and `radiologist-inference/` do not exist on disk — they are planned packages. Do not attempt to read or import from them.
+- **[Packages]** `radiologist-app/` does not exist on disk — it is a planned package. Do not attempt to read or import from it.
 - **[PyTorch]** The sandbox security hook false-positives on the `.eval()` method name. Use `model.train(mode=False)` instead of `model.eval()` in any PyTorch code.
 - **[LICENSE]** You MUST NOT add the license header in your code yourself. `pre-commit` we do that.
 - **[MEMORY]** Generalise before saving: a gotcha observed on one instance (a class, function, OS, or library) should be written at the level of the broader behavior it exemplifies — not pinned to the specific case that triggered it. When writing a memory or gotcha, ask: is this specific to X, or is X just one case of a wider rule? Write the wider rule; mention X only as an example if it aids clarity.
