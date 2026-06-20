@@ -32,6 +32,7 @@ dependencies = [
 all = [
     "radiologist-core[all]",
     "radiologist-etl[all]",
+    "radiologist-inference[all]",
     "radiologist-utils[all]",
 ]
 etl = ["radiologist-etl"]
@@ -132,7 +133,7 @@ testpaths = [
     "radiologist-inference/tests",
     "radiologist-registry/tests",
 ]
-addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
+addopts = "--import-mode=importlib --cov=radiologist --cov-report=term-missing"
 
 [tool.uv.build-backend]
 namespace = true
