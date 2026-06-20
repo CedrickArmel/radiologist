@@ -154,9 +154,9 @@ class TestWandbRegistryPull:
 
     def test_pull_raises_runtime_error_when_wandb_absent(self, tmp_path):
         """WandbRegistry.pull() raises RuntimeError when wandb is absent."""
-        import radiologist.registry.resolver as resolver_mod
+        import radiologist.registry.optional as optional_mod
 
-        with patch.object(resolver_mod, "_wandb", None):
+        with patch.object(optional_mod, "_wandb", None):
             with pytest.raises(RuntimeError):
                 reg = WandbRegistry()
                 reg.pull(
@@ -227,10 +227,10 @@ class TestPredictorFromRegistryViaWandbRegistry:
 
     def test_from_registry_raises_runtime_error_when_wandb_absent(self, tmp_path):
         """from_registry raises RuntimeError when wandb absent."""
-        import radiologist.registry.resolver as resolver_mod
+        import radiologist.registry.optional as optional_mod
         from radiologist.inference import Predictor
 
-        with patch.object(resolver_mod, "_wandb", None):
+        with patch.object(optional_mod, "_wandb", None):
             with pytest.raises(RuntimeError):
                 Predictor.from_registry(
                     artifact_path="entity/project/name:v0",
