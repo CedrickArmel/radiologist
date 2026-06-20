@@ -5,9 +5,11 @@ PYTHON_VERSION ?= 3.10.16
 VENV           ?= radiologist
 PYENV_GIT_TAG  ?= v2.6.3
 
-PKG_CORE  := radiologist-core
-PKG_ETL   := radiologist-etl
-PKG_UTILS := radiologist-utils
+PKG_CORE      := radiologist-core
+PKG_ETL       := radiologist-etl
+PKG_UTILS     := radiologist-utils
+PKG_INFERENCE := radiologist-inference
+PKG_REGISTRY  := radiologist-registry
 
 PYTEST_FLAGS ?= -q
 
@@ -117,7 +119,7 @@ export UVALIASES
         tpusetup gpusetup cpusetup \
         uv pyenv venv remove-tf tpuenvs gpuenvs reload \
         sync sync-all sync-registry dev-install \
-        test test-core test-etl test-utils \
+        test test-core test-etl test-utils test-inference test-registry \
         lint format type-check \
         clean
 
@@ -215,6 +217,12 @@ test-etl:  ## run radiologist-etl tests only
 
 test-utils:  ## run radiologist-utils tests only
 	@uv run --active pytest $(PKG_UTILS)/tests $(PYTEST_FLAGS)
+
+test-inference:  ## run radiologist-inference tests only
+	@uv run --active pytest $(PKG_INFERENCE)/tests $(PYTEST_FLAGS)
+
+test-registry:  ## run radiologist-registry tests only
+	@uv run --active pytest $(PKG_REGISTRY)/tests $(PYTEST_FLAGS)
 
 # --------------------------------------------------------------------------- #
 #  Code quality                                                                #
