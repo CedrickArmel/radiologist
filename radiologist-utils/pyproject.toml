@@ -43,7 +43,7 @@ update_changelog_on_bump = true
 
 [tool.uv.build-backend]
 namespace = true
-module-name = "radiocovid.utils"
+module-name = "radiologist.utils"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

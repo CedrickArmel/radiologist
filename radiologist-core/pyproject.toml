@@ -35,7 +35,7 @@ all = [
 gcs = ["gcsfs>=2026.4.0"]
 registry = [
     "onnx>=1.21.0",
-    "onnxruntime~=1.23.0",
+    "onnxruntime~=1.23.2",
     "onnxscript>=0.7.0",
 ]
 wandb = ["wandb>=0.27.0"]
@@ -50,7 +50,7 @@ update_changelog_on_bump = true
 
 [tool.uv.build-backend]
 namespace = true
-module-name = "radiocovid.core"
+module-name = "radiologist.core"
 
 [tool.uv.sources]
 radiologist-etl = { workspace = true }
