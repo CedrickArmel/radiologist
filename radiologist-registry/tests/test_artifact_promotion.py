@@ -25,9 +25,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import radiologist.registry.uploader as uploader_mod
-import radiologist.registry.wandb_registry as facade_mod
 from radiologist.registry.models import ExportResult, PromoteResult
-from radiologist.registry.uploader import _WandbUploader
 from radiologist.registry.wandb_registry import WandbRegistry
 
 
@@ -65,28 +63,49 @@ def mock_wandb():
     return m
 
 
-class TestWandbUploaderPromote:
+class TestPromoteViaRegistry:
     def test_promote_returns_correct_qualified_names(self, export_result, mock_wandb):
         with patch.object(uploader_mod, "_wandb", mock_wandb):
-            uploader = _WandbUploader()
-            result = uploader.promote(export_result, "entity/project", "staging")
+            registry = WandbRegistry()
+            result = registry.promote(export_result, "entity/project", "staging")
 
         assert result.det_qualified_name == "entity/project/model-abc123:staging"
         assert result.mcd_qualified_name == "entity/project/model-abc123-mcd:staging"
 
     def test_promote_creates_run_with_correct_job_type(self, export_result, mock_wandb):
         with patch.object(uploader_mod, "_wandb", mock_wandb):
-            uploader = _WandbUploader()
-            uploader.promote(export_result, "entity/project", "staging")
+            registry = WandbRegistry()
+            registry.promote(export_result, "entity/project", "staging")
 
         mock_wandb.init.assert_called_once_with(job_type="registry-promote")
+
+    def test_promote_calls_run_finish_after_upload(self, export_result, mock_wandb):
+        with patch.object(uploader_mod, "_wandb", mock_wandb):
+            registry = WandbRegistry()
+            registry.promote(export_result, "entity/project", "staging")
+
+        run = mock_wandb.init.return_value
+        run.finish.assert_called_once()
+
+    def test_promote_calls_run_finish_even_when_upload_raises(
+        self, export_result, mock_wandb
+    ):
+        run = mock_wandb.init.return_value
+        run.log_artifact.side_effect = RuntimeError("upload failed")
+
+        with patch.object(uploader_mod, "_wandb", mock_wandb):
+            registry = WandbRegistry()
+            with pytest.raises(RuntimeError, match="upload failed"):
+                registry.promote(export_result, "entity/project", "staging")
+
+        run.finish.assert_called_once()
 
     def test_promote_creates_det_artifact_with_correct_name(
         self, export_result, mock_wandb
     ):
         with patch.object(uploader_mod, "_wandb", mock_wandb):
-            uploader = _WandbUploader()
-            uploader.promote(export_result, "entity/project", "staging")
+            registry = WandbRegistry()
+            registry.promote(export_result, "entity/project", "staging")
 
         calls = mock_wandb.Artifact.call_args_list
         assert calls[0][0][0] == "model-abc123"
@@ -96,8 +115,8 @@ class TestWandbUploaderPromote:
         self, export_result, mock_wandb
     ):
         with patch.object(uploader_mod, "_wandb", mock_wandb):
-            uploader = _WandbUploader()
-            uploader.promote(export_result, "entity/project", "staging")
+            registry = WandbRegistry()
+            registry.promote(export_result, "entity/project", "staging")
 
         calls = mock_wandb.Artifact.call_args_list
         assert calls[1][0][0] == "model-abc123-mcd"
@@ -105,8 +124,8 @@ class TestWandbUploaderPromote:
 
     def test_promote_links_artifacts_with_alias(self, export_result, mock_wandb):
         with patch.object(uploader_mod, "_wandb", mock_wandb):
-            uploader = _WandbUploader()
-            uploader.promote(export_result, "entity/project", "staging")
+            registry = WandbRegistry()
+            registry.promote(export_result, "entity/project", "staging")
 
         run = mock_wandb.init.return_value
         link_calls = run.link_artifact.call_args_list
@@ -114,25 +133,14 @@ class TestWandbUploaderPromote:
         assert link_calls[1][1]["aliases"] == ["staging"]
 
     def test_promote_raises_runtime_error_when_wandb_absent(self, export_result):
-        with patch.object(uploader_mod, "_wandb", None):
-            uploader = _WandbUploader()
+        with patch("radiologist.registry.optional._wandb", None):
+            registry = WandbRegistry()
             with pytest.raises(RuntimeError, match="wandb is required"):
-                uploader.promote(export_result, "entity/project", "staging")
+                registry.promote(export_result, "entity/project", "staging")
 
     def test_promote_returns_promote_result_instance(self, export_result, mock_wandb):
         with patch.object(uploader_mod, "_wandb", mock_wandb):
-            uploader = _WandbUploader()
-            result = uploader.promote(export_result, "entity/project", "staging")
+            registry = WandbRegistry()
+            result = registry.promote(export_result, "entity/project", "staging")
 
         assert isinstance(result, PromoteResult)
-
-
-class TestWandbRegistryPromoteDelegation:
-    def test_registry_promote_delegates_to_uploader(self, export_result, mock_wandb):
-        with patch.object(facade_mod, "_wandb", mock_wandb, create=True):
-            with patch.object(uploader_mod, "_wandb", mock_wandb):
-                registry = WandbRegistry()
-                result = registry.promote(export_result, "entity/project", "staging")
-
-        assert result.det_qualified_name == "entity/project/model-abc123:staging"
-        assert result.mcd_qualified_name == "entity/project/model-abc123-mcd:staging"

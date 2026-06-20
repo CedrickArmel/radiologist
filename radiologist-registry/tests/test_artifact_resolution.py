@@ -103,14 +103,13 @@ class TestResolveViaRunId:
 
 class TestResolveViaTags:
     def test_returns_artifactref_for_best_run_by_metric(self) -> None:
-        run_a = _make_run("run_a", 0.8)
         run_b = _make_run("run_b", 0.95)
         art = _make_artifact("entity/project/model-run_b:best", "v1", "run_b")
 
         with patch("radiologist.registry.resolver._wandb") as mock_wandb:
             mock_api = MagicMock()
             mock_wandb.Api.return_value = mock_api
-            mock_api.runs.return_value = [run_a, run_b]
+            mock_api.runs.return_value = [run_b]
             mock_api.artifact.return_value = art
 
             registry = WandbRegistry()
@@ -121,6 +120,38 @@ class TestResolveViaTags:
             )
 
         assert ref.run_id == "run_b"
+
+    def test_passes_server_side_order_when_metric_given(self) -> None:
+        run_a = _make_run("run_a", 0.9)
+        art = _make_artifact("entity/project/model-run_a:best", "v1", "run_a")
+
+        with patch("radiologist.registry.resolver._wandb") as mock_wandb:
+            mock_api = MagicMock()
+            mock_wandb.Api.return_value = mock_api
+            mock_api.runs.return_value = [run_a]
+            mock_api.artifact.return_value = art
+
+            registry = WandbRegistry()
+            registry.resolve("entity/project", tags=["prod"], metric="best_val_score")
+
+        call_kwargs = mock_api.runs.call_args[1]
+        assert call_kwargs["order"] == "-summary_metric.best_val_score"
+
+    def test_omits_order_kwarg_when_no_metric_given(self) -> None:
+        run_a = _make_run("run_a", 0.9)
+        art = _make_artifact("entity/project/model-run_a:best", "v1", "run_a")
+
+        with patch("radiologist.registry.resolver._wandb") as mock_wandb:
+            mock_api = MagicMock()
+            mock_wandb.Api.return_value = mock_api
+            mock_api.runs.return_value = [run_a]
+            mock_api.artifact.return_value = art
+
+            registry = WandbRegistry()
+            registry.resolve("entity/project", tags=["prod"])
+
+        call_kwargs = mock_api.runs.call_args[1]
+        assert "order" not in call_kwargs
 
     def test_filters_by_tags(self) -> None:
         run_a = _make_run("run_a", 0.9)
@@ -173,6 +204,23 @@ class TestResolveViaRawPath:
         assert ref.qualified_name == "entity/project/model-run99:v0"
         assert ref.version == "v0"
         assert ref.artifact_name == "model-run99"
+
+    def test_returns_empty_run_id_when_logged_by_returns_none(self) -> None:
+        art = MagicMock()
+        art.qualified_name = "entity/project/model-orphan:v0"
+        art.version = "v0"
+        art.logged_by.return_value = None
+
+        with patch("radiologist.registry.resolver._wandb") as mock_wandb:
+            mock_api = MagicMock()
+            mock_wandb.Api.return_value = mock_api
+            mock_api.artifact.return_value = art
+
+            registry = WandbRegistry()
+            ref = registry.resolve("entity/project/model-orphan:v0")
+
+        assert ref.run_id == ""
+        assert ref.artifact_name == "model-orphan"
 
 
 class TestDownload:
@@ -251,7 +299,7 @@ class TestPull:
 
 class TestWandbNotInstalled:
     def test_resolve_raises_runtime_error_when_wandb_missing(self) -> None:
-        with patch("radiologist.registry.resolver._wandb", None):
+        with patch("radiologist.registry.optional._wandb", None):
             registry = WandbRegistry()
             with pytest.raises(RuntimeError, match="wandb"):
                 registry.resolve("entity/project")
@@ -265,13 +313,13 @@ class TestWandbNotInstalled:
             artifact_name="model-run1",
             version="v1",
         )
-        with patch("radiologist.registry.resolver._wandb", None):
+        with patch("radiologist.registry.optional._wandb", None):
             registry = WandbRegistry()
             with pytest.raises(RuntimeError, match="wandb"):
                 registry.download(ref, str(tmp_path))
 
     def test_pull_raises_runtime_error_when_wandb_missing(self, tmp_path: Any) -> None:
-        with patch("radiologist.registry.resolver._wandb", None):
+        with patch("radiologist.registry.optional._wandb", None):
             registry = WandbRegistry()
             with pytest.raises(RuntimeError, match="wandb"):
                 registry.pull("entity/project/model-run1:v1", str(tmp_path))

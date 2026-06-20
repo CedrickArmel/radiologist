@@ -22,12 +22,7 @@
 
 from typing import List
 
-from radiologist.registry.optional import _wandb
-
-_WANDB_MISSING_MSG = (
-    "wandb is required for registry operations. "
-    "Install with: pip install 'radiologist-registry[wandb]'"
-)
+from radiologist.registry.optional import _guard_wandb, _wandb
 
 
 class _WandbAliasManager:
@@ -35,17 +30,15 @@ class _WandbAliasManager:
 
     def get_aliases(self, artifact_path: str) -> List[str]:
         """Return a snapshot of the artifact's current alias list."""
-        if _wandb is None:
-            raise RuntimeError(_WANDB_MISSING_MSG)
-        api = _wandb.Api()
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
         art = api.artifact(artifact_path)
         return list(art.aliases)
 
     def set_alias(self, artifact_path: str, alias: str) -> None:
         """Add alias to the artifact; no-op if already present."""
-        if _wandb is None:
-            raise RuntimeError(_WANDB_MISSING_MSG)
-        api = _wandb.Api()
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
         art = api.artifact(artifact_path)
         if alias not in art.aliases:
             art.aliases.append(alias)
@@ -53,9 +46,8 @@ class _WandbAliasManager:
 
     def remove_alias(self, artifact_path: str, alias: str) -> None:
         """Remove alias from the artifact; no-op if absent."""
-        if _wandb is None:
-            raise RuntimeError(_WANDB_MISSING_MSG)
-        api = _wandb.Api()
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
         art = api.artifact(artifact_path)
         if alias in art.aliases:
             art.aliases.remove(alias)

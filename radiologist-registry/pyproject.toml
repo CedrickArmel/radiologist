@@ -15,7 +15,7 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 namespace = true
-module-name = "radiocovid.registry"
+module-name = "radiologist.registry"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
