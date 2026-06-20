@@ -1,13 +1,15 @@
 [project]
 name = "radiologist-registry"
 version = "0.1.0"
+description = "W&B model registry — promote, resolve, and download ONNX artifacts"
+license = { file = "../LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "radiologist-utils>=0.1.0",
 ]
 
 [project.optional-dependencies]
-wandb = ["wandb>=0.16"]
+wandb = ["wandb>=0.27.0"]
 
 [build-system]
 requires = ["uv_build>=0.9.28,<0.10.0"]
