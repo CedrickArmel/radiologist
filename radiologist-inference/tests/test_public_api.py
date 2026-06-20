@@ -112,35 +112,13 @@ def test_predictor_explain_raises_not_implemented():
         predictor.explain(image=np.zeros((224, 224, 3), dtype=np.uint8))
 
 
-def test_predictor_predict_with_uncertainty_raises_when_no_mcd_session():
-    """predict_with_uncertainty raises RuntimeError when no mcd_session is set."""
-    import json
-    from unittest.mock import MagicMock
-
-    import onnxruntime as ort
-
+def test_predictor_predict_with_uncertainty_raises_when_no_mcd_session(
+    det_onnx_path,
+):
+    """predict_with_uncertainty raises RuntimeError when predictor has no mcd_path."""
     from radiologist.inference import Predictor
-    from radiologist.inference.predictor import _PredictorState
 
-    mock_meta = MagicMock()
-    mock_meta.custom_metadata_map = {
-        "classes": json.dumps(["NORMAL", "ABNORMAL"]),
-        "input_shape": json.dumps([1, 3, 224, 224]),
-        "cam_target_layer": "features.28",
-        "output_names": json.dumps(["logits"]),
-    }
-    mock_session = MagicMock(spec=ort.InferenceSession)
-    mock_session.get_modelmeta.return_value = mock_meta
-
-    predictor = object.__new__(Predictor)
-    predictor._state = _PredictorState(
-        det_session=mock_session,
-        metadata={
-            "classes": json.dumps(["NORMAL", "ABNORMAL"]),
-            "input_shape": json.dumps([1, 3, 224, 224]),
-        },
-        mcd_session=None,
-    )
+    predictor = Predictor.from_path(det_path=det_onnx_path)
     with pytest.raises(RuntimeError, match="mcd_path"):
         predictor.predict_with_uncertainty(
             image=np.zeros((224, 224, 3), dtype=np.uint8)

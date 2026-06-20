@@ -36,7 +36,7 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 import pytest
 
-from radiologist.registry.wandb_registry import WandbRegistry
+from radiologist.registry import WandbRegistry
 
 CLASSES = ["NORMAL", "ABNORMAL"]
 INPUT_SHAPE = [1, 3, 224, 224]
