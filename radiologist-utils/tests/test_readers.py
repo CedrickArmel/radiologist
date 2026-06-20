@@ -30,7 +30,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from radiologist.utils.readers import (
+from radiologist.utils import (
     BaseImageReader,
     ImageReader,
     LocalImageReader,

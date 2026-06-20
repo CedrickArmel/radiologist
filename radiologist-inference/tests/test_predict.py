@@ -28,9 +28,8 @@ Fixtures build real ONNX models so no mocks are needed for local code.
 
 import numpy as np
 import pytest
+from _helpers import build_det_onnx
 from PIL import Image as PILImage
-
-from conftest import build_det_onnx
 
 CLASSES = ["NORMAL", "ABNORMAL"]
 

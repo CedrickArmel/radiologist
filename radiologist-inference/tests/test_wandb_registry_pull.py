@@ -31,8 +31,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from _helpers import build_det_onnx
 
-from conftest import build_det_onnx
 from radiologist.registry import WandbRegistry
 
 
