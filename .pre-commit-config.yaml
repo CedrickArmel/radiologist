@@ -45,7 +45,7 @@ repos:
         args: [--config-file, pyproject.toml]
         exclude: ".*/tests/(conftest|__init__)\\.py$"
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.16.3
+    rev: v4.16.4
     hooks:
       - id: commitizen
         stages: [commit-msg]
