@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -35,12 +35,62 @@ except ImportError:
     onnx = None  # type: ignore[assignment]
 
 from radiologist.core.module import LModule
-from radiologist.core.registry.promote import (
-    _CamWrapper,
-    _resolve_layer,
-    _set_metadata_props,
-)
 from radiologist.registry import ExportResult
+
+
+def _resolve_layer(net: nn.Module, dot_path: str) -> nn.Module:
+    """Resolve a dot-separated attribute path against ``net``.
+
+    Raises:
+        AttributeError: if any segment of the path does not exist.
+    """
+    obj = net
+    for part in dot_path.split("."):
+        try:
+            obj = getattr(obj, part)
+        except AttributeError:
+            raise AttributeError(
+                f"Layer {dot_path!r} not found in net: "
+                f"segment {part!r} missing on {type(obj).__name__}"
+            )
+    return obj  # type: ignore[return-value]
+
+
+class _CamWrapper(nn.Module):
+    """Thin wrapper that returns ``(logits, activation)`` from a forward pass.
+
+    The activation is captured from ``target_layer`` via a forward hook.
+    """
+
+    def __init__(self, net: nn.Module, target_layer: nn.Module) -> None:
+        super().__init__()
+        self.net = net
+        self._activation: Optional[torch.Tensor] = None
+        target_layer.register_forward_hook(self._hook)
+
+    def _hook(
+        self,
+        module: nn.Module,
+        input: Tuple[torch.Tensor, ...],
+        output: torch.Tensor,
+    ) -> None:
+        self._activation = output
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        logits = self.net(x)
+        if self._activation is None:
+            raise RuntimeError("Forward hook did not capture activation.")
+        return logits, self._activation
+
+
+def _set_metadata_props(model: "onnx.ModelProto", props: dict) -> "onnx.ModelProto":
+    """Write ``props`` dict as ``metadata_props`` on an ONNX model."""
+    del model.metadata_props[:]
+    for k, v in props.items():
+        entry = model.metadata_props.add()
+        entry.key = k
+        entry.value = v
+    return model
 
 
 def export_onnx(
