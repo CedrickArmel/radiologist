@@ -45,6 +45,8 @@ except ImportError:
     Trainer = object  # type: ignore[assignment,misc]
     instantiate = None  # type: ignore[assignment]
 
+from radiologist.core.module import LModule
+
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
@@ -71,7 +73,11 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     if cfg.get("train") or cfg.get("test"):
         datamodule = instantiate(cfg.datamodule)
-        module = instantiate(cfg.module)
+
+        if not cfg.get("module"):
+            raise KeyError("Missing key module in config.")
+
+        module = LModule(cfg=cfg.get("module"))
 
         if cfg.get("ckpt_path") and module.precision:
             cfg.trainer.precision = module.precision
@@ -98,7 +104,10 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
                     f"Resuming training from checkpoint {cfg.get('ckpt_path')}..."
                 )
             trainer.fit(
-                model=module, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path")
+                model=module,
+                datamodule=datamodule,
+                ckpt_path=cfg.get("ckpt_path"),
+                weights_only=False,
             )
 
         # Snapshot fit-phase metrics (e.g. best_val_score) before test overwrites them.
@@ -118,7 +127,12 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
                 else f"Re-using checkpoint {ckpt_path}"
             )
 
-            trainer.test(model=module, datamodule=datamodule, ckpt_path=ckpt_path)
+            trainer.test(
+                model=module,
+                datamodule=datamodule,
+                ckpt_path=ckpt_path,
+                weights_only=False,
+            )
             metric_dict.update(trainer.callback_metrics)
 
         log_hyperparameters(object_dict)

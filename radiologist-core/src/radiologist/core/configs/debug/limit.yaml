@@ -1,0 +1,23 @@
+# @package _global_
+
+# How much of dataset to check. Adapt to your devices. limit_*_batches is a global batch subset split across devices.
+
+defaults:
+  - base
+  - _self_
+
+hydra:
+  job_logging:
+    root:
+      level: INFO
+
+trainer:
+  limit_train_batches: 0.01 # uses only 1% of the training data
+  limit_val_batches: 0.05 # uses only 5% of validation data
+  limit_test_batches: 0.05 # uses only 5% of test data
+
+callbacks:
+  model_checkpoint: null
+  early_stopping: null
+  exception_checkpoint: null
+loggers: null

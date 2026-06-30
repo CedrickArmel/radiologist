@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import lightning as L
 import torch
+from hydra.utils import instantiate
+from omegaconf import DictConfig
 from torchmetrics import MeanMetric, Metric
 from torchmetrics.utilities import dim_zero_cat
 
@@ -38,34 +40,35 @@ class LModule(L.LightningModule):
     """Lightning module wrapping an arbitrary ``net`` with focal-loss training.
 
     Args:
-        net: backbone network.
-        loss: loss function (e.g. FocalLoss).
-        metric: ``partial`` factory for the primary metric (e.g. F-beta score).
-        optimizer: ``partial`` factory for the optimizer.
-        scheduler: optional ``partial`` factory for the LR scheduler.
-        trainable_layers: mapping of layer-group names to parameter lists.
-        priors: optional class prior probabilities for bias initialisation.
+        cfg (DictConfig): Configuration containing the following keys.
+            The ``net``, ``loss``, ``metric``, ``optimizer``, and ``scheduler``
+            keys should each include a ``_target_`` field so that they can be
+            instantiated by Hydra. ``metric``, ``optimizer``, and ``scheduler``
+            should additionally include ``_partial_: true``, since they must
+            be partially instantiated.
+
+            net: Backbone network.
+            loss: Loss function (e.g. FocalLoss).
+            metric: ``partial`` factory for the primary metric (e.g. F-beta score).
+            optimizer: ``partial`` factory for the optimizer.
+            scheduler: Optional ``partial`` factory for the LR scheduler.
+            trainable_layers: Mapping of layer-group names to parameter lists.
+            priors: Optional class prior probabilities for bias initialisation.
     """
 
-    def __init__(
-        self,
-        net: torch.nn.Module,
-        loss: torch.nn.Module,
-        metric: partial,  # type: ignore[type-arg]
-        optimizer: partial,  # type: ignore[type-arg]
-        scheduler: Optional[partial] = None,  # type: ignore[type-arg]
-        trainable_layers: Optional[Dict[str, Any]] = None,
-        priors: Optional[List[float]] = None,
-    ) -> None:
+    def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
-        self.save_hyperparameters(
-            ignore=["net", "loss", "metric", "optimizer", "scheduler"]
-        )
+        self.save_hyperparameters()
 
-        self.net = net
-        self.criterion = loss
-        self.optimizer = optimizer
-        self.scheduler = scheduler
+        self.net = instantiate(cfg.get("net"))
+        self.criterion = instantiate(cfg.get("loss"))
+        self.optimizer = instantiate(cfg.get("optimizer"))
+        self.scheduler = instantiate(cfg.get("scheduler"))
+
+        self.hparams["trainable_layers"] = cfg.get("trainable_layers")
+        self.hparams["priors"] = cfg.get("priors")
+
+        metric = instantiate(cfg.get("metric"))
 
         self.val_score: Metric = metric()
         self.test_score: Metric = metric()
