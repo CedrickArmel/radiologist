@@ -87,6 +87,7 @@ def small_net_cfg(module_cfg):
                 },
             ],
         },
+        merge=False,
     )
     return cfg
 
@@ -174,6 +175,7 @@ def test_configure_optimizers_with_scheduler_returns_scheduler_dict(module_cfg):
             "step_size": 1,
             "gamma": 0.9,
         },
+        merge=False,
     )
     mod = LModule(cfg=cfg)
     result = mod.configure_optimizers()
@@ -317,6 +319,7 @@ def test_setup_tl_list_of_indices_unfreezes_only_those(module_cfg):
                 },
             ],
         },
+        merge=False,
     )
     OmegaConf.update(cfg, "trainable_layers", {"": [1]})
     mod = LModule(cfg=cfg)
