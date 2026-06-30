@@ -65,7 +65,7 @@ def export_onnx(
     os.makedirs(out_dir, exist_ok=True)
 
     lmodule = LModule.load_from_checkpoint(
-        ckpt_path, map_location="cpu", weights_only=False
+        ckpt_path, map_location="cpu", weights_only=False, strict=False
     )
     net = lmodule.net
 

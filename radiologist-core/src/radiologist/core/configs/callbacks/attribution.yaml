@@ -1,8 +1,8 @@
 # @package callbacks
 attribution:
   _target_: radiologist.core.AttributionCallback
-  target_layer: ???
+  target_layer: layer4
   every_n_val_epochs: 1
-  every_n_batches: ???
+  every_n_batches: 10
   save_to_file: false
   ig_n_steps: null

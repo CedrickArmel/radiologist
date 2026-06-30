@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - base
+  - _self_
+
+hydra:
+  job_logging:
+    root:
+      level: INFO
+
+trainer:
+  max_epochs: 100
+  overfit_batches: 4 # Number of batches to overfit to.
+  detect_anomaly: false
+
+callbacks:
+  model_checkpoint: null
+  early_stopping: null
+  exception_checkpoint: null

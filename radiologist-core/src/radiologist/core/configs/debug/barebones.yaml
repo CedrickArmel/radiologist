@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - base
+  - _self_
+
+trainer:
+  barebones: true # Runs n if set to n (int) else 1 if set to True batch(es) of train, val and test to find any bugs (ie: a sort of unit test).
+  enable_checkpointing: null
+  enable_progress_bar: false
+  log_every_n_steps: null
+  enable_model_summary: false
+  num_sanity_val_steps: null
+  detect_anomaly: false
+  profiler: null
+
+callbacks: null
+loggers: null

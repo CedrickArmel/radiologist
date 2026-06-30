@@ -1,8 +1,8 @@
 # @package _global_
 datamodule:
   _target_: radiologist.core.WebDatasetDataModule
-  shard_root: ???
-  split_manifest_uri: ???
+  shard_root: gs://radiologist-liora-gcs/shards/
+  split_manifest_uri: gs://radiologist-liora-gcs/pipelines/manifests/manifest-cac06487078e0dfa.jsonl
   batch_size: 10
   seed: ${seed}
   shardshuffle: 100
