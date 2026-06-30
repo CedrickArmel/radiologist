@@ -24,42 +24,56 @@ from __future__ import annotations
 
 import sys
 import types
-from functools import partial
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import lightning as L
 import pytest
 import torch
-import torch.nn as nn
-from torchmetrics.classification import (
-    MulticlassFBetaScore,  # type: ignore[import-untyped]
-)
+from omegaconf import OmegaConf
 
-from radiologist.core import FocalLoss, LModule
+from radiologist.core import LModule
 
 # ---------------------------------------------------------------------------
 # Helpers — real LModule with a 1-channel net for attribution hooks
 # ---------------------------------------------------------------------------
 
-
-def _make_net() -> nn.Sequential:
-    return nn.Sequential(
-        nn.Conv2d(1, 4, 3, padding=1),
-        nn.ReLU(),
-        nn.Flatten(),
-        nn.Linear(4 * 8 * 8, 2),
-    )
+_ATTR_LMODULE_CFG = {
+    "net": {
+        "_target_": "torch.nn.Sequential",
+        "_args_": [
+            {
+                "_target_": "torch.nn.Conv2d",
+                "in_channels": 1,
+                "out_channels": 4,
+                "kernel_size": 3,
+                "padding": 1,
+            },
+            {"_target_": "torch.nn.ReLU"},
+            {"_target_": "torch.nn.Flatten"},
+            {"_target_": "torch.nn.Linear", "in_features": 256, "out_features": 2},
+        ],
+    },
+    "loss": {"_target_": "radiologist.core.FocalLoss"},
+    "metric": {
+        "_target_": "torchmetrics.classification.MulticlassFBetaScore",
+        "_partial_": True,
+        "beta": 1.0,
+        "num_classes": 2,
+    },
+    "optimizer": {
+        "_target_": "torch.optim.Adam",
+        "_partial_": True,
+        "lr": 1e-3,
+    },
+    "scheduler": None,
+    "trainable_layers": None,
+    "priors": None,
+}
 
 
 def _make_lmodule() -> LModule:
-    net = _make_net()
-    return LModule(
-        net=net,
-        loss=FocalLoss(),
-        metric=partial(MulticlassFBetaScore, beta=1.0, num_classes=2),
-        optimizer=partial(torch.optim.Adam, lr=1e-3),
-    )
+    return LModule(cfg=OmegaConf.create(_ATTR_LMODULE_CFG))
 
 
 def _make_trainer(tmp_path: Path) -> L.Trainer:
