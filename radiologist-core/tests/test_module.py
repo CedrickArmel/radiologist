@@ -20,14 +20,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from functools import partial
-
 import pytest
 import torch
-import torch.nn as nn
-from torchmetrics.classification import MulticlassFBetaScore
+from omegaconf import OmegaConf
 
-from radiologist.core import FocalLoss, LModule
+from radiologist.core import LModule
 
 NUM_CLASSES = 2
 IN_FEATURES = 4
@@ -35,33 +32,68 @@ BATCH_SIZE = 4
 
 
 @pytest.fixture
-def net():
-    return nn.Linear(IN_FEATURES, NUM_CLASSES)
-
-
-@pytest.fixture
-def loss_fn():
-    return FocalLoss(gamma=2.0, reduction="mean", to_onehot_y=True)
-
-
-@pytest.fixture
-def metric_partial():
-    return partial(MulticlassFBetaScore, num_classes=NUM_CLASSES, beta=1.0)
-
-
-@pytest.fixture
-def optimizer_partial():
-    return partial(torch.optim.AdamW, lr=1e-3)
-
-
-@pytest.fixture
-def module(net, loss_fn, metric_partial, optimizer_partial):  # noqa: F811
-    return LModule(
-        net=net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
+def module_cfg():
+    return OmegaConf.create(
+        {
+            "net": {
+                "_target_": "torch.nn.Linear",
+                "in_features": IN_FEATURES,
+                "out_features": NUM_CLASSES,
+            },
+            "loss": {
+                "_target_": "radiologist.core.FocalLoss",
+                "gamma": 2.0,
+                "reduction": "mean",
+                "to_onehot_y": True,
+            },
+            "metric": {
+                "_target_": "torchmetrics.classification.MulticlassFBetaScore",
+                "_partial_": True,
+                "num_classes": NUM_CLASSES,
+                "beta": 1.0,
+            },
+            "optimizer": {
+                "_target_": "torch.optim.AdamW",
+                "_partial_": True,
+                "lr": 1e-3,
+            },
+            "scheduler": None,
+            "trainable_layers": None,
+            "priors": None,
+        }
     )
+
+
+@pytest.fixture
+def small_net_cfg(module_cfg):
+    """Sequential 3-layer net: Linear(4,8) → ReLU → Linear(8,2)."""
+    cfg = OmegaConf.create(OmegaConf.to_container(module_cfg, resolve=True))
+    OmegaConf.update(
+        cfg,
+        "net",
+        {
+            "_target_": "torch.nn.Sequential",
+            "_args_": [
+                {
+                    "_target_": "torch.nn.Linear",
+                    "in_features": IN_FEATURES,
+                    "out_features": 8,
+                },
+                {"_target_": "torch.nn.ReLU"},
+                {
+                    "_target_": "torch.nn.Linear",
+                    "in_features": 8,
+                    "out_features": NUM_CLASSES,
+                },
+            ],
+        },
+    )
+    return cfg
+
+
+@pytest.fixture
+def module(module_cfg):
+    return LModule(cfg=module_cfg)
 
 
 @pytest.fixture
@@ -131,18 +163,19 @@ def test_configure_optimizers_no_scheduler_returns_optimizer_only(module):
     assert "lr_scheduler" not in result
 
 
-def test_configure_optimizers_with_scheduler_returns_scheduler_dict(
-    net, loss_fn, metric_partial
-):
-    optimizer_partial = partial(torch.optim.AdamW, lr=1e-3)
-    scheduler_partial = partial(torch.optim.lr_scheduler.StepLR, step_size=1, gamma=0.9)
-    mod = LModule(
-        net=net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        scheduler=scheduler_partial,
+def test_configure_optimizers_with_scheduler_returns_scheduler_dict(module_cfg):
+    cfg = OmegaConf.create(OmegaConf.to_container(module_cfg, resolve=True))
+    OmegaConf.update(
+        cfg,
+        "scheduler",
+        {
+            "_target_": "torch.optim.lr_scheduler.StepLR",
+            "_partial_": True,
+            "step_size": 1,
+            "gamma": 0.9,
+        },
     )
+    mod = LModule(cfg=cfg)
     result = mod.configure_optimizers()
     assert "optimizer" in result
     assert "lr_scheduler" in result
@@ -188,51 +221,26 @@ def test_validation_step_still_logs_val_score(module, fake_batch):
 
 
 @pytest.fixture
-def small_net():
-    """A tiny sequential net with a named submodule and a final Linear."""
-    net = nn.Sequential(
-        nn.Linear(IN_FEATURES, 8),  # index 0
-        nn.ReLU(),  # index 1
-        nn.Linear(8, NUM_CLASSES),  # index 2  <- last Linear
-    )
-    return net
-
-
-@pytest.fixture
-def module_scratch(small_net, loss_fn, metric_partial, optimizer_partial):
+def module_scratch(small_net_cfg):
     """LModule with trainable_layers=None (from-scratch mode)."""
-    return LModule(
-        net=small_net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers=None,
-    )
+    return LModule(cfg=small_net_cfg)
 
 
 @pytest.fixture
-def module_tl(small_net, loss_fn, metric_partial, optimizer_partial):
+def module_tl(small_net_cfg):
     """LModule with transfer-learning: only index 2 (last Linear) trainable."""
-    return LModule(
-        net=small_net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers={"2": None},
-    )
+    cfg = OmegaConf.create(OmegaConf.to_container(small_net_cfg, resolve=True))
+    OmegaConf.update(cfg, "trainable_layers", {"2": None})
+    return LModule(cfg=cfg)
 
 
 @pytest.fixture
-def module_tl_with_priors(small_net, loss_fn, metric_partial, optimizer_partial):
+def module_tl_with_priors(small_net_cfg):
     """LModule with transfer-learning and class priors."""
-    return LModule(
-        net=small_net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers={"2": None},
-        priors=[0.3, 0.7],
-    )
+    cfg = OmegaConf.create(OmegaConf.to_container(small_net_cfg, resolve=True))
+    OmegaConf.update(cfg, "trainable_layers", {"2": None})
+    OmegaConf.update(cfg, "priors", [0.3, 0.7])
+    return LModule(cfg=cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -246,22 +254,11 @@ def test_setup_from_scratch_all_params_remain_trainable(module_scratch):
     assert all_trainable
 
 
-def test_setup_from_scratch_reinitialises_weights(
-    small_net, loss_fn, metric_partial, optimizer_partial
-):
-    torch.manual_seed(0)
-    original_weight = small_net[0].weight.clone()
-
-    torch.manual_seed(0)
-    mod = LModule(
-        net=small_net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers=None,
-    )
+def test_setup_from_scratch_reinitialises_weights(small_net_cfg):
+    mod = LModule(cfg=small_net_cfg)
+    initial_weight = mod.net[0].weight.clone()
     mod.setup("fit")
-    assert not torch.equal(mod.net[0].weight, original_weight)
+    assert not torch.equal(mod.net[0].weight, initial_weight)
 
 
 # ---------------------------------------------------------------------------
@@ -269,51 +266,64 @@ def test_setup_from_scratch_reinitialises_weights(
 # ---------------------------------------------------------------------------
 
 
-def test_setup_tl_only_named_layers_are_trainable(module_tl, small_net):
+def test_setup_tl_only_named_layers_are_trainable(module_tl):
     module_tl.setup("fit")
-    # layer 2 (last Linear) should be trainable
-    for p in small_net[2].parameters():
+    for p in module_tl.net[2].parameters():
         assert p.requires_grad
-    # layers 0 and 1 should be frozen
-    for p in small_net[0].parameters():
+    for p in module_tl.net[0].parameters():
         assert not p.requires_grad
 
 
-def test_setup_tl_none_value_unfreezes_whole_submodule(
-    small_net, loss_fn, metric_partial, optimizer_partial
-):
+def test_setup_tl_none_value_unfreezes_whole_submodule(small_net_cfg):
     """trainable_layers with None value unfreezes entire named submodule."""
-    mod = LModule(
-        net=small_net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers={"2": None},
-    )
+    cfg = OmegaConf.create(OmegaConf.to_container(small_net_cfg, resolve=True))
+    OmegaConf.update(cfg, "trainable_layers", {"2": None})
+    mod = LModule(cfg=cfg)
     mod.setup("fit")
-    for p in small_net[2].parameters():
+    for p in mod.net[2].parameters():
         assert p.requires_grad
 
 
-def test_setup_tl_list_of_indices_unfreezes_only_those(
-    loss_fn, metric_partial, optimizer_partial
-):
+def test_setup_tl_list_of_indices_unfreezes_only_those(module_cfg):
     """trainable_layers with list of ints unfreezes only those submodule indices."""
-    outer = nn.Sequential(
-        nn.Sequential(nn.Linear(4, 4), nn.ReLU()),  # index 0
-        nn.Sequential(nn.Linear(4, 2), nn.ReLU()),  # index 1
+    cfg = OmegaConf.create(OmegaConf.to_container(module_cfg, resolve=True))
+    OmegaConf.update(
+        cfg,
+        "net",
+        {
+            "_target_": "torch.nn.Sequential",
+            "_args_": [
+                {
+                    "_target_": "torch.nn.Sequential",
+                    "_args_": [
+                        {
+                            "_target_": "torch.nn.Linear",
+                            "in_features": 4,
+                            "out_features": 4,
+                        },
+                        {"_target_": "torch.nn.ReLU"},
+                    ],
+                },
+                {
+                    "_target_": "torch.nn.Sequential",
+                    "_args_": [
+                        {
+                            "_target_": "torch.nn.Linear",
+                            "in_features": 4,
+                            "out_features": 2,
+                        },
+                        {"_target_": "torch.nn.ReLU"},
+                    ],
+                },
+            ],
+        },
     )
-    mod = LModule(
-        net=outer,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers={"": [1]},
-    )
+    OmegaConf.update(cfg, "trainable_layers", {"": [1]})
+    mod = LModule(cfg=cfg)
     mod.setup("fit")
-    for p in outer[1].parameters():
+    for p in mod.net[1].parameters():
         assert p.requires_grad
-    for p in outer[0].parameters():
+    for p in mod.net[0].parameters():
         assert not p.requires_grad
 
 
@@ -322,42 +332,29 @@ def test_setup_tl_list_of_indices_unfreezes_only_those(
 # ---------------------------------------------------------------------------
 
 
-def test_setup_tl_with_priors_sets_last_linear_bias(module_tl_with_priors, small_net):
+def test_setup_tl_with_priors_sets_last_linear_bias(module_tl_with_priors):
     module_tl_with_priors.setup("fit")
     expected = -torch.log(torch.tensor([0.3, 0.7], dtype=torch.float32))
-    actual = small_net[2].bias.data
+    actual = module_tl_with_priors.net[2].bias.data
     assert torch.allclose(actual, expected, atol=1e-5)
 
 
-def test_setup_tl_priors_length_mismatch_raises_value_error(
-    small_net, loss_fn, metric_partial, optimizer_partial
-):
-    mod = LModule(
-        net=small_net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers={"2": None},
-        priors=[0.5, 0.3, 0.2],  # 3 priors vs 2 out_features
-    )
+def test_setup_tl_priors_length_mismatch_raises_value_error(small_net_cfg):
+    cfg = OmegaConf.create(OmegaConf.to_container(small_net_cfg, resolve=True))
+    OmegaConf.update(cfg, "trainable_layers", {"2": None})
+    OmegaConf.update(cfg, "priors", [0.5, 0.3, 0.2])  # 3 priors vs 2 out_features
+    mod = LModule(cfg=cfg)
     with pytest.raises(ValueError):
         mod.setup("fit")
 
 
-def test_setup_tl_no_priors_leaves_last_linear_bias_unchanged(
-    small_net, loss_fn, metric_partial, optimizer_partial
-):
-    original_bias = small_net[2].bias.data.clone()
-    mod = LModule(
-        net=small_net,
-        loss=loss_fn,
-        metric=metric_partial,
-        optimizer=optimizer_partial,
-        trainable_layers={"2": None},
-        priors=None,
-    )
+def test_setup_tl_no_priors_leaves_last_linear_bias_unchanged(small_net_cfg):
+    cfg = OmegaConf.create(OmegaConf.to_container(small_net_cfg, resolve=True))
+    OmegaConf.update(cfg, "trainable_layers", {"2": None})
+    mod = LModule(cfg=cfg)
+    original_bias = mod.net[2].bias.data.clone()
     mod.setup("fit")
-    assert torch.equal(small_net[2].bias.data, original_bias)
+    assert torch.equal(mod.net[2].bias.data, original_bias)
 
 
 # ---------------------------------------------------------------------------

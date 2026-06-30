@@ -192,47 +192,62 @@ def dm(
     )
 
 
+_LMODULE_NET_CFG = {
+    "_target_": "torch.nn.Sequential",
+    "_args_": [
+        {
+            "_target_": "torch.nn.Conv2d",
+            "in_channels": 3,
+            "out_channels": 4,
+            "kernel_size": 3,
+            "padding": 1,
+        },
+        {"_target_": "torch.nn.ReLU"},
+        {"_target_": "torch.nn.Dropout", "p": 0.5},
+        {"_target_": "torch.nn.AdaptiveAvgPool2d", "output_size": [1, 1]},
+        {"_target_": "torch.nn.Flatten"},
+        {"_target_": "torch.nn.Linear", "in_features": 4, "out_features": 2},
+    ],
+}
+
+_LMODULE_CFG = {
+    "net": _LMODULE_NET_CFG,
+    "loss": {"_target_": "radiologist.core.FocalLoss"},
+    "metric": {
+        "_target_": "torchmetrics.classification.MulticlassFBetaScore",
+        "_partial_": True,
+        "beta": 1.0,
+        "num_classes": 2,
+    },
+    "optimizer": {
+        "_target_": "torch.optim.Adam",
+        "_partial_": True,
+        "lr": 1e-3,
+    },
+    "scheduler": None,
+    "trainable_layers": None,
+    "priors": None,
+}
+
+
 @pytest.fixture()
 def lmodule():
-    import torch
-    import torch.nn as nn
-    from torchmetrics.classification import (
-        MulticlassFBetaScore,  # type: ignore[import-untyped]
-    )
+    from omegaconf import OmegaConf
 
-    from radiologist.core import FocalLoss, LModule
+    from radiologist.core import LModule
 
-    net = nn.Sequential(
-        nn.Conv2d(3, 4, 3, padding=1),
-        nn.ReLU(),
-        nn.Dropout(p=0.5),
-        nn.AdaptiveAvgPool2d((1, 1)),
-        nn.Flatten(),
-        nn.Linear(4, 2),
-    )
-    return LModule(
-        net=net,
-        loss=FocalLoss(),
-        metric=partial(MulticlassFBetaScore, beta=1.0, num_classes=2),
-        optimizer=partial(torch.optim.Adam, lr=1e-3),
-    )
+    return LModule(cfg=OmegaConf.create(_LMODULE_CFG))
 
 
 @pytest.fixture()
 def ckpt_path(tmp_path, lmodule):
     """Real Lightning checkpoint loadable via LModule.load_from_checkpoint.
 
-    Stores full constructor kwargs in hyper_parameters so Lightning can
-    reconstruct the module without patching load_from_checkpoint.
-    Uses lmodule.net so the checkpoint's architecture always matches lmodule.
+    Stores the cfg DictConfig in hyper_parameters so Lightning reconstructs
+    the module via LModule(cfg=...) using the same architecture as lmodule.
     """
     import lightning as L
     import torch
-    from torchmetrics.classification import (
-        MulticlassFBetaScore,  # type: ignore[import-untyped]
-    )
-
-    from radiologist.core import FocalLoss
 
     path = str(tmp_path / "test.ckpt")
     ckpt = {
@@ -240,14 +255,7 @@ def ckpt_path(tmp_path, lmodule):
         "global_step": 0,
         "pytorch-lightning_version": L.__version__,
         "state_dict": lmodule.state_dict(),
-        "hyper_parameters": {
-            "net": lmodule.net,
-            "loss": FocalLoss(),
-            "metric": partial(MulticlassFBetaScore, beta=1.0, num_classes=2),
-            "optimizer": partial(torch.optim.Adam, lr=1e-3),
-            "trainable_layers": None,
-            "priors": None,
-        },
+        "hyper_parameters": {"cfg": _LMODULE_CFG},
     }
     torch.save(ckpt, path)
     return path
