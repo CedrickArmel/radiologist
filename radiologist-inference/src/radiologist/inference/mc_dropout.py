@@ -34,6 +34,7 @@ from PIL import Image as PILImage  # type: ignore[import-untyped]
 from radiologist.inference.base_predictor import (
     BasePredictor,
     _preprocess_image,
+    _read_metadata,
     _softmax,
 )
 from radiologist.inference.models import UncertaintyResult
@@ -77,7 +78,7 @@ def mc_dropout_predict(
         UncertaintyResult with mean probabilities, per-class std, entropy, and
         pass count.
     """
-    meta = dict(session.get_modelmeta().custom_metadata_map)
+    meta = _read_metadata(session)
     classes: List[str] = json.loads(meta["classes"])
 
     input_name = session.get_inputs()[0].name

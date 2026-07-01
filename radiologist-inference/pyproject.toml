@@ -32,7 +32,7 @@ serve = [
 ]
 
 [project.scripts]
-radiologist = "radiologist.inference._cli:main"
+radiologist = "radiologist.inference.cli:main"
 
 [tool.commitizen]
 name = "cz_conventional_commits"

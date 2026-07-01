@@ -110,7 +110,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
     def _load_pil(data: bytes) -> PILImage.Image:
         try:
             return PILImage.open(io.BytesIO(data)).convert("RGB")
-        except (UnidentifiedImageError, Exception) as exc:
+        except UnidentifiedImageError as exc:
             raise HTTPException(
                 status_code=400, detail=f"Invalid image: {exc}"
             ) from exc
