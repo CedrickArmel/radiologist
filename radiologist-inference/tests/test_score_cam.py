@@ -20,17 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Behavioral tests for Score-CAM: score_cam() and Predictor.explain() (issue #79).
+"""Behavioral tests for the standalone score_cam() saliency function (issue #79).
 
-Tests drive through the public API only. Real ONNX models are built per
-test — no mocks for local code.
+Tests drive through the public API only. Predictor.explain()'s behavioral
+coverage lives in test_explainer.py, which exercises the same saliency
+computation through Explainer.explain().
 """
 
 import numpy as np
-import pytest
-from PIL import Image as PILImage
 
-CLASSES = ["NORMAL", "ABNORMAL"]
 FEAT_C, FEAT_H, FEAT_W = 64, 7, 7
 
 
@@ -69,77 +67,3 @@ class TestScoreCamFunction:
         assert result.shape == (FEAT_H, FEAT_W)
         assert result.min() >= 0.0
         assert result.max() <= 1.0
-
-
-# ---------------------------------------------------------------------------
-# Predictor.explain()
-# ---------------------------------------------------------------------------
-
-
-class TestExplainReturnType:
-    def test_explain_returns_explanation_instance(self, det_onnx_path_nonzero):
-        """explain(image) must return an Explanation dataclass."""
-        from radiologist.inference.predictor import Explanation, Predictor
-
-        predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
-        image = np.zeros((224, 224, 3), dtype=np.uint8)
-        result = predictor.explain(image=image)
-        assert isinstance(result, Explanation)
-
-
-class TestExplainSpatialDimensions:
-    def test_saliency_map_matches_input_image_spatial_dims(self, det_onnx_path_nonzero):
-        """saliency_map must have H×W dimensions matching the input image."""
-        from radiologist.inference.predictor import Predictor
-
-        predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
-
-        h, w = 128, 96
-        image = np.zeros((h, w, 3), dtype=np.uint8)
-        result = predictor.explain(image=image)
-        assert result.saliency_map.shape == (h, w)
-
-    def test_saliency_map_matches_pil_image_spatial_dims(self, det_onnx_path_nonzero):
-        """saliency_map dims must match a PIL Image input."""
-        from radiologist.inference.predictor import Predictor
-
-        predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
-
-        h, w = 200, 150
-        pil_img = PILImage.fromarray(np.zeros((h, w, 3), dtype=np.uint8), mode="RGB")
-        result = predictor.explain(image=pil_img)
-        assert result.saliency_map.shape == (h, w)
-
-
-class TestExplainSaliencyValues:
-    def test_all_saliency_values_in_0_1(self, det_onnx_path_nonzero):
-        """Every value in saliency_map must lie in [0, 1]."""
-        from radiologist.inference.predictor import Predictor
-
-        predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
-        image = np.zeros((224, 224, 3), dtype=np.uint8)
-        result = predictor.explain(image=image)
-        assert float(result.saliency_map.min()) >= 0.0
-        assert float(result.saliency_map.max()) <= 1.0
-
-
-class TestExplainPredictedClass:
-    def test_explain_predicted_class_matches_predict(self, det_onnx_path_nonzero):
-        """Explanation.predicted_class must be consistent with predict() for the same image."""
-        from radiologist.inference.predictor import Predictor
-
-        predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
-        image = np.zeros((224, 224, 3), dtype=np.uint8)
-        explanation = predictor.explain(image=image)
-        prediction = predictor.predict(image=image)
-        assert explanation.predicted_class == prediction.predicted_class
-
-
-class TestExplainWithoutDetModel:
-    def test_explain_raises_not_implemented_without_det_model(self):
-        """explain() on a predictor without a det model must raise NotImplementedError."""
-        from radiologist.inference.predictor import Predictor
-
-        predictor = object.__new__(Predictor)
-        with pytest.raises(NotImplementedError):
-            predictor.explain(image=np.zeros((224, 224, 3), dtype=np.uint8))
