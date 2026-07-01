@@ -12,5 +12,6 @@
 - [ETL implementation patterns](project_etl_implementation.md) — scikit-image import scope, functools.partial pickling, fsspec normalization, Prefect import guard, ParquetWriter guard, workers sentinel
 - [Pipeline architecture](project_pipeline_architecture.md) — ops.py/prefect.py split pattern, compute_run_id hashing contract, Prefect 3 API facts
 - [Manual ckpt fixture missing hook fields](feedback_manual_ckpt_fixture_missing_hook_fields.md) — hand-built checkpoint fixtures lack fields Lightning hooks add; check before relying on them
+- [W&B sandbox env vars](feedback_wandb_sandbox_env_vars.md) — set WANDB_DIR/WANDB_DATA_DIR/WANDB_CACHE_DIR/WANDB_CONFIG_DIR to a writable tmp before running tests that build real `wandb.Artifact` objects
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD, gh CLI, uv venv).
