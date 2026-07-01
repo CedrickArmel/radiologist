@@ -40,7 +40,7 @@ CLASSES = ["NORMAL", "ABNORMAL"]
 class TestPredictWithUncertainty:
     def test_returns_uncertainty_result_type(self, predictor_with_mcd, sample_image):
         """predict_with_uncertainty must return an UncertaintyResult."""
-        from radiologist.inference import UncertaintyResult
+        from radiologist.inference.predictor import UncertaintyResult
 
         result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=10)
         assert isinstance(result, UncertaintyResult)
@@ -98,7 +98,10 @@ class TestMcDropoutPredict:
         """mc_dropout_predict must return an UncertaintyResult."""
         import onnxruntime as ort
 
-        from radiologist.inference import UncertaintyResult, mc_dropout_predict
+        from radiologist.inference.predictor import (
+            UncertaintyResult,
+            mc_dropout_predict,
+        )
 
         session = ort.InferenceSession(mcd_onnx_path)
         preprocessed = sample_image.astype(np.float32).transpose(2, 0, 1)[np.newaxis]
@@ -109,7 +112,7 @@ class TestMcDropoutPredict:
         """mc_dropout_predict mean_probabilities must sum to 1.0."""
         import onnxruntime as ort
 
-        from radiologist.inference import mc_dropout_predict
+        from radiologist.inference.predictor import mc_dropout_predict
 
         session = ort.InferenceSession(mcd_onnx_path)
         preprocessed = sample_image.astype(np.float32).transpose(2, 0, 1)[np.newaxis]
@@ -121,7 +124,7 @@ class TestMcDropoutPredict:
         """mc_dropout_predict result must record the requested number of passes."""
         import onnxruntime as ort
 
-        from radiologist.inference import mc_dropout_predict
+        from radiologist.inference.predictor import mc_dropout_predict
 
         session = ort.InferenceSession(mcd_onnx_path)
         preprocessed = sample_image.astype(np.float32).transpose(2, 0, 1)[np.newaxis]

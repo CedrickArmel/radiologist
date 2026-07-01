@@ -100,7 +100,7 @@ class TestPredictorFromRegistryViaWandbRegistry:
     def test_from_registry_returns_predictor_instance(self, tmp_path):
         """Predictor.from_registry must return a Predictor instance."""
         import radiologist.registry.resolver as resolver_mod
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
@@ -116,7 +116,7 @@ class TestPredictorFromRegistryViaWandbRegistry:
     def test_from_registry_predictor_produces_prediction(self, tmp_path):
         """Predictor returned by from_registry must produce a Prediction on predict()."""
         import radiologist.registry.resolver as resolver_mod
-        from radiologist.inference import Prediction, Predictor
+        from radiologist.inference.predictor import Prediction, Predictor
 
         onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
@@ -134,7 +134,7 @@ class TestPredictorFromRegistryViaWandbRegistry:
     def test_from_registry_prediction_shape_matches_from_path(self, tmp_path):
         """from_registry predictor must produce Prediction with same keys as from_path."""
         import radiologist.registry.resolver as resolver_mod
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         onnx_path = build_det_onnx(tmp_path)
         mock_wandb = _make_wandb_mock(onnx_path)
@@ -159,7 +159,7 @@ class TestPredictorFromRegistryViaWandbRegistry:
     def test_from_registry_raises_runtime_error_when_wandb_absent(self, tmp_path):
         """from_registry raises RuntimeError when wandb absent."""
         import radiologist.registry.optional as optional_mod
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         with patch.object(optional_mod, "_wandb", None):
             with pytest.raises(RuntimeError):

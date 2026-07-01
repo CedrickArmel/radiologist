@@ -20,9 +20,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Tests for the radiologist.inference public API scaffold (issue #76).
+"""Tests for the radiologist.inference public API surface (issue #91).
 
-All behavioral contracts are verified through the public surface only.
+Asserts only import/shape contracts for the decomposed predictor hierarchy.
+Behavioral tests for predict/explain/predict_with_uncertainty are owned by
+the slice issues that implement them.
 """
 
 from unittest.mock import patch
@@ -41,13 +43,16 @@ def test_all_public_names_present():
     import radiologist.inference as pkg
 
     expected = {
-        "Predictor",
-        "score_cam",
-        "mc_dropout_predict",
+        "BasePredictor",
+        "Classifier",
+        "Explainer",
+        "MCDropoutPredictor",
         "Prediction",
         "Explanation",
         "UncertaintyResult",
         "ModelMetadata",
+        "score_cam",
+        "mc_dropout_predict",
         "create_app",
     }
     assert set(pkg.__all__) == expected
@@ -55,8 +60,21 @@ def test_all_public_names_present():
         assert hasattr(pkg, name), f"Missing public name: {name}"
 
 
+def test_predictor_absent_from_public_api():
+    """Predictor must not appear in radiologist.inference.__all__."""
+    import radiologist.inference as pkg
+
+    assert "Predictor" not in pkg.__all__
+
+
+def test_predictor_import_raises_import_error():
+    """Importing Predictor from radiologist.inference must raise ImportError."""
+    with pytest.raises(ImportError):
+        from radiologist.inference import Predictor  # noqa: F401
+
+
 def test_pull_model_absent_from_public_api():
-    """pull_model must not appear in radiologist.inference.__all__ (removed in #90)."""
+    """pull_model must not appear in radiologist.inference.__all__."""
     import radiologist.inference as pkg
 
     assert "pull_model" not in pkg.__all__
@@ -103,26 +121,18 @@ def test_result_dataclasses_are_importable():
     assert meta.classes == ["a", "b"]
 
 
-def test_predictor_explain_raises_not_implemented():
-    """Predictor.explain must raise NotImplementedError (not yet implemented)."""
-    from radiologist.inference import Predictor
+def test_predictor_subclass_relationships_hold():
+    """Classifier, Explainer, and MCDropoutPredictor must subclass BasePredictor."""
+    from radiologist.inference import (
+        BasePredictor,
+        Classifier,
+        Explainer,
+        MCDropoutPredictor,
+    )
 
-    predictor = object.__new__(Predictor)
-    with pytest.raises(NotImplementedError):
-        predictor.explain(image=np.zeros((224, 224, 3), dtype=np.uint8))
-
-
-def test_predictor_predict_with_uncertainty_raises_when_no_mcd_session(
-    det_onnx_path,
-):
-    """predict_with_uncertainty raises RuntimeError when predictor has no mcd_path."""
-    from radiologist.inference import Predictor
-
-    predictor = Predictor.from_path(det_path=det_onnx_path)
-    with pytest.raises(RuntimeError, match="mcd_path"):
-        predictor.predict_with_uncertainty(
-            image=np.zeros((224, 224, 3), dtype=np.uint8)
-        )
+    assert issubclass(Classifier, BasePredictor)
+    assert issubclass(Explainer, Classifier)
+    assert issubclass(MCDropoutPredictor, BasePredictor)
 
 
 def test_score_cam_returns_saliency_map_in_0_1():
@@ -140,8 +150,8 @@ def test_score_cam_returns_saliency_map_in_0_1():
 
 def test_create_app_raises_runtime_error_when_fastapi_absent():
     """create_app raises RuntimeError naming 'serve' when fastapi is absent."""
-    import radiologist.inference.predictor as stubs
+    import radiologist.inference.app as app_module
 
-    with patch.object(stubs, "_fastapi", None):
+    with patch.object(app_module, "_fastapi", None):
         with pytest.raises(RuntimeError, match="serve"):
-            stubs.create_app()
+            app_module.create_app()

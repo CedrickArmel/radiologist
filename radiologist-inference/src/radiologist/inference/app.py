@@ -23,10 +23,36 @@
 """FastAPI application factory for the radiologist inference serving layer."""
 
 import io
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
+
+from radiologist.inference.optional import _fastapi
+
+if TYPE_CHECKING:
+    from radiologist.inference.base_predictor import BasePredictor
+
+
+def create_app(predictor: Optional["BasePredictor"] = None) -> Any:
+    """Create and return the FastAPI application instance.
+
+    Args:
+        predictor: Optional predictor instance to inject at startup.
+
+    Returns:
+        Configured FastAPI application instance.
+
+    Raises:
+        RuntimeError: When the ``serve`` extra (fastapi, uvicorn) is not
+            installed.
+    """
+    if _fastapi is None:
+        raise RuntimeError(
+            "The 'serve' extra is required to use create_app. "
+            "Install it with: pip install radiologist-inference[serve]"
+        )
+    raise NotImplementedError
 
 
 def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901

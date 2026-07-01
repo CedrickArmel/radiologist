@@ -20,17 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Typer-based CLI for radiologist-inference (issue #82).
+"""Typer-based CLI for radiologist-inference.
 
 Entry points: predict <image> --model <det_path>
-              pull <artifact> --local-dir <dir>
+              explain <image> --model <det_path>
+              uncertainty <image> --model <det_path> --mcd-model <mcd_path>
 """
 
-from typing import Optional
-
 from radiologist.inference.optional import _typer
-from radiologist.inference.predictor import Predictor
-from radiologist.registry.wandb_registry import WandbRegistry
 
 if _typer is not None:
     import typer
@@ -45,37 +42,36 @@ if _typer is not None:
         model: str = typer.Option(
             ..., "--model", help="Path to the deterministic ONNX model."
         ),
-        mcd_model: Optional[str] = typer.Option(
-            None, "--mcd-model", help="Path to the MC-Dropout ONNX model."
-        ),
     ) -> None:
         """Run classification inference on a chest X-ray image."""
-        try:
-            predictor = Predictor.from_path(det_path=model, mcd_path=mcd_model)
-            result = predictor.predict(image=image_path)
-        except Exception as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=1)
-        typer.echo(f"Predicted class: {result.predicted_class}")
-        for cls, prob in result.probabilities.items():
-            typer.echo(f"  {cls}: {prob:.4f}")
+        raise NotImplementedError
 
     @app.command()
-    def pull(
-        artifact: str = typer.Argument(
-            ..., help="W&B artifact path (entity/project/name:version)."
+    def explain(
+        image_path: str = typer.Argument(
+            ..., help="Path to the input chest X-ray image."
         ),
-        local_dir: str = typer.Option(
-            ".", "--local-dir", help="Local directory to download the model to."
+        model: str = typer.Option(
+            ..., "--model", help="Path to the deterministic ONNX model."
         ),
     ) -> None:
-        """Download an ONNX model from the W&B Model Registry."""
-        try:
-            path = WandbRegistry().pull(artifact_path=artifact, local_dir=local_dir)
-        except Exception as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=1)
-        typer.echo(f"Model downloaded to: {path}")
+        """Produce a Score-CAM explanation for a chest X-ray image."""
+        raise NotImplementedError
+
+    @app.command()
+    def uncertainty(
+        image_path: str = typer.Argument(
+            ..., help="Path to the input chest X-ray image."
+        ),
+        mcd_model: str = typer.Option(
+            ..., "--mcd-model", help="Path to the MC-Dropout ONNX model."
+        ),
+        n_passes: int = typer.Option(
+            30, "--n-passes", help="Number of stochastic forward passes."
+        ),
+    ) -> None:
+        """Estimate MC-Dropout uncertainty for a chest X-ray image."""
+        raise NotImplementedError
 
 else:
     app = None  # type: ignore[assignment]

@@ -20,49 +20,46 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sys
-from pathlib import Path
+"""Result and metadata dataclasses shared across the predictor hierarchy."""
+
+from dataclasses import dataclass
+from typing import Dict, List
 
 import numpy as np
-import pytest
-
-sys.path.insert(0, str(Path(__file__).parent))
-
-from _helpers import build_det_onnx, build_mcd_onnx  # noqa: E402
 
 
-@pytest.fixture()
-def det_onnx_path(tmp_path):
-    return build_det_onnx(tmp_path)
+@dataclass(frozen=True)
+class Prediction:
+    """Inference result with class probabilities and predicted class label."""
+
+    probabilities: Dict[str, float]
+    predicted_class: str
 
 
-@pytest.fixture()
-def det_onnx_path_nonzero(tmp_path):
-    return build_det_onnx(tmp_path, feat_nonzero=True)
+@dataclass(frozen=True)
+class Explanation:
+    """Score-CAM saliency map result."""
+
+    saliency_map: np.ndarray
+    predicted_class: str
 
 
-@pytest.fixture()
-def mcd_onnx_path(tmp_path):
-    return build_mcd_onnx(tmp_path)
+@dataclass(frozen=True)
+class UncertaintyResult:
+    """MC-Dropout uncertainty estimation result."""
+
+    mean_probabilities: Dict[str, float]
+    std_per_class: Dict[str, float]
+    predictive_entropy: float
+    n_passes: int
 
 
-@pytest.fixture()
-def predictor_with_mcd(tmp_path):
-    from radiologist.inference.predictor import Predictor
+@dataclass(frozen=True)
+class ModelMetadata:
+    """ONNX model metadata extracted from session."""
 
-    det = build_det_onnx(tmp_path, filename="det.onnx")
-    mcd = build_mcd_onnx(tmp_path, filename="mcd.onnx")
-    return Predictor.from_path(det_path=det, mcd_path=mcd)
-
-
-@pytest.fixture()
-def predictor_without_mcd(tmp_path):
-    from radiologist.inference.predictor import Predictor
-
-    det = build_det_onnx(tmp_path, filename="det_only.onnx")
-    return Predictor.from_path(det_path=det)
-
-
-@pytest.fixture()
-def sample_image():
-    return np.zeros((224, 224, 3), dtype=np.uint8)
+    classes: List[str]
+    input_shape: List[int]
+    cam_target_layer: str
+    output_names: List[str]
+    mc_dropout: bool

@@ -20,49 +20,22 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import sys
-from pathlib import Path
+"""Score-CAM explanation on top of Classifier."""
+
+from __future__ import annotations
+
+from typing import Union
 
 import numpy as np
-import pytest
+from PIL import Image as PILImage  # type: ignore[import-untyped]
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from _helpers import build_det_onnx, build_mcd_onnx  # noqa: E402
-
-
-@pytest.fixture()
-def det_onnx_path(tmp_path):
-    return build_det_onnx(tmp_path)
+from radiologist.inference.classifier import Classifier
+from radiologist.inference.models import Explanation
 
 
-@pytest.fixture()
-def det_onnx_path_nonzero(tmp_path):
-    return build_det_onnx(tmp_path, feat_nonzero=True)
+class Explainer(Classifier):
+    """Adds Score-CAM explanation to Classifier."""
 
-
-@pytest.fixture()
-def mcd_onnx_path(tmp_path):
-    return build_mcd_onnx(tmp_path)
-
-
-@pytest.fixture()
-def predictor_with_mcd(tmp_path):
-    from radiologist.inference.predictor import Predictor
-
-    det = build_det_onnx(tmp_path, filename="det.onnx")
-    mcd = build_mcd_onnx(tmp_path, filename="mcd.onnx")
-    return Predictor.from_path(det_path=det, mcd_path=mcd)
-
-
-@pytest.fixture()
-def predictor_without_mcd(tmp_path):
-    from radiologist.inference.predictor import Predictor
-
-    det = build_det_onnx(tmp_path, filename="det_only.onnx")
-    return Predictor.from_path(det_path=det)
-
-
-@pytest.fixture()
-def sample_image():
-    return np.zeros((224, 224, 3), dtype=np.uint8)
+    def explain(self, image: Union[str, "np.ndarray", "PILImage.Image"]) -> Explanation:
+        """Produce a Score-CAM saliency map for the given image."""
+        raise NotImplementedError
