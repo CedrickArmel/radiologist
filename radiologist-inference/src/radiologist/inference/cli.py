@@ -27,6 +27,13 @@ Entry points: predict <image> --model <det_path>
               uncertainty <image> --model <det_path> --mcd-model <mcd_path>
 """
 
+from typing import Optional
+
+import numpy as np
+
+from radiologist.inference.classifier import Classifier
+from radiologist.inference.explainer import Explainer
+from radiologist.inference.mc_dropout import MCDropoutPredictor
 from radiologist.inference.optional import _typer
 
 if _typer is not None:
@@ -44,7 +51,15 @@ if _typer is not None:
         ),
     ) -> None:
         """Run classification inference on a chest X-ray image."""
-        raise NotImplementedError
+        try:
+            classifier = Classifier.from_path(det_path=model)
+            result = classifier.predict(image=image_path)
+        except Exception as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"Predicted class: {result.predicted_class}")
+        for cls, prob in result.probabilities.items():
+            typer.echo(f"  {cls}: {prob:.4f}")
 
     @app.command()
     def explain(
@@ -54,14 +69,31 @@ if _typer is not None:
         model: str = typer.Option(
             ..., "--model", help="Path to the deterministic ONNX model."
         ),
+        out: Optional[str] = typer.Option(
+            None, "--out", help="Path to save the saliency map as a .npy file."
+        ),
     ) -> None:
         """Produce a Score-CAM explanation for a chest X-ray image."""
-        raise NotImplementedError
+        try:
+            explainer = Explainer.from_path(det_path=model)
+            result = explainer.explain(image=image_path)
+        except Exception as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"Predicted class: {result.predicted_class}")
+        if out is not None:
+            np.save(out, result.saliency_map)
+            typer.echo(f"Saliency map saved to: {out}")
+        else:
+            typer.echo(f"Saliency map shape: {result.saliency_map.shape}")
 
     @app.command()
     def uncertainty(
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
+        ),
+        model: str = typer.Option(
+            ..., "--model", help="Path to the deterministic ONNX model."
         ),
         mcd_model: str = typer.Option(
             ..., "--mcd-model", help="Path to the MC-Dropout ONNX model."
@@ -71,7 +103,19 @@ if _typer is not None:
         ),
     ) -> None:
         """Estimate MC-Dropout uncertainty for a chest X-ray image."""
-        raise NotImplementedError
+        try:
+            predictor = MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
+            result = predictor.predict_with_uncertainty(
+                image=image_path, n_passes=n_passes
+            )
+        except Exception as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo("Mean probabilities:")
+        for cls, prob in result.mean_probabilities.items():
+            std = result.std_per_class[cls]
+            typer.echo(f"  {cls}: {prob:.4f} (std={std:.4f})")
+        typer.echo(f"Predictive entropy: {result.predictive_entropy:.4f}")
 
 else:
     app = None  # type: ignore[assignment]

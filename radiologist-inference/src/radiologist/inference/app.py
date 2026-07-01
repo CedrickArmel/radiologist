@@ -52,15 +52,22 @@ def create_app(predictor: Optional["BasePredictor"] = None) -> Any:
             "The 'serve' extra is required to use create_app. "
             "Install it with: pip install radiologist-inference[serve]"
         )
-    raise NotImplementedError
+    return _build_app(_fastapi, predictor)
 
 
 def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
-    """Build and return the FastAPI app with all routes wired up.
+    """Build and return the FastAPI app with capability-matched routes.
+
+    Routes are wired based on ``isinstance`` checks against the predictor:
+    ``Classifier`` (and its subclass ``Explainer``) gets ``/predict``,
+    ``Explainer`` additionally gets ``/explain``, and ``MCDropoutPredictor``
+    gets ``/uncertainty``. When ``predictor`` is ``None`` the type is unknown,
+    so every route is wired and each falls back to the 503 "no model loaded"
+    guard until a predictor is injected. ``/healthz`` is always wired.
 
     Args:
         fastapi_mod: The imported fastapi module (passed to avoid re-importing).
-        predictor: Optional Predictor instance injected at startup.
+        predictor: Optional predictor instance injected at startup.
 
     Returns:
         Configured FastAPI application.
@@ -72,10 +79,18 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
     from starlette.requests import Request  # type: ignore[import-untyped]
     from starlette.responses import JSONResponse  # type: ignore[import-untyped]
 
+    from radiologist.inference.classifier import Classifier
+    from radiologist.inference.explainer import Explainer
+    from radiologist.inference.mc_dropout import MCDropoutPredictor
+
     app = fastapi_mod.FastAPI(title="Radiologist Inference API")
     state_holder: Dict[str, Any] = {"predictor": predictor}
 
     HTTPException = fastapi_mod.HTTPException
+
+    wire_predict = predictor is None or isinstance(predictor, Classifier)
+    wire_explain = predictor is None or isinstance(predictor, Explainer)
+    wire_uncertainty = predictor is None or isinstance(predictor, MCDropoutPredictor)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -100,53 +115,59 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
                 status_code=400, detail=f"Invalid image: {exc}"
             ) from exc
 
-    @app.post("/predict")
-    async def predict(
-        image: fastapi.UploadFile = fastapi.File(...),
-    ) -> Dict[str, Any]:
-        raw = await image.read()
-        if not raw:
-            raise HTTPException(status_code=400, detail="Empty image file.")
-        pil_img = _load_pil(raw)
-        p = _get_predictor()
-        result = p.predict(pil_img)
-        return {
-            "probabilities": result.probabilities,
-            "predicted_class": result.predicted_class,
-        }
+    if wire_predict:
 
-    @app.post("/explain")
-    async def explain(
-        image: fastapi.UploadFile = fastapi.File(...),
-    ) -> Dict[str, Any]:
-        raw = await image.read()
-        if not raw:
-            raise HTTPException(status_code=400, detail="Empty image file.")
-        pil_img = _load_pil(raw)
-        p = _get_predictor()
-        result = p.explain(pil_img)
-        saliency: List[List[float]] = result.saliency_map.tolist()
-        return {
-            "saliency_map": saliency,
-            "predicted_class": result.predicted_class,
-        }
+        @app.post("/predict")
+        async def predict(
+            image: fastapi.UploadFile = fastapi.File(...),
+        ) -> Dict[str, Any]:
+            raw = await image.read()
+            if not raw:
+                raise HTTPException(status_code=400, detail="Empty image file.")
+            pil_img = _load_pil(raw)
+            p = _get_predictor()
+            result = p.predict(pil_img)
+            return {
+                "probabilities": result.probabilities,
+                "predicted_class": result.predicted_class,
+            }
 
-    @app.post("/uncertainty")
-    async def uncertainty(
-        image: fastapi.UploadFile = fastapi.File(...),
-    ) -> Dict[str, Any]:
-        raw = await image.read()
-        if not raw:
-            raise HTTPException(status_code=400, detail="Empty image file.")
-        pil_img = _load_pil(raw)
-        p = _get_predictor()
-        result = p.predict_with_uncertainty(pil_img)
-        return {
-            "mean_probabilities": result.mean_probabilities,
-            "std_per_class": result.std_per_class,
-            "predictive_entropy": result.predictive_entropy,
-            "n_passes": result.n_passes,
-        }
+    if wire_explain:
+
+        @app.post("/explain")
+        async def explain(
+            image: fastapi.UploadFile = fastapi.File(...),
+        ) -> Dict[str, Any]:
+            raw = await image.read()
+            if not raw:
+                raise HTTPException(status_code=400, detail="Empty image file.")
+            pil_img = _load_pil(raw)
+            p = _get_predictor()
+            result = p.explain(pil_img)
+            saliency: List[List[float]] = result.saliency_map.tolist()
+            return {
+                "saliency_map": saliency,
+                "predicted_class": result.predicted_class,
+            }
+
+    if wire_uncertainty:
+
+        @app.post("/uncertainty")
+        async def uncertainty(
+            image: fastapi.UploadFile = fastapi.File(...),
+        ) -> Dict[str, Any]:
+            raw = await image.read()
+            if not raw:
+                raise HTTPException(status_code=400, detail="Empty image file.")
+            pil_img = _load_pil(raw)
+            p = _get_predictor()
+            result = p.predict_with_uncertainty(pil_img)
+            return {
+                "mean_probabilities": result.mean_probabilities,
+                "std_per_class": result.std_per_class,
+                "predictive_entropy": result.predictive_entropy,
+                "n_passes": result.n_passes,
+            }
 
     @app.get("/healthz")
     def healthz() -> Dict[str, str]:
