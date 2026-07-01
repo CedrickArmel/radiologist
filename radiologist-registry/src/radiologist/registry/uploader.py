@@ -20,37 +20,30 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from radiologist.registry.models import ExportResult, PromoteResult
-from radiologist.registry.optional import _guard_wandb, _wandb
+from typing import Any, Optional
+
+from radiologist.registry.models import ExportResult, LoggedArtifacts, PromoteResult
+from radiologist.registry.optional import _guard_wandb, _wandb  # noqa: F401
 
 
 class _WandbUploader:
     """W&B seam for artifact upload operations."""
 
-    def promote(
+    def log_model_artifacts(
         self,
         export_result: ExportResult,
-        collection: str,
+        run: Any,
+        ckpt_path: str,
+        last_ckpt_path: Optional[str] = None,
+    ) -> LoggedArtifacts:
+        raise NotImplementedError
+
+    def link_to_collection(
+        self,
+        det_qualified_name: str,
+        mcd_qualified_name: str,
+        det_collection: str,
+        mcd_collection: str,
         alias: str,
     ) -> PromoteResult:
-        _guard_wandb()
-        run = _wandb.init(job_type="registry-promote")  # type: ignore[union-attr]
-        try:
-            run_id = export_result.run_id
-
-            det_art = _wandb.Artifact(f"model-{run_id}", type="model")  # type: ignore[union-attr]
-            det_art.add_file(export_result.det_path)
-            run.log_artifact(det_art)
-            det_linked = run.link_artifact(det_art, collection, aliases=[alias])
-
-            mcd_art = _wandb.Artifact(f"model-{run_id}-mcd", type="model")  # type: ignore[union-attr]
-            mcd_art.add_file(export_result.mcd_path)
-            run.log_artifact(mcd_art)
-            mcd_linked = run.link_artifact(mcd_art, collection, aliases=[alias])
-
-            return PromoteResult(
-                det_qualified_name=det_linked.qualified_name,
-                mcd_qualified_name=mcd_linked.qualified_name,
-            )
-        finally:
-            run.finish()
+        raise NotImplementedError

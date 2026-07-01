@@ -21,7 +21,13 @@
 # SOFTWARE.
 
 from radiologist.registry.interface import ModelRegistry
-from radiologist.registry.models import ArtifactRef, ExportResult, PromoteResult
+from radiologist.registry.models import (
+    ArtifactRef,
+    CollectionMember,
+    ExportResult,
+    LoggedArtifacts,
+    PromoteResult,
+)
 from radiologist.registry.wandb_registry import WandbRegistry
 
 __all__ = [
@@ -30,4 +36,6 @@ __all__ = [
     "ExportResult",
     "PromoteResult",
     "WandbRegistry",
+    "LoggedArtifacts",
+    "CollectionMember",
 ]

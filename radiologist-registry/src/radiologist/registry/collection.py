@@ -20,22 +20,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from radiologist.core.callbacks import (
-    AttributionCallback,
-    BestMetricCallback,
-    OnnxExportCallback,
-    WandbDefineSummaryCallback,
-)
-from radiologist.core.data import WebDatasetDataModule
-from radiologist.core.losses import FocalLoss
-from radiologist.core.module import LModule
+from typing import List
 
-__all__ = [
-    "AttributionCallback",
-    "BestMetricCallback",
-    "FocalLoss",
-    "LModule",
-    "OnnxExportCallback",
-    "WandbDefineSummaryCallback",
-    "WebDatasetDataModule",
-]
+from radiologist.registry.models import CollectionMember
+from radiologist.registry.optional import _guard_wandb, _wandb  # noqa: F401
+
+
+class _WandbCollectionLister:
+    """W&B seam for listing the members (and aliases) of a registry collection."""
+
+    def list_collection_artifacts(
+        self,
+        type_name: str,
+        collection_name: str,
+    ) -> List[CollectionMember]:
+        raise NotImplementedError

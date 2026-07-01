@@ -46,6 +46,7 @@ except ImportError:
     instantiate = None  # type: ignore[assignment]
 
 from radiologist.core.module import LModule
+from radiologist.core.resume import resolve_resume_ckpt, restore_precision
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -78,9 +79,10 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
             raise KeyError("Missing key module in config.")
 
         module = LModule(cfg=cfg.get("module"))
-
-        if cfg.get("ckpt_path") and module.precision:
-            cfg.trainer.precision = module.precision
+        resolved_ckpt = resolve_resume_ckpt(cfg)
+        if resolved_ckpt is not None:
+            restore_precision(cfg, resolved_ckpt)
+            cfg.ckpt_path = resolved_ckpt
 
         trainer: Trainer = instantiate(
             cfg.trainer,
