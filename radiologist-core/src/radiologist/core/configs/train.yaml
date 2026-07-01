@@ -19,6 +19,8 @@ defaults:
 
 stage: train
 ckpt_path: null
+resume_ref: null
+resume_path: null
 seed: 42
 tags: null
 train: true

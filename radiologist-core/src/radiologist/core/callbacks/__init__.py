@@ -22,10 +22,12 @@
 
 from radiologist.core.callbacks.attribution import AttributionCallback
 from radiologist.core.callbacks.best_metric import BestMetricCallback
+from radiologist.core.callbacks.onnx_export import OnnxExportCallback
 from radiologist.core.callbacks.wandb_summary import WandbDefineSummaryCallback
 
 __all__ = [
     "AttributionCallback",
     "BestMetricCallback",
+    "OnnxExportCallback",
     "WandbDefineSummaryCallback",
 ]

@@ -20,22 +20,25 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from radiologist.core.callbacks import (
-    AttributionCallback,
-    BestMetricCallback,
-    OnnxExportCallback,
-    WandbDefineSummaryCallback,
-)
-from radiologist.core.data import WebDatasetDataModule
-from radiologist.core.losses import FocalLoss
-from radiologist.core.module import LModule
+from typing import Any, List, Tuple
 
-__all__ = [
-    "AttributionCallback",
-    "BestMetricCallback",
-    "FocalLoss",
-    "LModule",
-    "OnnxExportCallback",
-    "WandbDefineSummaryCallback",
-    "WebDatasetDataModule",
-]
+import lightning as L
+
+
+class OnnxExportCallback(L.Callback):
+    """Opt-in end-of-fit ONNX export that logs the model to the active W&B run.
+
+    Silent no-op when wandb has no active run or no best checkpoint exists.
+    """
+
+    def __init__(
+        self,
+        input_shape: Tuple[int, ...],
+        classes: List[str],
+        cam_target_layer: str,
+        opset: int = 18,
+    ) -> None:
+        raise NotImplementedError
+
+    def on_fit_end(self, trainer: Any, pl_module: Any) -> None:
+        raise NotImplementedError

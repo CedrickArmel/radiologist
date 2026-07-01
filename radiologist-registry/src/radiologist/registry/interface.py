@@ -20,9 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import List, Optional, Protocol, Union
+from typing import Any, List, Optional, Protocol, Union
 
-from radiologist.registry.models import ArtifactRef, ExportResult, PromoteResult
+from radiologist.registry.models import (
+    ArtifactRef,
+    CollectionMember,
+    ExportResult,
+    LoggedArtifacts,
+    PromoteResult,
+)
 
 
 class ModelRegistry(Protocol):
@@ -43,11 +49,32 @@ class ModelRegistry(Protocol):
 
     def pull(self, artifact_path: str, local_dir: str) -> str: ...
 
-    def promote(
+    def log_model_artifacts(
         self,
         export_result: ExportResult,
-        collection: str,
-        alias: str,
+        run: Any,
+        ckpt_path: str,
+        last_ckpt_path: Optional[str] = None,
+    ) -> LoggedArtifacts: ...
+
+    def list_collection_artifacts(
+        self,
+        type_name: str,
+        collection_name: str,
+    ) -> List[CollectionMember]: ...
+
+    def promote(
+        self,
+        path: str,
+        run_id: str,
+        det_collection: str,
+        mcd_collection: str,
+    ) -> PromoteResult: ...
+
+    def transition_to_production(
+        self,
+        det_collection: str,
+        mcd_collection: str,
     ) -> PromoteResult: ...
 
     def get_aliases(self, artifact_path: str) -> List[str]: ...

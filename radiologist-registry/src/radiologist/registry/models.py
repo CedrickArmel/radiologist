@@ -47,7 +47,29 @@ class ExportResult:
 
 @dataclass(frozen=True)
 class PromoteResult:
-    """Artifact qualified names after upload — output of WandbRegistry.promote()."""
+    """Result of a link/transition transaction — det+mcd always share one alias."""
 
     det_qualified_name: str
     mcd_qualified_name: str
+    alias: str
+
+
+@dataclass(frozen=True)
+class LoggedArtifacts:
+    """Qualified names of the artifacts logged to the active run by the export callback.
+
+    These are logged-but-not-linked: resolvable by run_id, carrying version aliases
+    ('best'/'last'), but not yet attached to any registry collection.
+    """
+
+    det_qualified_name: str
+    mcd_qualified_name: str
+    run_id: str
+
+
+@dataclass(frozen=True)
+class CollectionMember:
+    """One artifact version in a W&B collection together with its current alias list."""
+
+    qualified_name: str
+    aliases: List[str]
