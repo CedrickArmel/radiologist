@@ -31,11 +31,11 @@ from radiologist.registry.models import (
 from radiologist.registry.wandb_registry import WandbRegistry
 
 __all__ = [
-    "ModelRegistry",
     "ArtifactRef",
+    "CollectionMember",
     "ExportResult",
+    "LoggedArtifacts",
+    "ModelRegistry",
     "PromoteResult",
     "WandbRegistry",
-    "LoggedArtifacts",
-    "CollectionMember",
 ]

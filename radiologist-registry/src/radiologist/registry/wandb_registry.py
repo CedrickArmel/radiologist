@@ -31,8 +31,15 @@ from radiologist.registry.models import (
     LoggedArtifacts,
     PromoteResult,
 )
+from radiologist.registry.optional import _MODEL_ARTIFACT_TYPE
 from radiologist.registry.resolver import _WandbResolver
 from radiologist.registry.uploader import _WandbUploader
+
+
+def _find_by_alias(
+    members: List[CollectionMember], alias: str
+) -> Optional[CollectionMember]:
+    return next((m for m in members if alias in m.aliases), None)
 
 
 class WandbRegistry:
@@ -98,8 +105,12 @@ class WandbRegistry:
         det_ref = self._resolver.resolve(path, run_id=run_id, version="best")
         mcd_ref = self._resolver.resolve(path, run_id=f"{run_id}-mcd", version="best")
 
-        det_members = self._lister.list_collection_artifacts("model", det_collection)
-        mcd_members = self._lister.list_collection_artifacts("model", mcd_collection)
+        det_members = self._lister.list_collection_artifacts(
+            _MODEL_ARTIFACT_TYPE, det_collection
+        )
+        mcd_members = self._lister.list_collection_artifacts(
+            _MODEL_ARTIFACT_TYPE, mcd_collection
+        )
         has_production = any(
             "production" in m.aliases for m in (*det_members, *mcd_members)
         )
@@ -118,23 +129,23 @@ class WandbRegistry:
         det_collection: str,
         mcd_collection: str,
     ) -> PromoteResult:
-        det_members = self._lister.list_collection_artifacts("model", det_collection)
-        mcd_members = self._lister.list_collection_artifacts("model", mcd_collection)
+        det_members = self._lister.list_collection_artifacts(
+            _MODEL_ARTIFACT_TYPE, det_collection
+        )
+        mcd_members = self._lister.list_collection_artifacts(
+            _MODEL_ARTIFACT_TYPE, mcd_collection
+        )
 
-        det_staging = next((m for m in det_members if "staging" in m.aliases), None)
-        mcd_staging = next((m for m in mcd_members if "staging" in m.aliases), None)
+        det_staging = _find_by_alias(det_members, "staging")
+        mcd_staging = _find_by_alias(mcd_members, "staging")
         if det_staging is None or mcd_staging is None:
             raise LookupError(
                 "No 'staging' member found in one or both collections: "
                 f"{det_collection!r}, {mcd_collection!r}"
             )
 
-        det_production = next(
-            (m for m in det_members if "production" in m.aliases), None
-        )
-        mcd_production = next(
-            (m for m in mcd_members if "production" in m.aliases), None
-        )
+        det_production = _find_by_alias(det_members, "production")
+        mcd_production = _find_by_alias(mcd_members, "production")
 
         if det_production is not None:
             self._alias_manager.remove_alias(

@@ -30,6 +30,8 @@ _WANDB_MISSING_MSG = (
     "Install with: pip install 'radiologist-registry[wandb]'"
 )
 
+_MODEL_ARTIFACT_TYPE = "model"
+
 
 def _guard_wandb() -> None:
     if _wandb is None:
