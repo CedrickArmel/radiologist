@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Tests for the radiologist.inference CLI surface (issue #95).
+"""Tests for the radiologist.inference CLI surface.
 
 Covers the three real subcommands (predict, explain, uncertainty) wired to
 Classifier/Explainer/MCDropoutPredictor, the absence of a pull subcommand,

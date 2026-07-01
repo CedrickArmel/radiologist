@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 """Behavioral tests for MCDropoutPredictor.predict_with_uncertainty and the
-stateless mc_dropout_predict helper (issue #94).
+stateless mc_dropout_predict helper.
 
 Tests drive through the public API only. Fixtures build real ONNX models so
 no mocks are needed for local code.

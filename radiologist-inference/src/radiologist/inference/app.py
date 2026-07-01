@@ -103,7 +103,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         if p is None:
             raise HTTPException(
                 status_code=503,
-                detail="No model loaded. Supply a Predictor at startup.",
+                detail="No model loaded. Supply a predictor instance at startup.",
             )
         return p
 
@@ -115,18 +115,21 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
                 status_code=400, detail=f"Invalid image: {exc}"
             ) from exc
 
+    async def _handle(image: Any, method_name: str) -> Any:
+        raw = await image.read()
+        if not raw:
+            raise HTTPException(status_code=400, detail="Empty image file.")
+        pil_img = _load_pil(raw)
+        p = _get_predictor()
+        return getattr(p, method_name)(pil_img)
+
     if wire_predict:
 
         @app.post("/predict")
         async def predict(
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
-            raw = await image.read()
-            if not raw:
-                raise HTTPException(status_code=400, detail="Empty image file.")
-            pil_img = _load_pil(raw)
-            p = _get_predictor()
-            result = p.predict(pil_img)
+            result = await _handle(image, "predict")
             return {
                 "probabilities": result.probabilities,
                 "predicted_class": result.predicted_class,
@@ -138,12 +141,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         async def explain(
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
-            raw = await image.read()
-            if not raw:
-                raise HTTPException(status_code=400, detail="Empty image file.")
-            pil_img = _load_pil(raw)
-            p = _get_predictor()
-            result = p.explain(pil_img)
+            result = await _handle(image, "explain")
             saliency: List[List[float]] = result.saliency_map.tolist()
             return {
                 "saliency_map": saliency,
@@ -156,12 +154,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         async def uncertainty(
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
-            raw = await image.read()
-            if not raw:
-                raise HTTPException(status_code=400, detail="Empty image file.")
-            pil_img = _load_pil(raw)
-            p = _get_predictor()
-            result = p.predict_with_uncertainty(pil_img)
+            result = await _handle(image, "predict_with_uncertainty")
             return {
                 "mean_probabilities": result.mean_probabilities,
                 "std_per_class": result.std_per_class,

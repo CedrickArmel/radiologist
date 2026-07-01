@@ -31,7 +31,11 @@ import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
-from radiologist.inference.base_predictor import BasePredictor, _preprocess_image
+from radiologist.inference.base_predictor import (
+    BasePredictor,
+    _preprocess_image,
+    _softmax,
+)
 from radiologist.inference.models import UncertaintyResult
 
 
@@ -54,7 +58,7 @@ class MCDropoutPredictor(BasePredictor):
                 "MC-Dropout inference requires mcd_path to be supplied when"
                 " loading the predictor via from_path()."
             )
-        input_shape: List[int] = json.loads(self._state.metadata["input_shape"])
+        input_shape = self._state.model_metadata.input_shape
         arr = _preprocess_image(image, input_shape)
         return mc_dropout_predict(mcd_session, arr, n_passes=n_passes)
 
@@ -81,11 +85,7 @@ def mc_dropout_predict(
     for _ in range(n_passes):
         outputs = session.run(["logits"], {input_name: image})
         raw: "np.ndarray" = outputs[0][0]
-        softmax = raw.astype(np.float64)
-        softmax = softmax - softmax.max()
-        softmax = np.exp(softmax)
-        softmax = (softmax / softmax.sum()).astype(np.float32)
-        all_probs.append(softmax)
+        all_probs.append(_softmax(raw))
 
     stacked = np.stack(all_probs, axis=0)  # (n_passes, n_classes)
     mean_p = stacked.mean(axis=0)

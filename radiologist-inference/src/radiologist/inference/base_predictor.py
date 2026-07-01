@@ -28,6 +28,7 @@ in the subclasses defined in classifier.py, explainer.py, and mc_dropout.py.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
@@ -35,6 +36,7 @@ import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
+from radiologist.inference.models import ModelMetadata
 from radiologist.registry.wandb_registry import WandbRegistry
 
 if TYPE_CHECKING:
@@ -45,6 +47,7 @@ if TYPE_CHECKING:
 class _PredictorState:
     det_session: ort.InferenceSession
     metadata: Dict[str, str]
+    model_metadata: ModelMetadata
     mcd_session: Optional[ort.InferenceSession] = field(default=None)
 
 
@@ -76,10 +79,15 @@ class BasePredictor:
         if mcd_path is not None:
             mcd_session = ort.InferenceSession(mcd_path)
 
+        model_metadata = _parse_model_metadata(
+            metadata, mc_dropout=mcd_session is not None
+        )
+
         instance = cls.__new__(cls)
         instance._state = _PredictorState(
             det_session=det_session,
             metadata=metadata,
+            model_metadata=model_metadata,
             mcd_session=mcd_session,
         )
         return instance
@@ -115,6 +123,41 @@ def _read_metadata(session: "ort.InferenceSession") -> Dict[str, str]:
     return dict(session.get_modelmeta().custom_metadata_map)
 
 
+def _parse_model_metadata(metadata: Dict[str, str], mc_dropout: bool) -> ModelMetadata:
+    """Parse the raw ONNX metadata dict into a typed ModelMetadata.
+
+    Args:
+        metadata: Raw custom_metadata_map from the deterministic session.
+        mc_dropout: Whether a stochastic (MC-Dropout) session was also loaded.
+
+    Returns:
+        Typed ModelMetadata with JSON fields decoded.
+    """
+    return ModelMetadata(
+        classes=json.loads(metadata["classes"]),
+        input_shape=json.loads(metadata["input_shape"]),
+        cam_target_layer=metadata["cam_target_layer"],
+        output_names=json.loads(metadata["output_names"]),
+        mc_dropout=mc_dropout,
+    )
+
+
+def _to_pil(image: Union[str, "np.ndarray", "PILImage.Image"]) -> "PILImage.Image":
+    """Convert a file path, numpy HWC uint8 array, or PIL Image to RGB PIL.
+
+    Args:
+        image: File path, numpy HWC uint8 array, or PIL Image.
+
+    Returns:
+        RGB-converted PIL Image.
+    """
+    if isinstance(image, str):
+        return PILImage.open(image).convert("RGB")
+    elif isinstance(image, np.ndarray):
+        return PILImage.fromarray(image).convert("RGB")
+    return image.convert("RGB")
+
+
 def _preprocess_image(
     image: Union[str, "np.ndarray", "PILImage.Image"],
     input_shape: List[int],
@@ -129,17 +172,25 @@ def _preprocess_image(
         Float32 array of shape (1, C, H, W) with values in [0, 1].
     """
     _, _, h, w = input_shape
-    if isinstance(image, str):
-        pil_img = PILImage.open(image).convert("RGB")
-    elif isinstance(image, np.ndarray):
-        pil_img = PILImage.fromarray(image).convert("RGB")
-    else:
-        pil_img = image.convert("RGB")
-
+    pil_img = _to_pil(image)
     pil_img = pil_img.resize((w, h), PILImage.Resampling.BILINEAR)
     arr = np.array(pil_img, dtype=np.float32) / 255.0
     arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
     return arr
+
+
+def _softmax(logits: "np.ndarray") -> "np.ndarray":
+    """Numerically stable softmax over the last axis.
+
+    Args:
+        logits: Raw model output logits.
+
+    Returns:
+        Float32 array of the same shape with values summing to 1.
+    """
+    shifted = logits.astype(np.float64) - logits.astype(np.float64).max()
+    exp = np.exp(shifted)
+    return (exp / exp.sum()).astype(np.float32)
 
 
 def _apply_prior_correction(

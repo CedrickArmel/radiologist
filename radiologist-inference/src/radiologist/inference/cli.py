@@ -27,7 +27,8 @@ Entry points: predict <image> --model <det_path>
               uncertainty <image> --model <det_path> --mcd-model <mcd_path>
 """
 
-from typing import Optional
+import functools
+from typing import Any, Callable, Optional, TypeVar
 
 import numpy as np
 
@@ -36,12 +37,28 @@ from radiologist.inference.explainer import Explainer
 from radiologist.inference.mc_dropout import MCDropoutPredictor
 from radiologist.inference.optional import _typer
 
+F = TypeVar("F", bound=Callable[..., None])
+
 if _typer is not None:
     import typer
 
     app = typer.Typer(name="radiologist", add_completion=False)
 
+    def _exit_on_error(func: F) -> F:
+        """Wrap a CLI command so unhandled exceptions become a clean exit(1)."""
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> None:
+            try:
+                func(*args, **kwargs)
+            except Exception as exc:
+                typer.echo(f"Error: {exc}", err=True)
+                raise typer.Exit(code=1)
+
+        return wrapper  # type: ignore[return-value]
+
     @app.command()
+    @_exit_on_error
     def predict(
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
@@ -51,17 +68,14 @@ if _typer is not None:
         ),
     ) -> None:
         """Run classification inference on a chest X-ray image."""
-        try:
-            classifier = Classifier.from_path(det_path=model)
-            result = classifier.predict(image=image_path)
-        except Exception as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=1)
+        classifier = Classifier.from_path(det_path=model)
+        result = classifier.predict(image=image_path)
         typer.echo(f"Predicted class: {result.predicted_class}")
         for cls, prob in result.probabilities.items():
             typer.echo(f"  {cls}: {prob:.4f}")
 
     @app.command()
+    @_exit_on_error
     def explain(
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
@@ -74,12 +88,8 @@ if _typer is not None:
         ),
     ) -> None:
         """Produce a Score-CAM explanation for a chest X-ray image."""
-        try:
-            explainer = Explainer.from_path(det_path=model)
-            result = explainer.explain(image=image_path)
-        except Exception as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=1)
+        explainer = Explainer.from_path(det_path=model)
+        result = explainer.explain(image=image_path)
         typer.echo(f"Predicted class: {result.predicted_class}")
         if out is not None:
             np.save(out, result.saliency_map)
@@ -88,6 +98,7 @@ if _typer is not None:
             typer.echo(f"Saliency map shape: {result.saliency_map.shape}")
 
     @app.command()
+    @_exit_on_error
     def uncertainty(
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
@@ -103,14 +114,8 @@ if _typer is not None:
         ),
     ) -> None:
         """Estimate MC-Dropout uncertainty for a chest X-ray image."""
-        try:
-            predictor = MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
-            result = predictor.predict_with_uncertainty(
-                image=image_path, n_passes=n_passes
-            )
-        except Exception as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=1)
+        predictor = MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
+        result = predictor.predict_with_uncertainty(image=image_path, n_passes=n_passes)
         typer.echo("Mean probabilities:")
         for cls, prob in result.mean_probabilities.items():
             std = result.std_per_class[cls]

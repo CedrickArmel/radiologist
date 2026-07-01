@@ -24,13 +24,12 @@
 
 from __future__ import annotations
 
-import json
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
-from radiologist.inference.base_predictor import _preprocess_image
+from radiologist.inference.base_predictor import _preprocess_image, _softmax, _to_pil
 from radiologist.inference.cam import score_cam_with_session
 from radiologist.inference.classifier import Classifier
 from radiologist.inference.models import Explanation
@@ -49,17 +48,12 @@ class Explainer(Classifier):
             Explanation with a saliency map sized to the original image
             resolution and the predicted class label.
         """
-        if isinstance(image, str):
-            pil_orig = PILImage.open(image).convert("RGB")
-        elif isinstance(image, np.ndarray):
-            pil_orig = PILImage.fromarray(image).convert("RGB")
-        else:
-            pil_orig = image.convert("RGB")
+        pil_orig = _to_pil(image)
         original_w, original_h = pil_orig.size
 
-        meta = self._state.metadata
-        classes: List[str] = json.loads(meta["classes"])
-        input_shape: List[int] = json.loads(meta["input_shape"])
+        model_metadata = self._state.model_metadata
+        classes = model_metadata.classes
+        input_shape = model_metadata.input_shape
 
         preprocessed = _preprocess_image(image, input_shape)
 
@@ -77,10 +71,7 @@ class Explainer(Classifier):
             original_w=original_w,
         )
 
-        probs = logits_raw.astype(np.float64)
-        probs = probs - probs.max()
-        probs = np.exp(probs)
-        probs = probs / probs.sum()
+        probs = _softmax(logits_raw)
         predicted = classes[int(np.argmax(probs))]
 
         return Explanation(saliency_map=saliency, predicted_class=predicted)
