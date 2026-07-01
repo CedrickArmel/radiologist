@@ -127,7 +127,26 @@ Run `pyenv [command] --help` to display `pyenv`'s help.
 
 Always create worktrees in `PROJECT-ROOT`/.claude/worktrees to maintain clean repo. Never nest worktrees - No exceptions.
 
-[Environment setup](#environment-setup) still apply in worktrees - No exceptions.
+**Never share the `radiologist` venv with a worktree.** Editable installs (`uv sync`) write `.pth` files that point at absolute paths. Running `uv sync --active` inside a worktree while activated on the shared `radiologist` venv rewrites those `.pth` files to point at the worktree's path — when the worktree is later deleted, the main checkout's venv silently breaks (imports resolve to a path that no longer exists).
+
+Instead, each worktree gets its own dedicated pyenv virtualenv, named after the worktree:
+
+```bash
+pyenv virtualenv 3.10.16 radiologist-<worktree-name>
+pyenv activate radiologist-<worktree-name>   # do not rely on .python-version here — activate explicitly
+make dev-install
+```
+
+[Environment setup](#environment-setup) otherwise still applies (same Python version, same `make dev-install` target) — only the venv name changes.
+
+At the end of the task, before removing the worktree:
+
+```bash
+pyenv deactivate
+pyenv virtualenv-delete -f radiologist-<worktree-name>
+```
+
+Do not leave orphaned `radiologist-<worktree-name>` venvs behind — delete the venv in the same step as the worktree.
 
 When an subagent ends his work in a worktree:
 
