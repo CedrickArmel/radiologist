@@ -36,7 +36,10 @@ class ArtifactRef:
 
 @dataclass(frozen=True)
 class ExportResult:
-    """Paths to exported ONNX files — produced by core.export_onnx(), consumed by WandbRegistry.promote()."""
+    """Paths to exported ONNX files — produced by core.export_onnx().
+
+    Consumed by WandbRegistry.log_model_artifacts().
+    """
 
     det_path: str
     mcd_path: str
