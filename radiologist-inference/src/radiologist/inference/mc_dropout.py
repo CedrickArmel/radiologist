@@ -24,13 +24,14 @@
 
 from __future__ import annotations
 
-from typing import Union
+import json
+from typing import List, Union
 
 import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
-from radiologist.inference.base_predictor import BasePredictor
+from radiologist.inference.base_predictor import BasePredictor, _preprocess_image
 from radiologist.inference.models import UncertaintyResult
 
 
@@ -47,7 +48,15 @@ class MCDropoutPredictor(BasePredictor):
         Raises:
             RuntimeError: When no stochastic (MC-Dropout) session was loaded.
         """
-        raise NotImplementedError
+        mcd_session = self._state.mcd_session
+        if mcd_session is None:
+            raise RuntimeError(
+                "MC-Dropout inference requires mcd_path to be supplied when"
+                " loading the predictor via from_path()."
+            )
+        input_shape: List[int] = json.loads(self._state.metadata["input_shape"])
+        arr = _preprocess_image(image, input_shape)
+        return mc_dropout_predict(mcd_session, arr, n_passes=n_passes)
 
 
 def mc_dropout_predict(
@@ -64,4 +73,30 @@ def mc_dropout_predict(
         UncertaintyResult with mean probabilities, per-class std, entropy, and
         pass count.
     """
-    raise NotImplementedError
+    meta = dict(session.get_modelmeta().custom_metadata_map)
+    classes: List[str] = json.loads(meta["classes"])
+
+    input_name = session.get_inputs()[0].name
+    all_probs: List["np.ndarray"] = []
+    for _ in range(n_passes):
+        outputs = session.run(["logits"], {input_name: image})
+        raw: "np.ndarray" = outputs[0][0]
+        softmax = raw.astype(np.float64)
+        softmax = softmax - softmax.max()
+        softmax = np.exp(softmax)
+        softmax = (softmax / softmax.sum()).astype(np.float32)
+        all_probs.append(softmax)
+
+    stacked = np.stack(all_probs, axis=0)  # (n_passes, n_classes)
+    mean_p = stacked.mean(axis=0)
+    std_p = stacked.std(axis=0)
+
+    epsilon = 1e-12
+    entropy = float(-np.sum(mean_p * np.log(mean_p + epsilon)))
+
+    return UncertaintyResult(
+        mean_probabilities={c: float(mean_p[i]) for i, c in enumerate(classes)},
+        std_per_class={c: float(std_p[i]) for i, c in enumerate(classes)},
+        predictive_entropy=entropy,
+        n_passes=n_passes,
+    )
