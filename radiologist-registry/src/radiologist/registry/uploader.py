@@ -24,7 +24,11 @@ from typing import Any, Optional
 
 from radiologist.registry.alias_manager import _WandbAliasManager
 from radiologist.registry.models import ExportResult, LoggedArtifacts, PromoteResult
-from radiologist.registry.optional import _guard_wandb, _wandb  # noqa: F401
+from radiologist.registry.optional import (  # noqa: F401
+    _MODEL_ARTIFACT_TYPE,
+    _guard_wandb,
+    _wandb,
+)
 
 
 class _WandbUploader:
@@ -45,17 +49,23 @@ class _WandbUploader:
         det_name = f"model-{run_id}"
         mcd_name = f"model-{run_id}-mcd"
 
-        det_art = _wandb.Artifact(det_name, type="model")  # type: ignore[union-attr]
+        det_art = _wandb.Artifact(  # type: ignore[union-attr]
+            det_name, type=_MODEL_ARTIFACT_TYPE
+        )
         det_art.add_file(export_result.det_path)
         det_art.add_file(ckpt_path)
         run.log_artifact(det_art, aliases=["best"])
 
-        mcd_art = _wandb.Artifact(mcd_name, type="model")  # type: ignore[union-attr]
+        mcd_art = _wandb.Artifact(  # type: ignore[union-attr]
+            mcd_name, type=_MODEL_ARTIFACT_TYPE
+        )
         mcd_art.add_file(export_result.mcd_path)
         run.log_artifact(mcd_art, aliases=["best"])
 
         if last_ckpt_path:
-            last_art = _wandb.Artifact(det_name, type="model")  # type: ignore[union-attr]
+            last_art = _wandb.Artifact(  # type: ignore[union-attr]
+                det_name, type=_MODEL_ARTIFACT_TYPE
+            )
             last_art.add_file(last_ckpt_path)
             run.log_artifact(last_art, aliases=["last"])
 
