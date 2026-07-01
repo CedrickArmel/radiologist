@@ -22,7 +22,6 @@
 
 from pathlib import Path
 
-import pytest
 from omegaconf import OmegaConf
 
 _CONFIGS_DIR = Path(__file__).parent.parent / "src" / "radiologist" / "core" / "configs"
@@ -32,17 +31,6 @@ def test_onnx_export_callback_importable_from_public_api():
     from radiologist.core import OnnxExportCallback
 
     assert OnnxExportCallback is not None
-
-
-def test_onnx_export_callback_init_raises_not_implemented():
-    from radiologist.core import OnnxExportCallback
-
-    with pytest.raises(NotImplementedError):
-        OnnxExportCallback(
-            input_shape=(1, 3, 224, 224),
-            classes=["normal", "abnormal"],
-            cam_target_layer="layer4",
-        )
 
 
 def test_train_yaml_declares_resume_ref_and_resume_path_null():

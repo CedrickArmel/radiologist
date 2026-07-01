@@ -23,6 +23,10 @@
 from typing import Any, List, Tuple
 
 import lightning as L
+import wandb
+
+from radiologist.core.registry import export_onnx
+from radiologist.registry import WandbRegistry
 
 
 class OnnxExportCallback(L.Callback):
@@ -38,7 +42,32 @@ class OnnxExportCallback(L.Callback):
         cam_target_layer: str,
         opset: int = 18,
     ) -> None:
-        raise NotImplementedError
+        super().__init__()
+        self.input_shape = input_shape
+        self.classes = classes
+        self.cam_target_layer = cam_target_layer
+        self.opset = opset
+        self._registry = WandbRegistry()
 
     def on_fit_end(self, trainer: Any, pl_module: Any) -> None:
-        raise NotImplementedError
+        run = getattr(wandb, "run", None)
+        if run is None:
+            return
+
+        checkpoint_callback = getattr(trainer, "checkpoint_callback", None)
+        best_ckpt = getattr(checkpoint_callback, "best_model_path", "")
+        if not best_ckpt:
+            return
+        last_ckpt = getattr(checkpoint_callback, "last_model_path", "") or None
+
+        out_dir = trainer.log_dir or trainer.default_root_dir
+        result = export_onnx(
+            ckpt_path=best_ckpt,
+            run_id=run.id,
+            input_shape=self.input_shape,
+            classes=self.classes,
+            cam_target_layer=self.cam_target_layer,
+            out_dir=out_dir,
+            opset=self.opset,
+        )
+        self._registry.log_model_artifacts(result, run, best_ckpt, last_ckpt)
