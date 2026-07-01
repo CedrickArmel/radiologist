@@ -24,12 +24,17 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Union
+import json
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
-from radiologist.inference.base_predictor import BasePredictor
+from radiologist.inference.base_predictor import (
+    BasePredictor,
+    _apply_prior_correction,
+    _preprocess_image,
+)
 from radiologist.inference.models import Prediction
 
 
@@ -54,4 +59,29 @@ class Classifier(BasePredictor):
         Returns:
             Prediction with per-class probabilities and predicted class label.
         """
-        raise NotImplementedError
+        meta = self._state.metadata
+        classes: List[str] = json.loads(meta["classes"])
+        input_shape: List[int] = json.loads(meta["input_shape"])
+
+        arr = _preprocess_image(image, input_shape)
+
+        session = self._state.det_session
+        input_name = session.get_inputs()[0].name
+        outputs = session.run(["logits"], {input_name: arr})
+        logits: np.ndarray = outputs[0][0]
+
+        softmax = logits.astype(np.float64)
+        softmax = softmax - softmax.max()
+        softmax = np.exp(softmax)
+        softmax = (softmax / softmax.sum()).astype(np.float32)
+
+        effective_prior: Optional[Dict[str, float]] = deployment_prior
+        if effective_prior is None and "training_prior" in meta:
+            effective_prior = json.loads(meta["training_prior"])
+
+        if effective_prior is not None:
+            softmax = _apply_prior_correction(softmax, classes, effective_prior)
+
+        probs = {c: float(softmax[i]) for i, c in enumerate(classes)}
+        predicted = max(probs, key=probs.__getitem__)
+        return Prediction(probabilities=probs, predicted_class=predicted)

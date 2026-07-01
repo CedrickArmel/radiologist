@@ -28,18 +28,30 @@ in the subclasses defined in classifier.py, explainer.py, and mc_dropout.py.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
+from radiologist.registry.wandb_registry import WandbRegistry
+
 if TYPE_CHECKING:
     from radiologist.registry.interface import ModelRegistry
 
 
+@dataclass
+class _PredictorState:
+    det_session: ort.InferenceSession
+    metadata: Dict[str, str]
+    mcd_session: Optional[ort.InferenceSession] = field(default=None)
+
+
 class BasePredictor:
     """Common loading and preprocessing surface for all predictor classes."""
+
+    _state: _PredictorState
 
     @classmethod
     def from_path(
@@ -57,7 +69,20 @@ class BasePredictor:
         Raises:
             FileNotFoundError: If det_path does not exist.
         """
-        raise NotImplementedError
+        det_session = ort.InferenceSession(det_path)
+        metadata = _read_metadata(det_session)
+
+        mcd_session: Optional[ort.InferenceSession] = None
+        if mcd_path is not None:
+            mcd_session = ort.InferenceSession(mcd_path)
+
+        instance = cls.__new__(cls)
+        instance._state = _PredictorState(
+            det_session=det_session,
+            metadata=metadata,
+            mcd_session=mcd_session,
+        )
+        return instance
 
     @classmethod
     def from_registry(
@@ -80,12 +105,14 @@ class BasePredictor:
         Raises:
             RuntimeError: When the ``registry`` extra (wandb) is not installed.
         """
-        raise NotImplementedError
+        reg = registry if registry is not None else WandbRegistry()
+        det_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
+        return cls.from_path(det_path=det_path)
 
 
 def _read_metadata(session: "ort.InferenceSession") -> Dict[str, str]:
     """Extract custom_metadata_map from an ONNX InferenceSession."""
-    raise NotImplementedError
+    return dict(session.get_modelmeta().custom_metadata_map)
 
 
 def _preprocess_image(
@@ -101,7 +128,18 @@ def _preprocess_image(
     Returns:
         Float32 array of shape (1, C, H, W) with values in [0, 1].
     """
-    raise NotImplementedError
+    _, _, h, w = input_shape
+    if isinstance(image, str):
+        pil_img = PILImage.open(image).convert("RGB")
+    elif isinstance(image, np.ndarray):
+        pil_img = PILImage.fromarray(image).convert("RGB")
+    else:
+        pil_img = image.convert("RGB")
+
+    pil_img = pil_img.resize((w, h), PILImage.Resampling.BILINEAR)
+    arr = np.array(pil_img, dtype=np.float32) / 255.0
+    arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
+    return arr
 
 
 def _apply_prior_correction(
@@ -117,4 +155,9 @@ def _apply_prior_correction(
     Returns:
         Renormalized 1-D float32 array.
     """
-    raise NotImplementedError
+    weights = np.array([prior[c] for c in classes], dtype=np.float32)
+    corrected = softmax * weights
+    total = corrected.sum()
+    if total > 0:
+        corrected = corrected / total
+    return corrected
