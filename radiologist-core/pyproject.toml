@@ -56,6 +56,3 @@ module-name = "radiologist.core"
 radiologist-etl = { workspace = true }
 radiologist-registry = { workspace = true }
 radiologist-utils = { workspace = true }
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]

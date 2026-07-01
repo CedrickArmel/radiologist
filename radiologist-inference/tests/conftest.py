@@ -20,9 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
-from _helpers import build_det_onnx, build_mcd_onnx
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _helpers import build_det_onnx, build_mcd_onnx  # noqa: E402
 
 
 @pytest.fixture()
