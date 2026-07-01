@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 from PIL import Image as PILImage  # type: ignore[import-untyped]
@@ -34,6 +34,7 @@ from radiologist.inference.base_predictor import (
     BasePredictor,
     _apply_prior_correction,
     _preprocess_image,
+    _softmax,
 )
 from radiologist.inference.models import Prediction
 
@@ -60,8 +61,9 @@ class Classifier(BasePredictor):
             Prediction with per-class probabilities and predicted class label.
         """
         meta = self._state.metadata
-        classes: List[str] = json.loads(meta["classes"])
-        input_shape: List[int] = json.loads(meta["input_shape"])
+        model_metadata = self._state.model_metadata
+        classes = model_metadata.classes
+        input_shape = model_metadata.input_shape
 
         arr = _preprocess_image(image, input_shape)
 
@@ -70,10 +72,7 @@ class Classifier(BasePredictor):
         outputs = session.run(["logits"], {input_name: arr})
         logits: np.ndarray = outputs[0][0]
 
-        softmax = logits.astype(np.float64)
-        softmax = softmax - softmax.max()
-        softmax = np.exp(softmax)
-        softmax = (softmax / softmax.sum()).astype(np.float32)
+        softmax = _softmax(logits)
 
         effective_prior: Optional[Dict[str, float]] = deployment_prior
         if effective_prior is None and "training_prior" in meta:

@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Behavioral tests for Explainer (issue #93).
+"""Behavioral tests for Explainer.
 
 Tests drive through the public API only: Explainer.from_path, Explainer.explain,
 and the inherited Explainer.predict. Real ONNX models are built per test — no

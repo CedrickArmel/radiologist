@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Tests for the radiologist.inference public API surface (issue #91).
+"""Tests for the radiologist.inference public API surface.
 
 Asserts only import/shape contracts for the decomposed predictor hierarchy.
 Behavioral tests for predict/explain/predict_with_uncertainty are owned by

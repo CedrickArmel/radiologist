@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Behavioural tests for the isinstance-driven create_app() factory (issue #95)."""
+"""Behavioural tests for the isinstance-driven create_app() factory."""
 
 import io
 from typing import Any

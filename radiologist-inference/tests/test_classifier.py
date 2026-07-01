@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Behavioral tests for Classifier / BasePredictor (issue #92).
+"""Behavioral tests for Classifier / BasePredictor.
 
 Tests drive through the public API only: Classifier.from_path,
 Classifier.from_registry, Classifier.predict. Fixtures build real ONNX
