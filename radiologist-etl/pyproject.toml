@@ -41,6 +41,3 @@ module-name = "radiologist.etl"
 
 [tool.uv.sources]
 radiologist-utils = { workspace = true }
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]

@@ -25,6 +25,3 @@ version = "0.1.0"
 tag_format = "${version}-radiologist-registry"
 ignored_tag_formats = ["${version}-radiologist-*"]
 update_changelog_on_bump = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
