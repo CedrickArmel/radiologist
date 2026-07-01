@@ -20,7 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from unittest.mock import MagicMock
+from typing import List
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -148,27 +149,202 @@ class TestUploaderLogModelArtifacts:
         assert not fake_run.link_artifact.called
 
 
-class TestUploaderLinkToCollectionStubContract:
-    def test_link_to_collection_raises_not_implemented(self):
-        from radiologist.registry.uploader import _WandbUploader
+def _make_artifact(qualified_name: str, aliases: List[str]) -> MagicMock:
+    art = MagicMock()
+    art.qualified_name = qualified_name
+    art.aliases = list(aliases)
+    art.save = MagicMock()
+    art.link = MagicMock()
+    return art
 
-        with pytest.raises(NotImplementedError):
-            _WandbUploader().link_to_collection(
-                "entity/project/model-abc123:best",
-                "entity/project/model-abc123-mcd:best",
+
+class TestUploaderLinkToCollection:
+    def test_links_det_and_mcd_artifacts_with_given_alias(self):
+        det_art = _make_artifact("entity/project/model-abc123:best", ["best"])
+        mcd_art = _make_artifact("entity/project/model-abc123-mcd:best", ["best"])
+        with patch("radiologist.registry.uploader._wandb") as mock_wandb:
+            mock_api = MagicMock()
+            mock_wandb.Api.return_value = mock_api
+            mock_api.artifact.side_effect = [det_art, mcd_art]
+
+            from radiologist.registry.uploader import _WandbUploader
+
+            result = _WandbUploader().link_to_collection(
+                det_art.qualified_name,
+                mcd_art.qualified_name,
                 "det-collection",
                 "mcd-collection",
-                "staging",
+                "production",
             )
 
+        det_art.link.assert_called_once_with("det-collection", aliases=["production"])
+        mcd_art.link.assert_called_once_with("mcd-collection", aliases=["production"])
+        assert result.det_qualified_name == det_art.qualified_name
+        assert result.mcd_qualified_name == mcd_art.qualified_name
+        assert result.alias == "production"
 
-class TestWandbRegistryPromoteStubContract:
-    def test_promote_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            WandbRegistry().promote(
+
+class TestWandbRegistryPromote:
+    def test_applies_production_when_collection_has_no_production_member(self):
+        det_art = _make_artifact("entity/project/model-abc123:best", ["best"])
+        mcd_art = _make_artifact("entity/project/model-abc123-mcd:best", ["best"])
+        with (
+            patch("radiologist.registry.resolver._wandb") as resolver_wandb,
+            patch("radiologist.registry.collection._wandb") as collection_wandb,
+            patch("radiologist.registry.uploader._wandb") as uploader_wandb,
+        ):
+            resolver_api = MagicMock()
+            resolver_wandb.Api.return_value = resolver_api
+            resolver_api.artifact.side_effect = [det_art, mcd_art]
+
+            collection_api = MagicMock()
+            collection_wandb.Api.return_value = collection_api
+            det_collection_obj = MagicMock()
+            det_collection_obj.artifacts.return_value = []
+            collection_api.artifact_collection.return_value = det_collection_obj
+
+            uploader_api = MagicMock()
+            uploader_wandb.Api.return_value = uploader_api
+            uploader_api.artifact.side_effect = [det_art, mcd_art]
+
+            registry = WandbRegistry()
+            result = registry.promote(
                 "entity/project", "abc123", "det-collection", "mcd-collection"
             )
 
-    def test_transition_to_production_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            WandbRegistry().transition_to_production("det-collection", "mcd-collection")
+        det_art.link.assert_called_once_with("det-collection", aliases=["production"])
+        mcd_art.link.assert_called_once_with("mcd-collection", aliases=["production"])
+        assert result.alias == "production"
+
+    def test_applies_staging_when_collection_already_has_production_member(self):
+        det_art = _make_artifact("entity/project/model-abc123:best", ["best"])
+        mcd_art = _make_artifact("entity/project/model-abc123-mcd:best", ["best"])
+        with (
+            patch("radiologist.registry.resolver._wandb") as resolver_wandb,
+            patch("radiologist.registry.collection._wandb") as collection_wandb,
+            patch("radiologist.registry.uploader._wandb") as uploader_wandb,
+        ):
+            resolver_api = MagicMock()
+            resolver_wandb.Api.return_value = resolver_api
+            resolver_api.artifact.side_effect = [det_art, mcd_art]
+
+            collection_api = MagicMock()
+            collection_wandb.Api.return_value = collection_api
+            existing_production = _make_artifact(
+                "entity/project/model-xyz:v0", ["production"]
+            )
+            det_collection_obj = MagicMock()
+            det_collection_obj.artifacts.return_value = [existing_production]
+            collection_api.artifact_collection.return_value = det_collection_obj
+
+            uploader_api = MagicMock()
+            uploader_wandb.Api.return_value = uploader_api
+            uploader_api.artifact.side_effect = [det_art, mcd_art]
+
+            registry = WandbRegistry()
+            result = registry.promote(
+                "entity/project", "abc123", "det-collection", "mcd-collection"
+            )
+
+        det_art.link.assert_called_once_with("det-collection", aliases=["staging"])
+        mcd_art.link.assert_called_once_with("mcd-collection", aliases=["staging"])
+        assert result.alias == "staging"
+
+    def test_does_not_download_any_local_file(self):
+        det_art = _make_artifact("entity/project/model-abc123:best", ["best"])
+        mcd_art = _make_artifact("entity/project/model-abc123-mcd:best", ["best"])
+        with (
+            patch("radiologist.registry.resolver._wandb") as resolver_wandb,
+            patch("radiologist.registry.collection._wandb") as collection_wandb,
+            patch("radiologist.registry.uploader._wandb") as uploader_wandb,
+        ):
+            resolver_api = MagicMock()
+            resolver_wandb.Api.return_value = resolver_api
+            resolver_api.artifact.side_effect = [det_art, mcd_art]
+
+            collection_api = MagicMock()
+            collection_wandb.Api.return_value = collection_api
+            det_collection_obj = MagicMock()
+            det_collection_obj.artifacts.return_value = []
+            collection_api.artifact_collection.return_value = det_collection_obj
+
+            uploader_api = MagicMock()
+            uploader_wandb.Api.return_value = uploader_api
+            uploader_api.artifact.side_effect = [det_art, mcd_art]
+
+            registry = WandbRegistry()
+            registry.promote(
+                "entity/project", "abc123", "det-collection", "mcd-collection"
+            )
+
+        det_art.download.assert_not_called()
+        mcd_art.download.assert_not_called()
+
+
+class TestWandbRegistryTransitionToProduction:
+    def test_flips_staging_to_production_in_both_collections(self):
+        det_staging = _make_artifact("entity/project/model-a:v0", ["staging"])
+        det_production = _make_artifact("entity/project/model-b:v0", ["production"])
+        mcd_staging = _make_artifact("entity/project/model-c-mcd:v0", ["staging"])
+        mcd_production = _make_artifact("entity/project/model-d-mcd:v0", ["production"])
+        with (
+            patch("radiologist.registry.collection._wandb") as collection_wandb,
+            patch("radiologist.registry.alias_manager._wandb") as alias_wandb,
+        ):
+            collection_api = MagicMock()
+            collection_wandb.Api.return_value = collection_api
+            det_collection_obj = MagicMock()
+            det_collection_obj.artifacts.return_value = [det_staging, det_production]
+            mcd_collection_obj = MagicMock()
+            mcd_collection_obj.artifacts.return_value = [mcd_staging, mcd_production]
+            collection_api.artifact_collection.side_effect = [
+                det_collection_obj,
+                mcd_collection_obj,
+            ]
+
+            alias_api = MagicMock()
+            alias_wandb.Api.return_value = alias_api
+            alias_api.artifact.side_effect = [
+                det_production,
+                det_staging,
+                mcd_production,
+                mcd_staging,
+            ]
+
+            registry = WandbRegistry()
+            result = registry.transition_to_production(
+                "det-collection", "mcd-collection"
+            )
+
+        assert "production" not in det_production.aliases
+        assert "production" in det_staging.aliases
+        assert "production" not in mcd_production.aliases
+        assert "production" in mcd_staging.aliases
+        assert result.alias == "production"
+        assert result.det_qualified_name == det_staging.qualified_name
+        assert result.mcd_qualified_name == mcd_staging.qualified_name
+
+    def test_raises_lookup_error_when_no_staging_member_in_a_collection(self):
+        det_production = _make_artifact("entity/project/model-b:v0", ["production"])
+        mcd_staging = _make_artifact("entity/project/model-c-mcd:v0", ["staging"])
+        with (
+            patch("radiologist.registry.collection._wandb") as collection_wandb,
+            patch("radiologist.registry.alias_manager._wandb") as alias_wandb,
+        ):
+            collection_api = MagicMock()
+            collection_wandb.Api.return_value = collection_api
+            det_collection_obj = MagicMock()
+            det_collection_obj.artifacts.return_value = [det_production]
+            mcd_collection_obj = MagicMock()
+            mcd_collection_obj.artifacts.return_value = [mcd_staging]
+            collection_api.artifact_collection.side_effect = [
+                det_collection_obj,
+                mcd_collection_obj,
+            ]
+
+            registry = WandbRegistry()
+            with pytest.raises(LookupError):
+                registry.transition_to_production("det-collection", "mcd-collection")
+
+        alias_wandb.Api.assert_not_called()
+        assert "production" in det_production.aliases
