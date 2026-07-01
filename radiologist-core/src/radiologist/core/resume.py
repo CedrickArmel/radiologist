@@ -20,9 +20,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from typing import Optional
+from typing import Optional, Tuple
 
+import torch
 from omegaconf import DictConfig
+
+from radiologist.registry import WandbRegistry
+
+
+def _parse_resume_ref(resume_ref: str) -> Tuple[str, str]:
+    parts = resume_ref.split(":")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(
+            f"resume_ref must be '<run_id>:<tag>' with non-empty parts, "
+            f"got {resume_ref!r}."
+        )
+    run_id, tag = parts
+    return run_id, tag
 
 
 def resolve_resume_ckpt(cfg: DictConfig) -> Optional[str]:
@@ -37,7 +51,27 @@ def resolve_resume_ckpt(cfg: DictConfig) -> Optional[str]:
             ``resume_ref`` and ``ckpt_path`` are set, or if ``resume_ref``
             does not parse as ``'<run_id>:<tag>'``.
     """
-    raise NotImplementedError
+    resume_ref = cfg.get("resume_ref")
+    resume_path = cfg.get("resume_path")
+    ckpt_path = cfg.get("ckpt_path")
+
+    if resume_ref:
+        if not resume_path:
+            raise ValueError(
+                "resume_path must be set when resume_ref is set "
+                "(resume_ref, resume_path)."
+            )
+        if ckpt_path:
+            raise ValueError(
+                "resume_ref and ckpt_path are mutually exclusive resume "
+                "sources; set only one (ckpt_path, resume_ref)."
+            )
+        run_id, tag = _parse_resume_ref(resume_ref)
+        registry = WandbRegistry()
+        ref = registry.resolve(path=resume_path, run_id=run_id, version=tag)
+        return registry.download(ref, cfg.paths.output_dir)
+
+    return ckpt_path
 
 
 def restore_precision(cfg: DictConfig, ckpt_path: str) -> None:
@@ -49,4 +83,7 @@ def restore_precision(cfg: DictConfig, ckpt_path: str) -> None:
     user's own local path or their authenticated W&B project, never an
     untrusted source. Do not switch to weights_only=True.
     """
-    raise NotImplementedError
+    checkpoint = torch.load(ckpt_path, weights_only=False)
+    precision = checkpoint.get("precision")
+    if precision is not None:
+        cfg.trainer.precision = precision
