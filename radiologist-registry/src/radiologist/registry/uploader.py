@@ -22,12 +22,16 @@
 
 from typing import Any, Optional
 
+from radiologist.registry.alias_manager import _WandbAliasManager
 from radiologist.registry.models import ExportResult, LoggedArtifacts, PromoteResult
 from radiologist.registry.optional import _guard_wandb, _wandb  # noqa: F401
 
 
 class _WandbUploader:
     """W&B seam for artifact upload operations."""
+
+    def __init__(self) -> None:
+        self._alias_manager = _WandbAliasManager()
 
     def log_model_artifacts(
         self,
@@ -77,8 +81,15 @@ class _WandbUploader:
         det_art = api.artifact(det_qualified_name)
         det_art.link(det_collection, aliases=[alias])
 
-        mcd_art = api.artifact(mcd_qualified_name)
-        mcd_art.link(mcd_collection, aliases=[alias])
+        try:
+            mcd_art = api.artifact(mcd_qualified_name)
+            mcd_art.link(mcd_collection, aliases=[alias])
+        except Exception:
+            try:
+                self._alias_manager.remove_alias(det_qualified_name, alias)
+            except Exception:
+                pass
+            raise
 
         return PromoteResult(
             det_qualified_name=det_qualified_name,
