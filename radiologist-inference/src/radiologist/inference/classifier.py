@@ -60,9 +60,7 @@ class Classifier(BasePredictor):
         Returns:
             Prediction with per-class probabilities and predicted class label.
         """
-        meta = self._state.metadata
         model_metadata = self._state.model_metadata
-        classes = model_metadata.classes
         input_shape = model_metadata.input_shape
 
         arr = _preprocess_image(image, input_shape)
@@ -71,6 +69,21 @@ class Classifier(BasePredictor):
         input_name = session.get_inputs()[0].name
         outputs = session.run(["logits"], {input_name: arr})
         logits: np.ndarray = outputs[0][0]
+
+        return self._predict_from_logits(logits, deployment_prior)
+
+    def _predict_from_logits(
+        self,
+        logits: "np.ndarray",
+        deployment_prior: Optional[Dict[str, float]] = None,
+    ) -> Prediction:
+        """Turn raw model logits into a prior-corrected Prediction.
+
+        Shared by predict() and Explainer.explain() so predicted_class always
+        agrees between the two, regardless of which one triggered inference.
+        """
+        meta = self._state.metadata
+        classes = self._state.model_metadata.classes
 
         softmax = _softmax(logits)
 

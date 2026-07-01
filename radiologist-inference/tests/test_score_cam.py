@@ -20,9 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Behavioral tests for the standalone score_cam() saliency function (issue #79).
+"""Behavioral tests for the standalone score_cam() saliency function.
 
-Tests drive through the public API only. Predictor.explain()'s behavioral
+Tests drive through the public API only. Explainer.explain()'s behavioral
 coverage lives in test_explainer.py, which exercises the same saliency
 computation through Explainer.explain().
 """

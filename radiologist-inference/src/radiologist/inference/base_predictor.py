@@ -158,6 +158,23 @@ def _to_pil(image: Union[str, "np.ndarray", "PILImage.Image"]) -> "PILImage.Imag
     return image.convert("RGB")
 
 
+def _normalize_pil(pil_img: "PILImage.Image", input_shape: List[int]) -> "np.ndarray":
+    """Resize and normalize an already-decoded PIL image to a float32 NCHW array.
+
+    Args:
+        pil_img: RGB-converted PIL Image.
+        input_shape: [N, C, H, W] as stored in model metadata.
+
+    Returns:
+        Float32 array of shape (1, C, H, W) with values in [0, 1].
+    """
+    _, _, h, w = input_shape
+    pil_img = pil_img.resize((w, h), PILImage.Resampling.BILINEAR)
+    arr = np.array(pil_img, dtype=np.float32) / 255.0
+    arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
+    return arr
+
+
 def _preprocess_image(
     image: Union[str, "np.ndarray", "PILImage.Image"],
     input_shape: List[int],
@@ -171,12 +188,7 @@ def _preprocess_image(
     Returns:
         Float32 array of shape (1, C, H, W) with values in [0, 1].
     """
-    _, _, h, w = input_shape
-    pil_img = _to_pil(image)
-    pil_img = pil_img.resize((w, h), PILImage.Resampling.BILINEAR)
-    arr = np.array(pil_img, dtype=np.float32) / 255.0
-    arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
-    return arr
+    return _normalize_pil(_to_pil(image), input_shape)
 
 
 def _softmax(logits: "np.ndarray") -> "np.ndarray":

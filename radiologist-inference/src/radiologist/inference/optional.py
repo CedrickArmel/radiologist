@@ -28,11 +28,6 @@ RuntimeError naming the missing extra.
 """
 
 try:
-    import wandb as _wandb  # type: ignore[import-untyped]
-except ImportError:
-    _wandb = None  # type: ignore[assignment]
-
-try:
     import fastapi as _fastapi  # type: ignore[import-untyped]
 except ImportError:
     _fastapi = None  # type: ignore[assignment]
