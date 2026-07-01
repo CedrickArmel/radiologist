@@ -54,23 +54,6 @@ def test_collection_lister_list_collection_artifacts_raises_not_implemented():
         _WandbCollectionLister().list_collection_artifacts("model", "det-collection")
 
 
-def test_wandb_registry_log_model_artifacts_raises_not_implemented():
-    from unittest.mock import MagicMock
-
-    from radiologist.registry.models import ExportResult
-    from radiologist.registry.wandb_registry import WandbRegistry
-
-    export_result = ExportResult(
-        det_path="/tmp/model.onnx",
-        mcd_path="/tmp/model_mcd.onnx",
-        run_id="abc123",
-        input_shape=(1, 3, 224, 224),
-        classes=["normal", "abnormal"],
-    )
-    with pytest.raises(NotImplementedError):
-        WandbRegistry().log_model_artifacts(export_result, MagicMock(), "best.ckpt")
-
-
 def test_wandb_registry_list_collection_artifacts_raises_not_implemented():
     from radiologist.registry.wandb_registry import WandbRegistry
 

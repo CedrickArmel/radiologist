@@ -36,7 +36,32 @@ class _WandbUploader:
         ckpt_path: str,
         last_ckpt_path: Optional[str] = None,
     ) -> LoggedArtifacts:
-        raise NotImplementedError
+        _guard_wandb()
+        run_id = export_result.run_id
+        det_name = f"model-{run_id}"
+        mcd_name = f"model-{run_id}-mcd"
+
+        det_art = _wandb.Artifact(det_name, type="model")  # type: ignore[union-attr]
+        det_art.add_file(export_result.det_path)
+        det_art.add_file(ckpt_path)
+        run.log_artifact(det_art, aliases=["best"])
+
+        mcd_art = _wandb.Artifact(mcd_name, type="model")  # type: ignore[union-attr]
+        mcd_art.add_file(export_result.mcd_path)
+        run.log_artifact(mcd_art, aliases=["best"])
+
+        if last_ckpt_path:
+            last_art = _wandb.Artifact(det_name, type="model")  # type: ignore[union-attr]
+            last_art.add_file(last_ckpt_path)
+            run.log_artifact(last_art, aliases=["last"])
+
+        entity = getattr(run, "entity", "")
+        project = getattr(run, "project", "")
+        return LoggedArtifacts(
+            det_qualified_name=f"{entity}/{project}/{det_name}:best",
+            mcd_qualified_name=f"{entity}/{project}/{mcd_name}:best",
+            run_id=run_id,
+        )
 
     def link_to_collection(
         self,
