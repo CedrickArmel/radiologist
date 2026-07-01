@@ -245,6 +245,7 @@ def ckpt_path(tmp_path, lmodule):
 
     Stores the cfg DictConfig in hyper_parameters so Lightning reconstructs
     the module via LModule(cfg=...) using the same architecture as lmodule.
+    Includes "precision", mirroring LModule.on_save_checkpoint.
     """
     import lightning as L
     import torch
@@ -256,6 +257,7 @@ def ckpt_path(tmp_path, lmodule):
         "pytorch-lightning_version": L.__version__,
         "state_dict": lmodule.state_dict(),
         "hyper_parameters": {"cfg": _LMODULE_CFG},
+        "precision": "32-true",
     }
     torch.save(ckpt, path)
     return path

@@ -45,22 +45,6 @@ def test_onnx_export_callback_init_raises_not_implemented():
         )
 
 
-def test_resolve_resume_ckpt_raises_not_implemented():
-    from radiologist.core.resume import resolve_resume_ckpt
-
-    cfg = OmegaConf.create({"ckpt_path": None, "resume_ref": None, "resume_path": None})
-    with pytest.raises(NotImplementedError):
-        resolve_resume_ckpt(cfg)
-
-
-def test_restore_precision_raises_not_implemented(ckpt_path):
-    from radiologist.core.resume import restore_precision
-
-    cfg = OmegaConf.create({"trainer": {"precision": 32}})
-    with pytest.raises(NotImplementedError):
-        restore_precision(cfg, ckpt_path)
-
-
 def test_train_yaml_declares_resume_ref_and_resume_path_null():
     cfg = OmegaConf.load(_CONFIGS_DIR / "train.yaml")
     assert cfg.resume_ref is None
