@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Behavioural tests for create_app() and all HTTP routes (issue #81)."""
+"""Behavioural tests for the isinstance-driven create_app() factory (issue #95)."""
 
 import io
 from typing import Any
@@ -31,7 +31,7 @@ from _helpers import build_det_onnx, build_mcd_onnx
 from fastapi.testclient import TestClient
 from PIL import Image as PILImage
 
-from radiologist.inference.predictor import Predictor, create_app
+from radiologist.inference import Classifier, Explainer, MCDropoutPredictor, create_app
 
 
 def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
@@ -43,198 +43,191 @@ def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
 
 
 @pytest.fixture()
-def predictor(tmp_path) -> Predictor:
+def classifier(tmp_path) -> Classifier:
+    det_path = build_det_onnx(tmp_path, filename="det.onnx")
+    return Classifier.from_path(det_path=det_path)
+
+
+@pytest.fixture()
+def explainer(tmp_path) -> Explainer:
+    det_path = build_det_onnx(tmp_path, filename="det.onnx")
+    return Explainer.from_path(det_path=det_path)
+
+
+@pytest.fixture()
+def mcd_predictor(tmp_path) -> MCDropoutPredictor:
     det_path = build_det_onnx(tmp_path, filename="det.onnx")
     mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
-    return Predictor.from_path(det_path=det_path, mcd_path=mcd_path)
-
-
-@pytest.fixture()
-def client(predictor: Predictor) -> TestClient:
-    app = create_app(predictor=predictor)
-    return TestClient(app)
-
-
-@pytest.fixture()
-def client_no_model() -> TestClient:
-    app = create_app(predictor=None)
-    return TestClient(app)
+    return MCDropoutPredictor.from_path(det_path=det_path, mcd_path=mcd_path)
 
 
 # ---------------------------------------------------------------------------
-# AC: POST /predict — 200 with probabilities
+# AC: create_app(Classifier(...)) serves /predict + /healthz, 404s the rest.
 # ---------------------------------------------------------------------------
 
 
-class TestPostPredict:
-    def test_returns_200_with_class_probabilities(self, client: TestClient) -> None:
+class TestClassifierApp:
+    @pytest.fixture()
+    def client(self, classifier: Classifier) -> TestClient:
+        return TestClient(create_app(predictor=classifier))
+
+    def test_predict_returns_200_with_probabilities(self, client: TestClient) -> None:
         png = _make_png_bytes()
         response = client.post(
             "/predict", files={"image": ("test.png", png, "image/png")}
         )
         assert response.status_code == 200
-        body = response.json()
-        assert "probabilities" in body
-        assert isinstance(body["probabilities"], dict)
-
-    def test_probabilities_keys_are_class_names(self, client: TestClient) -> None:
-        png = _make_png_bytes()
-        response = client.post(
-            "/predict", files={"image": ("test.png", png, "image/png")}
-        )
         body = response.json()
         assert set(body["probabilities"].keys()) == {"NORMAL", "ABNORMAL"}
-
-    def test_predicted_class_present_in_response(self, client: TestClient) -> None:
-        png = _make_png_bytes()
-        response = client.post(
-            "/predict", files={"image": ("test.png", png, "image/png")}
-        )
-        body = response.json()
         assert "predicted_class" in body
 
-
-# ---------------------------------------------------------------------------
-# AC: POST /explain — 200 with saliency map
-# ---------------------------------------------------------------------------
-
-
-class TestPostExplain:
-    def test_returns_200_with_saliency_map(self, client: TestClient) -> None:
+    def test_explain_route_is_absent(self, client: TestClient) -> None:
         png = _make_png_bytes()
         response = client.post(
             "/explain", files={"image": ("test.png", png, "image/png")}
         )
-        assert response.status_code == 200
-        body = response.json()
-        assert "saliency_map" in body
-        assert isinstance(body["saliency_map"], list)
+        assert response.status_code == 404
 
-    def test_saliency_map_is_nested_list(self, client: TestClient) -> None:
-        png = _make_png_bytes()
-        response = client.post(
-            "/explain", files={"image": ("test.png", png, "image/png")}
-        )
-        body = response.json()
-        assert len(body["saliency_map"]) > 0
-
-    def test_predicted_class_present(self, client: TestClient) -> None:
-        png = _make_png_bytes()
-        response = client.post(
-            "/explain", files={"image": ("test.png", png, "image/png")}
-        )
-        body = response.json()
-        assert "predicted_class" in body
-
-
-# ---------------------------------------------------------------------------
-# AC: POST /uncertainty — 200 with spread and entropy
-# ---------------------------------------------------------------------------
-
-
-class TestPostUncertainty:
-    def test_returns_200_with_per_class_spread(self, client: TestClient) -> None:
+    def test_uncertainty_route_is_absent(self, client: TestClient) -> None:
         png = _make_png_bytes()
         response = client.post(
             "/uncertainty", files={"image": ("test.png", png, "image/png")}
         )
-        assert response.status_code == 200
-        body = response.json()
-        assert "std_per_class" in body
-        assert isinstance(body["std_per_class"], dict)
+        assert response.status_code == 404
 
-    def test_returns_predictive_entropy(self, client: TestClient) -> None:
-        png = _make_png_bytes()
-        response = client.post(
-            "/uncertainty", files={"image": ("test.png", png, "image/png")}
-        )
-        body = response.json()
-        assert "predictive_entropy" in body
-        assert isinstance(body["predictive_entropy"], float)
-
-    def test_returns_mean_probabilities(self, client: TestClient) -> None:
-        png = _make_png_bytes()
-        response = client.post(
-            "/uncertainty", files={"image": ("test.png", png, "image/png")}
-        )
-        body = response.json()
-        assert "mean_probabilities" in body
-
-
-# ---------------------------------------------------------------------------
-# AC: GET /healthz — 200 when model loaded
-# ---------------------------------------------------------------------------
-
-
-class TestGetHealthz:
-    def test_returns_200_when_model_is_loaded(self, client: TestClient) -> None:
+    def test_healthz_returns_200(self, client: TestClient) -> None:
         response = client.get("/healthz")
         assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
 
-    def test_healthz_body_contains_status_ok(self, client: TestClient) -> None:
-        response = client.get("/healthz")
-        body = response.json()
-        assert body.get("status") == "ok"
-
-
-# ---------------------------------------------------------------------------
-# AC: POST /predict — 400 on malformed/missing image
-# ---------------------------------------------------------------------------
-
-
-class TestPostPredictBadInput:
-    def test_returns_400_when_image_field_missing(self, client: TestClient) -> None:
+    def test_predict_returns_400_on_missing_image(self, client: TestClient) -> None:
         response = client.post("/predict")
         assert response.status_code == 400
 
-    def test_returns_400_when_image_bytes_are_not_valid_image(
+    def test_predict_returns_400_on_invalid_image_bytes(
         self, client: TestClient
     ) -> None:
-        garbage = b"this is not an image"
         response = client.post(
             "/predict",
-            files={"image": ("bad.png", garbage, "image/png")},
+            files={"image": ("bad.png", b"not an image", "image/png")},
         )
         assert response.status_code == 400
 
 
 # ---------------------------------------------------------------------------
-# AC: inference endpoints 503 when no model loaded
+# AC: create_app(Explainer(...)) additionally serves /explain.
 # ---------------------------------------------------------------------------
 
 
-class TestNoModelLoaded:
-    def test_predict_returns_503_when_no_predictor(
-        self, client_no_model: TestClient
-    ) -> None:
+class TestExplainerApp:
+    @pytest.fixture()
+    def client(self, explainer: Explainer) -> TestClient:
+        return TestClient(create_app(predictor=explainer))
+
+    def test_predict_still_served(self, client: TestClient) -> None:
         png = _make_png_bytes()
-        response = client_no_model.post(
+        response = client.post(
+            "/predict", files={"image": ("test.png", png, "image/png")}
+        )
+        assert response.status_code == 200
+
+    def test_explain_returns_200_with_saliency_map(self, client: TestClient) -> None:
+        png = _make_png_bytes()
+        response = client.post(
+            "/explain", files={"image": ("test.png", png, "image/png")}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert isinstance(body["saliency_map"], list)
+        assert len(body["saliency_map"]) > 0
+        assert "predicted_class" in body
+
+    def test_uncertainty_route_is_absent(self, client: TestClient) -> None:
+        png = _make_png_bytes()
+        response = client.post(
+            "/uncertainty", files={"image": ("test.png", png, "image/png")}
+        )
+        assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# AC: create_app(MCDropoutPredictor(...)) serves /uncertainty, 404s /predict.
+# ---------------------------------------------------------------------------
+
+
+class TestMCDropoutApp:
+    @pytest.fixture()
+    def client(self, mcd_predictor: MCDropoutPredictor) -> TestClient:
+        return TestClient(create_app(predictor=mcd_predictor))
+
+    def test_uncertainty_returns_200_with_stats(self, client: TestClient) -> None:
+        png = _make_png_bytes()
+        response = client.post(
+            "/uncertainty", files={"image": ("test.png", png, "image/png")}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "mean_probabilities" in body
+        assert "std_per_class" in body
+        assert isinstance(body["predictive_entropy"], float)
+
+    def test_predict_route_is_absent(self, client: TestClient) -> None:
+        png = _make_png_bytes()
+        response = client.post(
+            "/predict", files={"image": ("test.png", png, "image/png")}
+        )
+        assert response.status_code == 404
+
+    def test_explain_route_is_absent(self, client: TestClient) -> None:
+        png = _make_png_bytes()
+        response = client.post(
+            "/explain", files={"image": ("test.png", png, "image/png")}
+        )
+        assert response.status_code == 404
+
+    def test_healthz_returns_200(self, client: TestClient) -> None:
+        response = client.get("/healthz")
+        assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# AC: a wired route with no predictor injected returns 503.
+# ---------------------------------------------------------------------------
+
+
+class TestNoPredictorInjected:
+    @pytest.fixture()
+    def client(self) -> TestClient:
+        return TestClient(create_app(predictor=None))
+
+    def test_predict_returns_503(self, client: TestClient) -> None:
+        png = _make_png_bytes()
+        response = client.post(
             "/predict", files={"image": ("test.png", png, "image/png")}
         )
         assert response.status_code == 503
 
-    def test_explain_returns_503_when_no_predictor(
-        self, client_no_model: TestClient
-    ) -> None:
+    def test_explain_returns_503(self, client: TestClient) -> None:
         png = _make_png_bytes()
-        response = client_no_model.post(
+        response = client.post(
             "/explain", files={"image": ("test.png", png, "image/png")}
         )
         assert response.status_code == 503
 
-    def test_uncertainty_returns_503_when_no_predictor(
-        self, client_no_model: TestClient
-    ) -> None:
+    def test_uncertainty_returns_503(self, client: TestClient) -> None:
         png = _make_png_bytes()
-        response = client_no_model.post(
+        response = client.post(
             "/uncertainty", files={"image": ("test.png", png, "image/png")}
         )
         assert response.status_code == 503
 
+    def test_healthz_returns_503(self, client: TestClient) -> None:
+        response = client.get("/healthz")
+        assert response.status_code == 503
+
 
 # ---------------------------------------------------------------------------
-# AC: create_app raises RuntimeError when serve extra absent (already tested
-#     in test_public_api.py — verified here for completeness)
+# AC: create_app raises RuntimeError naming 'serve' when fastapi is absent.
 # ---------------------------------------------------------------------------
 
 
@@ -242,8 +235,8 @@ class TestCreateAppRuntimeErrorWhenFastapiAbsent:
     def test_create_app_raises_runtime_error_naming_serve_extra(
         self, monkeypatch: Any
     ) -> None:
-        import radiologist.inference.predictor as stubs
+        import radiologist.inference.app as app_module
 
-        monkeypatch.setattr(stubs, "_fastapi", None)
+        monkeypatch.setattr(app_module, "_fastapi", None)
         with pytest.raises(RuntimeError, match="serve"):
-            stubs.create_app()
+            app_module.create_app()
