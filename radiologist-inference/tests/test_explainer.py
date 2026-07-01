@@ -28,6 +28,7 @@ mocks for locally owned code.
 """
 
 import numpy as np
+from _helpers import build_det_onnx
 from PIL import Image as PILImage
 
 from radiologist.inference import Classifier, Explainer, Explanation, Prediction
@@ -74,6 +75,32 @@ class TestExplainPredictedClass:
         prediction = explainer.predict(image=image)
 
         assert explanation.predicted_class in CLASSES
+        assert explanation.predicted_class == prediction.predicted_class
+
+
+class TestExplainRespectsEmbeddedPrior:
+    def test_explain_predicted_class_matches_predict_with_embedded_prior(
+        self, tmp_path
+    ):
+        """predicted_class must reflect the training_prior correction, not raw argmax."""
+        raw_path = build_det_onnx(tmp_path, priors=None, filename="raw.onnx")
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+        raw_predicted = (
+            Classifier.from_path(det_path=raw_path).predict(image=image).predicted_class
+        )
+        other_class = next(c for c in CLASSES if c != raw_predicted)
+
+        skewed_path = build_det_onnx(
+            tmp_path,
+            priors={raw_predicted: 0.01, other_class: 0.99},
+            filename="skewed.onnx",
+        )
+        explainer = Explainer.from_path(det_path=skewed_path)
+
+        explanation = explainer.explain(image=image)
+        prediction = explainer.predict(image=image)
+
+        assert prediction.predicted_class == other_class
         assert explanation.predicted_class == prediction.predicted_class
 
 

@@ -24,12 +24,12 @@
 
 from __future__ import annotations
 
-from typing import Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
-from radiologist.inference.base_predictor import _preprocess_image, _softmax, _to_pil
+from radiologist.inference.base_predictor import _preprocess_image, _to_pil
 from radiologist.inference.cam import score_cam_with_session
 from radiologist.inference.classifier import Classifier
 from radiologist.inference.models import Explanation
@@ -38,11 +38,18 @@ from radiologist.inference.models import Explanation
 class Explainer(Classifier):
     """Adds Score-CAM explanation to Classifier."""
 
-    def explain(self, image: Union[str, "np.ndarray", "PILImage.Image"]) -> Explanation:
+    def explain(
+        self,
+        image: Union[str, "np.ndarray", "PILImage.Image"],
+        deployment_prior: Optional[Dict[str, float]] = None,
+    ) -> Explanation:
         """Produce a Score-CAM saliency map for the given image.
 
         Args:
             image: Input as file path, HWC numpy uint8 array, or PIL Image.
+            deployment_prior: Optional per-class deployment prior probabilities,
+                forwarded to predict() so predicted_class agrees between the
+                two methods.
 
         Returns:
             Explanation with a saliency map sized to the original image
@@ -52,7 +59,6 @@ class Explainer(Classifier):
         original_w, original_h = pil_orig.size
 
         model_metadata = self._state.model_metadata
-        classes = model_metadata.classes
         input_shape = model_metadata.input_shape
 
         preprocessed = _preprocess_image(image, input_shape)
@@ -60,7 +66,6 @@ class Explainer(Classifier):
         session = self._state.det_session
         input_name = session.get_inputs()[0].name
         outputs = session.run(["logits", "feature_maps"], {input_name: preprocessed})
-        logits_raw: np.ndarray = outputs[0][0]
         feature_maps: np.ndarray = outputs[1][0]
 
         saliency = score_cam_with_session(
@@ -71,7 +76,8 @@ class Explainer(Classifier):
             original_w=original_w,
         )
 
-        probs = _softmax(logits_raw)
-        predicted = classes[int(np.argmax(probs))]
+        predicted = self.predict(
+            image, deployment_prior=deployment_prior
+        ).predicted_class
 
         return Explanation(saliency_map=saliency, predicted_class=predicted)
