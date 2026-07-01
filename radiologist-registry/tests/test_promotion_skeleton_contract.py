@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import pytest
-
 
 def test_logged_artifacts_and_collection_member_importable_from_public_api():
     from radiologist.registry import CollectionMember, LoggedArtifacts
@@ -45,20 +43,6 @@ def test_promote_result_carries_alias_field():
         alias="staging",
     )
     assert result.alias == "staging"
-
-
-def test_collection_lister_list_collection_artifacts_raises_not_implemented():
-    from radiologist.registry.collection import _WandbCollectionLister
-
-    with pytest.raises(NotImplementedError):
-        _WandbCollectionLister().list_collection_artifacts("model", "det-collection")
-
-
-def test_wandb_registry_list_collection_artifacts_raises_not_implemented():
-    from radiologist.registry.wandb_registry import WandbRegistry
-
-    with pytest.raises(NotImplementedError):
-        WandbRegistry().list_collection_artifacts("model", "det-collection")
 
 
 def test_model_registry_protocol_declares_new_methods():

@@ -71,4 +71,17 @@ class _WandbUploader:
         mcd_collection: str,
         alias: str,
     ) -> PromoteResult:
-        raise NotImplementedError
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
+
+        det_art = api.artifact(det_qualified_name)
+        det_art.link(det_collection, aliases=[alias])
+
+        mcd_art = api.artifact(mcd_qualified_name)
+        mcd_art.link(mcd_collection, aliases=[alias])
+
+        return PromoteResult(
+            det_qualified_name=det_qualified_name,
+            mcd_qualified_name=mcd_qualified_name,
+            alias=alias,
+        )

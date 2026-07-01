@@ -34,4 +34,12 @@ class _WandbCollectionLister:
         type_name: str,
         collection_name: str,
     ) -> List[CollectionMember]:
-        raise NotImplementedError
+        _guard_wandb()
+        api = _wandb.Api()  # type: ignore[union-attr]
+        collection = api.artifact_collection(type_name, collection_name)
+        return [
+            CollectionMember(
+                qualified_name=art.qualified_name, aliases=list(art.aliases)
+            )
+            for art in collection.artifacts()
+        ]

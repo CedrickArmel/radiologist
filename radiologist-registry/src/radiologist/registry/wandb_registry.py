@@ -95,14 +95,61 @@ class WandbRegistry:
         det_collection: str,
         mcd_collection: str,
     ) -> PromoteResult:
-        raise NotImplementedError
+        det_ref = self._resolver.resolve(path, run_id=run_id, version="best")
+        mcd_ref = self._resolver.resolve(path, run_id=f"{run_id}-mcd", version="best")
+
+        members = self._lister.list_collection_artifacts("model", det_collection)
+        has_production = any("production" in m.aliases for m in members)
+        alias = "staging" if has_production else "production"
+
+        return self._uploader.link_to_collection(
+            det_ref.qualified_name,
+            mcd_ref.qualified_name,
+            det_collection,
+            mcd_collection,
+            alias,
+        )
 
     def transition_to_production(
         self,
         det_collection: str,
         mcd_collection: str,
     ) -> PromoteResult:
-        raise NotImplementedError
+        det_members = self._lister.list_collection_artifacts("model", det_collection)
+        mcd_members = self._lister.list_collection_artifacts("model", mcd_collection)
+
+        det_staging = next((m for m in det_members if "staging" in m.aliases), None)
+        mcd_staging = next((m for m in mcd_members if "staging" in m.aliases), None)
+        if det_staging is None or mcd_staging is None:
+            raise LookupError(
+                "No 'staging' member found in one or both collections: "
+                f"{det_collection!r}, {mcd_collection!r}"
+            )
+
+        det_production = next(
+            (m for m in det_members if "production" in m.aliases), None
+        )
+        mcd_production = next(
+            (m for m in mcd_members if "production" in m.aliases), None
+        )
+
+        if det_production is not None:
+            self._alias_manager.remove_alias(
+                det_production.qualified_name, "production"
+            )
+        self._alias_manager.set_alias(det_staging.qualified_name, "production")
+
+        if mcd_production is not None:
+            self._alias_manager.remove_alias(
+                mcd_production.qualified_name, "production"
+            )
+        self._alias_manager.set_alias(mcd_staging.qualified_name, "production")
+
+        return PromoteResult(
+            det_qualified_name=det_staging.qualified_name,
+            mcd_qualified_name=mcd_staging.qualified_name,
+            alias="production",
+        )
 
     def get_aliases(self, artifact_path: str) -> List[str]:
         return self._alias_manager.get_aliases(artifact_path)
