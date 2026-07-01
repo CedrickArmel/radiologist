@@ -79,7 +79,7 @@ class TestScoreCamFunction:
 class TestExplainReturnType:
     def test_explain_returns_explanation_instance(self, det_onnx_path_nonzero):
         """explain(image) must return an Explanation dataclass."""
-        from radiologist.inference import Explanation, Predictor
+        from radiologist.inference.predictor import Explanation, Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
         image = np.zeros((224, 224, 3), dtype=np.uint8)
@@ -90,7 +90,7 @@ class TestExplainReturnType:
 class TestExplainSpatialDimensions:
     def test_saliency_map_matches_input_image_spatial_dims(self, det_onnx_path_nonzero):
         """saliency_map must have H×W dimensions matching the input image."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
 
@@ -101,7 +101,7 @@ class TestExplainSpatialDimensions:
 
     def test_saliency_map_matches_pil_image_spatial_dims(self, det_onnx_path_nonzero):
         """saliency_map dims must match a PIL Image input."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
 
@@ -114,7 +114,7 @@ class TestExplainSpatialDimensions:
 class TestExplainSaliencyValues:
     def test_all_saliency_values_in_0_1(self, det_onnx_path_nonzero):
         """Every value in saliency_map must lie in [0, 1]."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
         image = np.zeros((224, 224, 3), dtype=np.uint8)
@@ -126,7 +126,7 @@ class TestExplainSaliencyValues:
 class TestExplainPredictedClass:
     def test_explain_predicted_class_matches_predict(self, det_onnx_path_nonzero):
         """Explanation.predicted_class must be consistent with predict() for the same image."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path_nonzero)
         image = np.zeros((224, 224, 3), dtype=np.uint8)
@@ -138,7 +138,7 @@ class TestExplainPredictedClass:
 class TestExplainWithoutDetModel:
     def test_explain_raises_not_implemented_without_det_model(self):
         """explain() on a predictor without a det model must raise NotImplementedError."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = object.__new__(Predictor)
         with pytest.raises(NotImplementedError):

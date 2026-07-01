@@ -31,7 +31,7 @@ from _helpers import build_det_onnx, build_mcd_onnx
 from fastapi.testclient import TestClient
 from PIL import Image as PILImage
 
-from radiologist.inference import Predictor, create_app
+from radiologist.inference.predictor import Predictor, create_app
 
 
 def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:

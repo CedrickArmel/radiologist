@@ -20,24 +20,29 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from radiologist.inference.predictor import (
+from radiologist.inference.app import create_app
+from radiologist.inference.base_predictor import BasePredictor
+from radiologist.inference.cam import score_cam
+from radiologist.inference.classifier import Classifier
+from radiologist.inference.explainer import Explainer
+from radiologist.inference.mc_dropout import MCDropoutPredictor, mc_dropout_predict
+from radiologist.inference.models import (
     Explanation,
     ModelMetadata,
     Prediction,
-    Predictor,
     UncertaintyResult,
-    create_app,
-    mc_dropout_predict,
-    score_cam,
 )
 
 __all__ = [
-    "Predictor",
-    "score_cam",
-    "mc_dropout_predict",
+    "BasePredictor",
+    "Classifier",
+    "Explainer",
+    "MCDropoutPredictor",
     "Prediction",
     "Explanation",
     "UncertaintyResult",
     "ModelMetadata",
+    "score_cam",
+    "mc_dropout_predict",
     "create_app",
 ]

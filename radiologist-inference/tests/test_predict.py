@@ -42,21 +42,21 @@ CLASSES = ["NORMAL", "ABNORMAL"]
 class TestPredictorFromPath:
     def test_from_path_returns_predictor_instance(self, det_onnx_path):
         """from_path with a valid ONNX file must return a Predictor instance."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
         assert isinstance(predictor, Predictor)
 
     def test_from_path_raises_on_unreadable_path(self, tmp_path):
         """from_path with a non-existent file must raise an error."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         with pytest.raises((FileNotFoundError, RuntimeError, OSError, Exception)):
             Predictor.from_path(det_path=str(tmp_path / "nonexistent.onnx"))
 
     def test_from_path_raises_on_invalid_onnx_file(self, tmp_path):
         """from_path with a file that is not a valid ONNX model must raise."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         bad_path = tmp_path / "bad.onnx"
         bad_path.write_bytes(b"this is not an onnx model")
@@ -67,7 +67,7 @@ class TestPredictorFromPath:
 class TestPredictReturnType:
     def test_predict_with_file_path_returns_prediction(self, det_onnx_path, tmp_path):
         """predict(image=file_path) must return a Prediction dataclass."""
-        from radiologist.inference import Prediction, Predictor
+        from radiologist.inference.predictor import Prediction, Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -80,7 +80,7 @@ class TestPredictReturnType:
 
     def test_predict_with_numpy_array_returns_prediction(self, det_onnx_path):
         """predict(image=np.ndarray) must return a Prediction dataclass."""
-        from radiologist.inference import Prediction, Predictor
+        from radiologist.inference.predictor import Prediction, Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -90,7 +90,7 @@ class TestPredictReturnType:
 
     def test_predict_with_pil_image_returns_prediction(self, det_onnx_path):
         """predict(image=PIL.Image) must return a Prediction dataclass."""
-        from radiologist.inference import Prediction, Predictor
+        from radiologist.inference.predictor import Prediction, Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -104,7 +104,7 @@ class TestPredictReturnType:
 class TestPredictProbabilities:
     def test_probabilities_sum_to_one(self, det_onnx_path):
         """Probabilities in Prediction must sum to 1.0 within floating tolerance."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -117,7 +117,7 @@ class TestPredictProbabilities:
         self, det_onnx_path
     ):
         """Prediction.probabilities keys must match the class names in ONNX metadata."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -127,7 +127,7 @@ class TestPredictProbabilities:
 
     def test_predicted_class_is_argmax_of_probabilities(self, det_onnx_path):
         """predicted_class must be the class with the highest probability."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -140,7 +140,7 @@ class TestPredictProbabilities:
 class TestBayesianPriorCorrection:
     def test_deployment_prior_changes_probabilities(self, det_onnx_path):
         """Supplying deployment_prior must produce different probabilities."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -154,7 +154,7 @@ class TestBayesianPriorCorrection:
 
     def test_deployment_prior_corrected_probs_still_sum_to_one(self, det_onnx_path):
         """Prior-corrected probabilities must still sum to 1.0."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         predictor = Predictor.from_path(det_path=det_onnx_path)
 
@@ -170,7 +170,7 @@ class TestBayesianPriorCorrection:
         self, tmp_path
     ):
         """When model has training_prior metadata, predict() applies correction."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         onnx_path_with_prior = build_det_onnx(
             tmp_path,
@@ -194,7 +194,7 @@ class TestBayesianPriorCorrection:
     ):
         """When model has no training_prior and no deployment_prior is given,
         probabilities come directly from the model's softmax output."""
-        from radiologist.inference import Predictor
+        from radiologist.inference.predictor import Predictor
 
         onnx_path = build_det_onnx(tmp_path, priors=None)
         predictor = Predictor.from_path(det_path=onnx_path)

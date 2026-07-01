@@ -20,113 +20,33 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Tests for the radiologist.inference CLI.
+"""Tests for the radiologist.inference CLI surface (issue #91).
 
-All tests use typer.testing.CliRunner and drive real Predictor and
-WandbRegistry instances. Only the W&B SDK boundary (_wandb sentinel) is
-mocked, and no radiologist.* class is mocked.
+The skeleton stubs the predict/explain/uncertainty command bodies with
+NotImplementedError, so only the command shape is asserted here. Behavioral
+CLI tests are owned by the slice issue that implements the smart factory
+and CLI (#5).
 """
 
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import numpy as np
 import pytest
-from PIL import Image as PILImage  # type: ignore[import-untyped]
 
 from radiologist.inference.cli import app
 
 
-def _make_wandb_mock(onnx_path):
-    mock_wandb = MagicMock()
-    artifact = MagicMock()
-    artifact.download.return_value = os.path.dirname(onnx_path)
-    api_instance = MagicMock()
-    api_instance.artifact.return_value = artifact
-    mock_wandb.Api.return_value = api_instance
-    return mock_wandb
+def _command_names():
+    return {cmd.callback.__name__ for cmd in app.registered_commands}
 
 
-def _save_png(tmp_path, filename="chest.png"):
-    img_arr = np.zeros((224, 224, 3), dtype=np.uint8)
-    img_path = str(tmp_path / filename)
-    PILImage.fromarray(img_arr).save(img_path)
-    return img_path
+def test_cli_exposes_predict_explain_uncertainty_commands():
+    """The CLI must expose exactly predict, explain, and uncertainty."""
+    assert _command_names() == {"predict", "explain", "uncertainty"}
 
 
-def _runner():
-    from typer.testing import CliRunner
-
-    return CliRunner()
-
-
-def test_predict_exits_0_on_valid_image_and_model(det_onnx_path, tmp_path):
-    """predict command exits 0 and prints the class when given a real model and image."""
-    img_path = _save_png(tmp_path)
-
-    result = _runner().invoke(
-        app,
-        ["predict", img_path, "--model", det_onnx_path],
-    )
-
-    assert result.exit_code == 0
-    assert "Predicted class:" in result.output
-
-
-def test_predict_exits_1_when_model_path_does_not_exist(tmp_path):
-    """predict command exits 1 when the model file does not exist."""
-    img_path = _save_png(tmp_path)
-
-    result = _runner().invoke(
-        app,
-        ["predict", img_path, "--model", str(tmp_path / "nonexistent.onnx")],
-    )
-
-    assert result.exit_code == 1
-
-
-def test_predict_exits_1_when_image_path_does_not_exist(det_onnx_path, tmp_path):
-    """predict command exits 1 when the image file does not exist."""
-    result = _runner().invoke(
-        app,
-        [
-            "predict",
-            str(tmp_path / "nonexistent_image.jpg"),
-            "--model",
-            det_onnx_path,
-        ],
-    )
-
-    assert result.exit_code == 1
-
-
-def test_pull_exits_0_on_valid_artifact(det_onnx_path, tmp_path):
-    """pull command exits 0 when artifact is retrievable via real WandbRegistry."""
-    import radiologist.registry.resolver as resolver_mod
-
-    mock_wandb = _make_wandb_mock(det_onnx_path)
-
-    with patch.object(resolver_mod, "_wandb", mock_wandb):
-        result = _runner().invoke(
-            app,
-            ["pull", "entity/project/name:v1", "--local-dir", str(tmp_path)],
-        )
-
-    assert result.exit_code == 0
-    assert "Model downloaded to:" in result.output
-
-
-def test_pull_exits_1_when_wandb_sdk_is_absent(tmp_path):
-    """pull command exits 1 when the W&B SDK is absent (real registry, _wandb=None)."""
-    import radiologist.registry.optional as optional_mod
-
-    with patch.object(optional_mod, "_wandb", None):
-        result = _runner().invoke(
-            app,
-            ["pull", "entity/project/name:v0", "--local-dir", str(tmp_path)],
-        )
-
-    assert result.exit_code == 1
+def test_cli_no_longer_exposes_pull_command():
+    """The pull subcommand must be absent from the CLI."""
+    assert "pull" not in _command_names()
 
 
 def test_cli_entry_point_raises_runtime_error_when_typer_absent():
