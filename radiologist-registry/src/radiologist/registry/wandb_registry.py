@@ -98,8 +98,11 @@ class WandbRegistry:
         det_ref = self._resolver.resolve(path, run_id=run_id, version="best")
         mcd_ref = self._resolver.resolve(path, run_id=f"{run_id}-mcd", version="best")
 
-        members = self._lister.list_collection_artifacts("model", det_collection)
-        has_production = any("production" in m.aliases for m in members)
+        det_members = self._lister.list_collection_artifacts("model", det_collection)
+        mcd_members = self._lister.list_collection_artifacts("model", mcd_collection)
+        has_production = any(
+            "production" in m.aliases for m in (*det_members, *mcd_members)
+        )
         alias = "staging" if has_production else "production"
 
         return self._uploader.link_to_collection(
@@ -139,11 +142,24 @@ class WandbRegistry:
             )
         self._alias_manager.set_alias(det_staging.qualified_name, "production")
 
-        if mcd_production is not None:
-            self._alias_manager.remove_alias(
-                mcd_production.qualified_name, "production"
-            )
-        self._alias_manager.set_alias(mcd_staging.qualified_name, "production")
+        try:
+            if mcd_production is not None:
+                self._alias_manager.remove_alias(
+                    mcd_production.qualified_name, "production"
+                )
+            self._alias_manager.set_alias(mcd_staging.qualified_name, "production")
+        except Exception:
+            try:
+                self._alias_manager.remove_alias(
+                    det_staging.qualified_name, "production"
+                )
+                if det_production is not None:
+                    self._alias_manager.set_alias(
+                        det_production.qualified_name, "production"
+                    )
+            except Exception:
+                pass
+            raise
 
         return PromoteResult(
             det_qualified_name=det_staging.qualified_name,
