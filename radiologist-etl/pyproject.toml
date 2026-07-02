@@ -28,6 +28,10 @@ all = [
     "gcsfs>=2026.4.0",
     "prefect>=3.7.0"
 ]
+
+[project.scripts]
+radiologist-etl = "radiologist.etl.prefect_pipelines:main"
+
 [tool.commitizen]
 name = "cz_conventional_commits"
 version = "0.1.0"
