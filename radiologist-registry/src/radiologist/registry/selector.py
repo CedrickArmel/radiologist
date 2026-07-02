@@ -45,19 +45,22 @@ class RegistrySelector:
     include_sweeps: bool = False
 
     def is_registry_backed(self) -> bool:
-        # contract: True when any registry selector field (run_id/tags/groups/
-        #   metric/version) is set; False when only a raw path/local file is
-        #   implied. Single dispatch rule for "local file vs registry".
-        raise NotImplementedError
+        return bool(
+            self.run_id or self.tags or self.groups or self.metric or self.version
+        )
 
 
 def resolve_selector(
     selector: RegistrySelector, registry: ModelRegistry
 ) -> ArtifactRef:
-    # contract: forwards selector fields to registry.resolve(...) applying the
-    #   run_id -> tags -> path cascade and returns the resolved ArtifactRef.
-    #   Raises ValueError when BOTH run_id and tags are set (strict CLI-facing
-    #   validation, stricter than the underlying resolve()). Propagates whatever
-    #   registry.resolve raises (ValueError on no match, RuntimeError when wandb
-    #   missing).
-    raise NotImplementedError
+    if selector.run_id and selector.tags:
+        raise ValueError("Provide either --run-id or --tags, not both.")
+    return registry.resolve(
+        path=selector.path,
+        run_id=selector.run_id,
+        groups=selector.groups,
+        tags=selector.tags,
+        metric=selector.metric,
+        version=selector.version,
+        include_sweeps=selector.include_sweeps,
+    )
