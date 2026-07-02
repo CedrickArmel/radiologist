@@ -10,6 +10,10 @@ dependencies = [
 
 [project.optional-dependencies]
 wandb = ["wandb>=0.27.0"]
+cli = ["typer>=0.9.0"]
+
+[project.scripts]
+radiologist-registry = "radiologist.registry.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.28,<0.10.0"]

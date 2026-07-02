@@ -41,6 +41,7 @@ from radiologist.registry.wandb_registry import WandbRegistry
 
 if TYPE_CHECKING:
     from radiologist.registry.interface import ModelRegistry
+    from radiologist.registry.selector import RegistrySelector
 
 
 @dataclass
@@ -116,6 +117,29 @@ class BasePredictor:
         reg = registry if registry is not None else WandbRegistry()
         det_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
         return cls.from_path(det_path=det_path)
+
+    @classmethod
+    def from_selector(
+        cls,
+        selector: "RegistrySelector",
+        local_dir: str,
+        registry: Optional["ModelRegistry"] = None,
+    ) -> "BasePredictor":
+        """Resolve a selector against a registry and load via from_path.
+
+        Args:
+            selector: Declarative description of which artifact to resolve.
+            local_dir: Local directory where the ONNX file will be saved.
+            registry: Registry to resolve/download from. Defaults to
+                WandbRegistry() when omitted.
+
+        Returns:
+            Loaded instance of the calling subclass.
+
+        Raises:
+            RuntimeError: When the ``registry`` extra (wandb) is not installed.
+        """
+        raise NotImplementedError
 
 
 def _read_metadata(session: "ort.InferenceSession") -> Dict[str, str]:
