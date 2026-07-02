@@ -28,14 +28,14 @@ Entry points: predict <image> --model <det_path>
 """
 
 import functools
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, List, Optional, TypeVar
 
 import numpy as np
 
 from radiologist.inference.classifier import Classifier
 from radiologist.inference.explainer import Explainer
 from radiologist.inference.mc_dropout import MCDropoutPredictor
-from radiologist.inference.optional import _typer
+from radiologist.inference.optional import _typer, _uvicorn
 
 F = TypeVar("F", bound=Callable[..., None])
 
@@ -63,16 +63,24 @@ if _typer is not None:
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
         ),
-        model: str = typer.Option(
-            ..., "--model", help="Path to the deterministic ONNX model."
+        model: Optional[str] = typer.Option(
+            None, "--model", help="Path to the deterministic ONNX model."
         ),
+        run_id: Optional[str] = typer.Option(None, "--run-id"),
+        tags: Optional[List[str]] = typer.Option(None, "--tags"),
+        groups: Optional[List[str]] = typer.Option(None, "--groups"),
+        metric: Optional[str] = typer.Option(None, "--metric"),
+        local_dir: str = typer.Option(".", "--local-dir"),
     ) -> None:
         """Run classification inference on a chest X-ray image."""
-        classifier = Classifier.from_path(det_path=model)
-        result = classifier.predict(image=image_path)
-        typer.echo(f"Predicted class: {result.predicted_class}")
-        for cls, prob in result.probabilities.items():
-            typer.echo(f"  {cls}: {prob:.4f}")
+        if model is not None:
+            classifier = Classifier.from_path(det_path=model)
+            result = classifier.predict(image=image_path)
+            typer.echo(f"Predicted class: {result.predicted_class}")
+            for cls, prob in result.probabilities.items():
+                typer.echo(f"  {cls}: {prob:.4f}")
+        else:
+            raise NotImplementedError
 
     @app.command()
     @_exit_on_error
@@ -80,22 +88,30 @@ if _typer is not None:
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
         ),
-        model: str = typer.Option(
-            ..., "--model", help="Path to the deterministic ONNX model."
+        model: Optional[str] = typer.Option(
+            None, "--model", help="Path to the deterministic ONNX model."
         ),
+        run_id: Optional[str] = typer.Option(None, "--run-id"),
+        tags: Optional[List[str]] = typer.Option(None, "--tags"),
+        groups: Optional[List[str]] = typer.Option(None, "--groups"),
+        metric: Optional[str] = typer.Option(None, "--metric"),
+        local_dir: str = typer.Option(".", "--local-dir"),
         out: Optional[str] = typer.Option(
             None, "--out", help="Path to save the saliency map as a .npy file."
         ),
     ) -> None:
         """Produce a Score-CAM explanation for a chest X-ray image."""
-        explainer = Explainer.from_path(det_path=model)
-        result = explainer.explain(image=image_path)
-        typer.echo(f"Predicted class: {result.predicted_class}")
-        if out is not None:
-            np.save(out, result.saliency_map)
-            typer.echo(f"Saliency map saved to: {out}")
+        if model is not None:
+            explainer = Explainer.from_path(det_path=model)
+            result = explainer.explain(image=image_path)
+            typer.echo(f"Predicted class: {result.predicted_class}")
+            if out is not None:
+                np.save(out, result.saliency_map)
+                typer.echo(f"Saliency map saved to: {out}")
+            else:
+                typer.echo(f"Saliency map shape: {result.saliency_map.shape}")
         else:
-            typer.echo(f"Saliency map shape: {result.saliency_map.shape}")
+            raise NotImplementedError
 
     @app.command()
     @_exit_on_error
@@ -103,24 +119,54 @@ if _typer is not None:
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
         ),
-        model: str = typer.Option(
-            ..., "--model", help="Path to the deterministic ONNX model."
+        model: Optional[str] = typer.Option(
+            None, "--model", help="Path to the deterministic ONNX model."
         ),
-        mcd_model: str = typer.Option(
-            ..., "--mcd-model", help="Path to the MC-Dropout ONNX model."
+        run_id: Optional[str] = typer.Option(None, "--run-id"),
+        tags: Optional[List[str]] = typer.Option(None, "--tags"),
+        groups: Optional[List[str]] = typer.Option(None, "--groups"),
+        metric: Optional[str] = typer.Option(None, "--metric"),
+        local_dir: str = typer.Option(".", "--local-dir"),
+        mcd_model: Optional[str] = typer.Option(
+            None, "--mcd-model", help="Path to the MC-Dropout ONNX model."
         ),
         n_passes: int = typer.Option(
             30, "--n-passes", help="Number of stochastic forward passes."
         ),
     ) -> None:
         """Estimate MC-Dropout uncertainty for a chest X-ray image."""
-        predictor = MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
-        result = predictor.predict_with_uncertainty(image=image_path, n_passes=n_passes)
-        typer.echo("Mean probabilities:")
-        for cls, prob in result.mean_probabilities.items():
-            std = result.std_per_class[cls]
-            typer.echo(f"  {cls}: {prob:.4f} (std={std:.4f})")
-        typer.echo(f"Predictive entropy: {result.predictive_entropy:.4f}")
+        if model is not None:
+            predictor = MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
+            result = predictor.predict_with_uncertainty(
+                image=image_path, n_passes=n_passes
+            )
+            typer.echo("Mean probabilities:")
+            for cls, prob in result.mean_probabilities.items():
+                std = result.std_per_class[cls]
+                typer.echo(f"  {cls}: {prob:.4f} (std={std:.4f})")
+            typer.echo(f"Predictive entropy: {result.predictive_entropy:.4f}")
+        else:
+            raise NotImplementedError
+
+    @app.command()
+    @_exit_on_error
+    def serve(
+        model: Optional[str] = typer.Option(None, "--model"),
+        run_id: Optional[str] = typer.Option(None, "--run-id"),
+        tags: Optional[List[str]] = typer.Option(None, "--tags"),
+        groups: Optional[List[str]] = typer.Option(None, "--groups"),
+        metric: Optional[str] = typer.Option(None, "--metric"),
+        local_dir: str = typer.Option(".", "--local-dir"),
+        host: str = typer.Option("127.0.0.1", "--host"),
+        port: int = typer.Option(8000, "--port"),
+    ) -> None:
+        """Launch the FastAPI inference server via uvicorn."""
+        if _uvicorn is None:
+            raise RuntimeError(
+                "The 'serve' extra is required to use the serve command. "
+                "Install it with: pip install radiologist-inference[serve]"
+            )
+        raise NotImplementedError
 
 else:
     app = None  # type: ignore[assignment]

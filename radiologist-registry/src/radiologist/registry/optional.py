@@ -36,3 +36,14 @@ _MODEL_ARTIFACT_TYPE = "model"
 def _guard_wandb() -> None:
     if _wandb is None:
         raise RuntimeError(_WANDB_MISSING_MSG)
+
+
+try:
+    import typer as _typer  # type: ignore[import-untyped]
+except ImportError:
+    _typer = None  # type: ignore[assignment]
+
+_TYPER_MISSING_MSG = (
+    "typer is required for the radiologist-registry CLI. "
+    "Install with: pip install 'radiologist-registry[cli]'"
+)

@@ -28,6 +28,7 @@ from radiologist.registry.models import (
     LoggedArtifacts,
     PromoteResult,
 )
+from radiologist.registry.selector import RegistrySelector, resolve_selector
 from radiologist.registry.wandb_registry import WandbRegistry
 
 __all__ = [
@@ -37,5 +38,7 @@ __all__ = [
     "LoggedArtifacts",
     "ModelRegistry",
     "PromoteResult",
+    "RegistrySelector",
     "WandbRegistry",
+    "resolve_selector",
 ]

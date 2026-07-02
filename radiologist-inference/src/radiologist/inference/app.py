@@ -167,4 +167,9 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         _get_predictor()
         return {"status": "ok"}
 
+    @app.get("/readyz")
+    def readyz() -> Dict[str, str]:
+        # contract (implemented in #6): 503 when no predictor loaded, 200 once one is.
+        raise NotImplementedError
+
     return app

@@ -36,3 +36,8 @@ try:
     import typer as _typer  # type: ignore[import-untyped]
 except ImportError:
     _typer = None  # type: ignore[assignment]
+
+try:
+    import uvicorn as _uvicorn  # type: ignore[import-untyped]
+except ImportError:
+    _uvicorn = None  # type: ignore[assignment]

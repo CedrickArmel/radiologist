@@ -53,8 +53,8 @@ def _make_png_path(tmp_path, width: int = 64, height: int = 64) -> str:
 
 
 def test_cli_exposes_predict_explain_uncertainty_commands():
-    """The CLI must expose exactly predict, explain, and uncertainty."""
-    assert _command_names() == {"predict", "explain", "uncertainty"}
+    """The CLI must expose predict, explain, uncertainty, and serve."""
+    assert _command_names() == {"predict", "explain", "uncertainty", "serve"}
 
 
 def test_cli_no_longer_exposes_pull_command():
