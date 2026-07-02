@@ -23,7 +23,11 @@
 from typing import Any, List, Tuple
 
 import lightning as L
-import wandb
+
+try:
+    import wandb
+except ImportError:
+    wandb = None  # type: ignore[assignment]
 
 from radiologist.core.registry import export_onnx
 from radiologist.registry import WandbRegistry

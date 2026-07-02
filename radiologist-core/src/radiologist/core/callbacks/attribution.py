@@ -43,7 +43,10 @@ except ImportError:
     LayerGradCam = None  # type: ignore[assignment,misc]
     _CAPTUM_AVAILABLE = False
 
-import wandb
+try:
+    import wandb
+except ImportError:
+    wandb = None  # type: ignore[assignment]
 
 
 @dataclass

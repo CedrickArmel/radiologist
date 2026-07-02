@@ -23,6 +23,9 @@ description = "Modeling library for the radiologist pipeline"
 license = { file = "../LICENSE" }
 requires-python = ">=3.10"
 
+[project.scripts]
+radiologist-core = "radiologist.core.train:main"
+
 [project.optional-dependencies]
 all = [
     "captum>=0.9.0",
