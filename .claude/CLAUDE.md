@@ -199,11 +199,11 @@ Fixtures defined in a `conftest.py` can be used by any test in that package with
 - Stacked PRs: branches that depend on other feature branches must target the dependency branch, not `main`. Adjust `gh pr create --base` accordingly.
 - After a `pre-commit.ci` remote auto-fix commit, run `git fetch origin <branch> && git rebase origin/<branch>` before the next push to avoid diverged-branch rejection.
 - Keep git tree linear.
+- **Mandatory merge type: rebase merge.** Never use a regular merge commit (`--no-ff`) or squash merge — always rebase the branch onto its target first, then fast-forward merge (`git merge --ff-only`) or use `gh pr merge --rebase`. This applies everywhere: worktrees, `main`, and any other branch.
 
 ## Gotchas
 
 - **[Packages]** `radiologist-app/` does not exist on disk — it is a planned package. Do not attempt to read or import from it.
-- **[PyTorch]** The sandbox security hook false-positives on the `.eval()` method name. Use `model.train(mode=False)` instead of `model.eval()` in any PyTorch code.
 - **[LICENSE]** You MUST NOT add the license header in your code yourself. `pre-commit` we do that.
 - **[MEMORY]** Generalise before saving: a gotcha observed on one instance (a class, function, OS, or library) should be written at the level of the broader behavior it exemplifies — not pinned to the specific case that triggered it. When writing a memory or gotcha, ask: is this specific to X, or is X just one case of a wider rule? Write the wider rule; mention X only as an example if it aids clarity.
 - **[Extra]** For optional extra deps, write their imports (e.g. `from prefect import ...`) wrapped in `try/except ImportError` with stub no-ops so modules import cleanly without the extra installed.
