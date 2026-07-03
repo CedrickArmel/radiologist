@@ -38,8 +38,7 @@ radiologist-core/src/radiologist/core/
 │   ├── best_metric.py  # best-epoch metric tracking
 │   └── wandb_summary.py
 ├── registry/
-│   ├── promote.py      # promote_to_registry (ONNX export + W&B upload)
-│   └── pull.py         # pull_checkpoint
+│   └── export.py       # export_onnx (checkpoint → deterministic + MC-Dropout ONNX)
 └── configs/            # Hydra config tree
 ```
 
@@ -156,39 +155,29 @@ Writes `best_{monitor}` to `trainer.callback_metrics` after every validation epo
 
 Calls `wandb.run.define_metric` at fit start so the W&B run summary panel highlights the best validation score automatically.
 
-## Promoting a trained model to the registry
+## Exporting and promoting a trained model
+
+`radiologist.core.registry.export_onnx` turns a Lightning checkpoint into two local ONNX files — it has no W&B interaction:
 
 ```python
-from radiologist.core.registry import promote_to_registry
+from radiologist.core.registry import export_onnx
 
-promote_to_registry(
-    artifact="entity/project/model-artifact:v3",
-    collection="chest-xray-classifier",
-    registry_alias="production",
+result = export_onnx(
+    ckpt_path="/path/to/checkpoint.ckpt",
+    run_id="wandb-run-id",
     input_shape=(1, 1, 224, 224),
     classes=["healthy", "viral", "opacity"],
     cam_target_layer="layer4.1.conv2",
+    out_dir="/tmp/onnx-export",
 )
 ```
 
-This exports two ONNX models from the checkpoint:
+This produces:
 
 1. **Deterministic** — `_CamWrapper` forward hook returns `(logits, activation)`. Useful for inference with visual explanation.
 2. **MC-Dropout** — `nn.Dropout` layers left in training mode (`TrainingMode.PRESERVE`, no constant folding). Run multiple forward passes and aggregate for uncertainty estimation.
 
-Both are uploaded as W&B artifacts and linked to the registry collection under `registry_alias`.
-
-### Pulling a checkpoint
-
-```python
-from radiologist.core.registry import pull_checkpoint
-
-ckpt_path = pull_checkpoint(
-    run_id="wandb-run-id",           # resolve by run ID
-    metric="best_val_score",
-    # or: tags=["production"], groups=["experiment-v2"]  to filter runs
-)
-```
+Uploading the exported ONNX files as W&B artifacts and linking them into a registry collection is handled by `radiologist-registry` (`WandbRegistry.log_model_artifacts()` then `WandbRegistry.promote()`, or the `radiologist-registry push` / `promote` CLI). See [`radiologist-registry/README.md`](../radiologist-registry/README.md) for the full flow.
 
 ## Configuration reference
 

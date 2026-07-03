@@ -236,7 +236,7 @@ format:  ## run black + isort in-place
 	@uv run --active isort .
 
 type-check:  ## run mypy across all packages
-	@uv run --active mypy $(PKG_CORE)/src $(PKG_ETL)/src $(PKG_UTILS)/src
+	@uv run --active mypy $(PKG_CORE)/src $(PKG_ETL)/src $(PKG_UTILS)/src $(PKG_INFERENCE)/src $(PKG_REGISTRY)/src
 
 # --------------------------------------------------------------------------- #
 #  Maintenance                                                                 #

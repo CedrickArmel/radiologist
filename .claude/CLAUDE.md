@@ -27,7 +27,7 @@ This project adopts a mono-repo layout managed by `UV`.
 | Path | Contents |
 |---|---|
 | `radiologist-app/` | UI |
-| `radiologist-core/` | Modeling library — datamodule, VGG-11 backbone, focal loss, training loop |
+| `radiologist-core/` | Modeling library — datamodule, configurable backbone (`module` Hydra group, defaults to ResNet-50), focal loss, training loop |
 | `radiologist-etl/` | Data preparation — outlier removal (Haralick GLCM), ImageFolder builder |
 | `radiologist-inference/` | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server, Typer CLI |
 | `radiologist-utils/` | Useful helpers |
