@@ -97,20 +97,31 @@ uv run --active python -m radiologist.core.train \
 
 ### 4 — Promote to the model registry
 
-```python
-from radiologist.core.registry import promote_to_registry
+Training already logged both ONNX exports (deterministic + MC-Dropout) as W&B artifacts. Link them into a registry collection:
 
-promote_to_registry(
-    artifact="entity/project/model-artifact:v3",
-    collection="chest-xray-classifier",
-    registry_alias="production",
-    input_shape=(1, 1, 224, 224),
-    classes=["healthy", "viral", "opacity"],
-    cam_target_layer="layer4.1.conv2",
+```bash
+radiologist-registry promote entity/project/model-artifact \
+    --run-id wandb-run-id \
+    --det-collection chest-xray-classifier \
+    --mcd-collection chest-xray-classifier-mcd
+```
+
+This resolves the deterministic artifact by `run_id` and the MC-Dropout artifact by the `{run_id}-mcd` convention, then links both into their collections under the same alias — `production` if neither collection has one yet, `staging` otherwise.
+
+Equivalent Python API:
+
+```python
+from radiologist.registry import WandbRegistry
+
+result = WandbRegistry().promote(
+    path="entity/project/model-artifact",
+    run_id="wandb-run-id",
+    det_collection="chest-xray-classifier",
+    mcd_collection="chest-xray-classifier-mcd",
 )
 ```
 
-This exports two ONNX models — deterministic (with GradCAM activation output) and MC-Dropout (for uncertainty estimation) — and links them to the W&B registry.
+See [`radiologist-registry/README.md`](radiologist-registry/README.md) for the full CLI reference (`push`, `pull`, `resolve`, `list`, `alias`, `transition-to-production`).
 
 ### 5 — Run the test suite
 

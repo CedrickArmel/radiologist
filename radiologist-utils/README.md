@@ -25,13 +25,13 @@ All symbols below are importable from `radiologist.utils` or `radiologist.utils.
 | `ImageReader(source, storage_options)` | Factory returning `LocalImageReader` or `RemoteImageReader` based on URI scheme |
 | `read_image(source, storage_options)` | Read a single PNG/JPEG from any fsspec URI → `(np.ndarray, metadata)` |
 
-`BaseImageReader` is an abstract lazy iterator over `(np.ndarray, dict)` tuples. Iterate it to stream images without loading the entire dataset into memory.
+`BaseImageReader` is an abstract lazy iterator over `(np.ndarray, dict)` tuples via `.iterate()`. Call it to stream images without loading the entire dataset into memory.
 
 ```python
 from radiologist.utils import ImageReader
 
 reader = ImageReader("gs://my-bucket/images/", storage_options={"token": "anon"})
-for image, meta in reader:
+for image, meta in reader.iterate():
     process(image, meta)
 ```
 
