@@ -199,6 +199,7 @@ Fixtures defined in a `conftest.py` can be used by any test in that package with
 - Stacked PRs: branches that depend on other feature branches must target the dependency branch, not `main`. Adjust `gh pr create --base` accordingly.
 - After a `pre-commit.ci` remote auto-fix commit, run `git fetch origin <branch> && git rebase origin/<branch>` before the next push to avoid diverged-branch rejection.
 - Keep git tree linear.
+- **Never commit directly to `main`**, regardless of change size — tiny one-line fixes included. Always commit on a branch and open a PR.
 - **Mandatory merge type: rebase merge.** Never use a regular merge commit (`--no-ff`) or squash merge — always rebase the branch onto its target first, then fast-forward merge (`git merge --ff-only`) or use `gh pr merge --rebase`. This applies everywhere: worktrees, `main`, and any other branch.
 
 ## Gotchas
