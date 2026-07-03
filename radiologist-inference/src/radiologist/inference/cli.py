@@ -38,7 +38,7 @@ from radiologist.inference.classifier import Classifier
 from radiologist.inference.explainer import Explainer
 from radiologist.inference.mc_dropout import MCDropoutPredictor
 from radiologist.inference.optional import _typer, _uvicorn
-from radiologist.registry import RegistrySelector
+from radiologist.registry import selector_from_flags
 
 F = TypeVar("F", bound=Callable[..., None])
 
@@ -58,7 +58,7 @@ def _load_predictor(
     local_dir: str,
 ) -> Any:
     """Dispatch to a registry selector or a local path, per predictor_cls."""
-    selector = RegistrySelector(
+    selector = selector_from_flags(
         path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
     )
     if selector.is_registry_backed():
@@ -78,13 +78,13 @@ def _load_uncertainty_predictor(
     mcd_model: Optional[str],
 ) -> "MCDropoutPredictor":
     """Load det+mcd models: registry pair (run_id / {run_id}-mcd) or local paths."""
-    selector = RegistrySelector(
+    selector = selector_from_flags(
         path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
     )
     if selector.is_registry_backed():
         det_path = _resolve_and_pull(selector, local_dir)
         mcd_run_id = f"{run_id}-mcd" if run_id else None
-        mcd_selector = RegistrySelector(
+        mcd_selector = selector_from_flags(
             path=model or "",
             run_id=mcd_run_id,
             tags=tags,
@@ -220,7 +220,7 @@ if _typer is not None:
                 "The 'serve' extra is required to use the serve command. "
                 "Install it with: pip install radiologist-inference[serve]"
             )
-        selector = RegistrySelector(
+        selector = selector_from_flags(
             path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
         )
         if selector.is_registry_backed():

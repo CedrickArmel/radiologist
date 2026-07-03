@@ -157,12 +157,7 @@ def _resolve_and_pull(
     local_dir: str,
     registry: Optional["ModelRegistry"] = None,
 ) -> str:
-    """Resolve a selector to an artifact ref, then pull its ONNX file.
-
-    Shared by from_selector() and the CLI uncertainty command's separate
-    deterministic/MC-Dropout resolution, so both surfaces share the same
-    wandb-missing error translation.
-    """
+    """Resolve a selector to an artifact ref, then pull its ONNX file."""
     reg = registry if registry is not None else WandbRegistry()
     try:
         ref = resolve_selector(selector, reg)

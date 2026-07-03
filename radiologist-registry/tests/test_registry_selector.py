@@ -24,7 +24,12 @@ from typing import Any, List, Optional, Union
 
 import pytest
 
-from radiologist.registry import ArtifactRef, RegistrySelector, resolve_selector
+from radiologist.registry import (
+    ArtifactRef,
+    RegistrySelector,
+    resolve_selector,
+    selector_from_flags,
+)
 
 
 class FakeModelRegistry:
@@ -160,6 +165,34 @@ def test_resolve_selector_with_only_path_returns_ref_for_raw_path(
 
     assert result == canned_ref
     assert registry.calls[0]["path"] == "models/local.onnx"
+
+
+def test_selector_from_flags_builds_equivalent_registry_selector() -> None:
+    selector = selector_from_flags(
+        path="entity/project/model",
+        run_id="run-123",
+        tags=["prod"],
+        groups=["group-a"],
+        metric="val_f1",
+        version="v2",
+        include_sweeps=True,
+    )
+
+    assert selector == RegistrySelector(
+        path="entity/project/model",
+        run_id="run-123",
+        tags=["prod"],
+        groups=["group-a"],
+        metric="val_f1",
+        version="v2",
+        include_sweeps=True,
+    )
+
+
+def test_selector_from_flags_defaults_match_registry_selector_defaults() -> None:
+    selector = selector_from_flags(path="models/local.onnx")
+
+    assert selector == RegistrySelector(path="models/local.onnx")
 
 
 def test_resolve_selector_raises_valueerror_when_run_id_and_tags_both_set(

@@ -32,7 +32,7 @@ from typing import Any, Callable, List, Optional, TypeVar
 from radiologist.registry.models import ExportResult
 from radiologist.registry.optional import _wandb  # noqa: F401
 from radiologist.registry.optional import _TYPER_MISSING_MSG, _guard_wandb, _typer
-from radiologist.registry.selector import RegistrySelector, resolve_selector
+from radiologist.registry.selector import resolve_selector, selector_from_flags
 from radiologist.registry.wandb_registry import WandbRegistry
 
 F = TypeVar("F", bound=Callable[..., None])
@@ -95,7 +95,7 @@ if _typer is not None:
         include_sweeps: bool = typer.Option(False, "--include-sweeps"),
     ) -> None:
         registry = WandbRegistry()
-        selector = RegistrySelector(
+        selector = selector_from_flags(
             path=path,
             run_id=run_id,
             groups=groups,
@@ -122,7 +122,7 @@ if _typer is not None:
         version: Optional[str] = typer.Option(None, "--version"),
         include_sweeps: bool = typer.Option(False, "--include-sweeps"),
     ) -> None:
-        selector = RegistrySelector(
+        selector = selector_from_flags(
             path=path,
             run_id=run_id,
             groups=groups,
