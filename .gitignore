@@ -1,6 +1,6 @@
 # Claude
 .claude/.cc-marker
-.claude/.settings.local.*
+.claude/settings.local.json
 .claude/local
 .claude/worktrees
 

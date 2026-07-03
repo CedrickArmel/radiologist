@@ -30,7 +30,9 @@ repos:
         exclude: "pdf$|ipynb$|parquet$|lock$"
       - id: check-case-conflict
       - id: check-docstring-first
+      # excluded: devcontainer bind mount makes os.access(X_OK) always True, false-positives on every file
       - id: check-executables-have-shebangs
+        exclude: ".*"
       - id: check-json
       - id: check-merge-conflict
       - id: check-toml

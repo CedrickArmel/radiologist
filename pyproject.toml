@@ -126,6 +126,27 @@ known_first_party = ["radiologist"]
 ignore_missing_imports = true
 explicit_package_bases = true
 
+[tool.pyright]
+pythonVersion = "3.10"
+include = [
+    "radiologist-utils/src",
+    "radiologist-etl/src",
+    "radiologist-core/src",
+    "radiologist-inference/src",
+    "radiologist-registry/src",
+    "radiologist-utils/tests",
+    "radiologist-etl/tests",
+    "radiologist-core/tests",
+    "radiologist-inference/tests",
+    "radiologist-registry/tests",
+]
+exclude = ["**/__pycache__"]
+# Cross-package imports (radiologist.core importing radiologist.utils, etc.)
+# resolve through the editable installs `make dev-install` sets up via .pth
+# files, not through this list — this only scopes what pyright indexes.
+reportMissingImports = "warning"
+
+
 [tool.pytest.ini_options]
 testpaths = [
     "radiologist-utils/tests",
