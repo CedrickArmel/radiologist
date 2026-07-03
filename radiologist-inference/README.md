@@ -67,6 +67,33 @@ classifier = Classifier.from_registry(
 )
 ```
 
+`from_path`/`from_registry` accept optional `mean`, `std`, and `input_shape`
+kwargs. This is a **behavior-relevant** addition: existing callers that omit
+them keep getting exactly today's `/255.0`-only preprocessing (fully
+backward compatible). Passing both `mean` and `std` applies
+`(arr / 255 - mean) / std` instead, letting inference match the model's
+actual training-time normalization without a custom fork — e.g. this
+project's `radiologist-core` training pipeline uses `Normalize(mean=[128],
+std=[65])` after `[0, 1]`-scaling, so `mean=128.0, std=65.0` reproduces
+train/serve-consistent preprocessing:
+
+```python
+classifier = Classifier.from_path(
+    det_path="model.onnx", mean=128.0, std=65.0,
+)
+```
+
+`mean` and `std` must be provided together — passing only one raises
+`ValueError`. `input_shape` (`[N, C, H, W]`) is a fallback used only when the
+ONNX file's embedded metadata has no `input_shape` key; if metadata has no
+`input_shape` and none is passed, loading raises `ValueError`.
+
+```python
+classifier = Classifier.from_path(
+    det_path="model_without_shape_metadata.onnx", input_shape=[1, 3, 224, 224],
+)
+```
+
 ### HTTP server (requires `serve` extra)
 
 `create_app` dispatches routes based on `isinstance` checks against the
@@ -108,6 +135,16 @@ radiologist explain chest_xray.png --model model.onnx --out saliency.npy
 radiologist uncertainty chest_xray.png --model model.onnx --mcd-model model_mcd.onnx
 ```
 
+`predict`, `explain`, and `uncertainty` all accept optional `--mean`,
+`--std`, and `--input-shape` flags, threaded straight to `from_path`.
+`--input-shape` takes a comma-separated `N,C,H,W`, e.g. `1,3,224,224`.
+Omitting all three keeps today's default `/255.0`-only preprocessing:
+
+```bash
+radiologist predict chest_xray.png --model model.onnx \
+    --mean 128 --std 65 --input-shape 1,3,224,224
+```
+
 ## Public API reference
 
 ### `BasePredictor`
@@ -116,8 +153,8 @@ Common loading surface shared by every predictor class.
 
 | Method | Signature | Description |
 |---|---|---|
-| `from_path` | `(det_path: str, mcd_path: Optional[str] = None) -> BasePredictor` | Load from local ONNX files |
-| `from_registry` | `(artifact_path: str, local_dir: str, registry=None) -> BasePredictor` | Download from W&B Registry and load; requires `registry` extra |
+| `from_path` | `(det_path: str, mcd_path: Optional[str] = None, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Load from local ONNX files |
+| `from_registry` | `(artifact_path: str, local_dir: str, registry=None, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Download from W&B Registry and load; requires `registry` extra |
 
 ### `Classifier(BasePredictor)`
 

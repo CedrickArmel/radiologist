@@ -63,7 +63,9 @@ class Classifier(BasePredictor):
         model_metadata = self._state.model_metadata
         input_shape = model_metadata.input_shape
 
-        arr = _preprocess_image(image, input_shape)
+        arr = _preprocess_image(
+            image, input_shape, mean=self._state.mean, std=self._state.std
+        )
 
         session = self._state.det_session
         input_name = session.get_inputs()[0].name

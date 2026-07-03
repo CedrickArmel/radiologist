@@ -56,6 +56,8 @@ class _PredictorState:
     metadata: Dict[str, str]
     model_metadata: ModelMetadata
     mcd_session: Optional[ort.InferenceSession] = field(default=None)
+    mean: Optional[float] = field(default=None)
+    std: Optional[float] = field(default=None)
 
 
 class BasePredictor:
@@ -65,19 +67,32 @@ class BasePredictor:
 
     @classmethod
     def from_path(
-        cls, det_path: str, mcd_path: Optional[str] = None
+        cls,
+        det_path: str,
+        mcd_path: Optional[str] = None,
+        mean: Optional[float] = None,
+        std: Optional[float] = None,
+        input_shape: Optional[List[int]] = None,
     ) -> "BasePredictor":
         """Load a predictor instance from local ONNX file paths.
 
         Args:
             det_path: Path to the deterministic ONNX model file.
             mcd_path: Optional path to the MC-Dropout ONNX model file.
+            mean: Optional normalization mean. When omitted (with std also
+                omitted), preprocessing keeps today's /255.0-only scaling.
+            std: Optional normalization std. Must be provided together with
+                mean.
+            input_shape: Optional [N, C, H, W] fallback used when the ONNX
+                file's metadata has no input_shape key.
 
         Returns:
             Loaded instance of the calling subclass.
 
         Raises:
             FileNotFoundError: If det_path does not exist.
+            ValueError: If exactly one of mean/std is provided, or if no
+                input_shape can be resolved from metadata or the argument.
         """
         det_session = ort.InferenceSession(det_path)
         metadata = _read_metadata(det_session)
@@ -87,7 +102,9 @@ class BasePredictor:
             mcd_session = ort.InferenceSession(mcd_path)
 
         model_metadata = _parse_model_metadata(
-            metadata, mc_dropout=mcd_session is not None
+            metadata,
+            mc_dropout=mcd_session is not None,
+            default_input_shape=input_shape,
         )
 
         instance = cls.__new__(cls)
@@ -96,6 +113,8 @@ class BasePredictor:
             metadata=metadata,
             model_metadata=model_metadata,
             mcd_session=mcd_session,
+            mean=mean,
+            std=std,
         )
         return instance
 
@@ -105,6 +124,9 @@ class BasePredictor:
         artifact_path: str,
         local_dir: str,
         registry: Optional["ModelRegistry"] = None,
+        mean: Optional[float] = None,
+        std: Optional[float] = None,
+        input_shape: Optional[List[int]] = None,
     ) -> "BasePredictor":
         """Download a model from a registry and load it via from_path.
 
@@ -113,6 +135,10 @@ class BasePredictor:
             local_dir: Local directory where the ONNX file will be saved.
             registry: Registry to pull from. Defaults to WandbRegistry() when
                 omitted.
+            mean: Optional normalization mean, forwarded to from_path.
+            std: Optional normalization std, forwarded to from_path.
+            input_shape: Optional input_shape fallback, forwarded to
+                from_path.
 
         Returns:
             Loaded instance of the calling subclass.
@@ -125,7 +151,9 @@ class BasePredictor:
             det_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
         except RuntimeError as exc:
             raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
-        return cls.from_path(det_path=det_path)
+        return cls.from_path(
+            det_path=det_path, mean=mean, std=std, input_shape=input_shape
+        )
 
     @classmethod
     def from_selector(
@@ -171,19 +199,37 @@ def _read_metadata(session: "ort.InferenceSession") -> Dict[str, str]:
     return dict(session.get_modelmeta().custom_metadata_map)
 
 
-def _parse_model_metadata(metadata: Dict[str, str], mc_dropout: bool) -> ModelMetadata:
+def _parse_model_metadata(
+    metadata: Dict[str, str],
+    mc_dropout: bool,
+    default_input_shape: Optional[List[int]] = None,
+) -> ModelMetadata:
     """Parse the raw ONNX metadata dict into a typed ModelMetadata.
 
     Args:
         metadata: Raw custom_metadata_map from the deterministic session.
         mc_dropout: Whether a stochastic (MC-Dropout) session was also loaded.
+        default_input_shape: Fallback [N, C, H, W] used when the metadata has
+            no input_shape key.
 
     Returns:
         Typed ModelMetadata with JSON fields decoded.
+
+    Raises:
+        ValueError: If the metadata has no input_shape key and
+            default_input_shape is not provided.
     """
+    if "input_shape" in metadata:
+        input_shape = json.loads(metadata["input_shape"])
+    else:
+        input_shape = default_input_shape
+    if input_shape is None:
+        raise ValueError(
+            "ONNX model has no input_shape metadata; pass input_shape" " explicitly."
+        )
     return ModelMetadata(
         classes=json.loads(metadata["classes"]),
-        input_shape=json.loads(metadata["input_shape"]),
+        input_shape=input_shape,
         cam_target_layer=metadata["cam_target_layer"],
         output_names=json.loads(metadata["output_names"]),
         mc_dropout=mc_dropout,
@@ -206,19 +252,35 @@ def _to_pil(image: Union[str, "np.ndarray", "PILImage.Image"]) -> "PILImage.Imag
     return image.convert("RGB")
 
 
-def _normalize_pil(pil_img: "PILImage.Image", input_shape: List[int]) -> "np.ndarray":
+def _normalize_pil(
+    pil_img: "PILImage.Image",
+    input_shape: List[int],
+    mean: Optional[float] = None,
+    std: Optional[float] = None,
+) -> "np.ndarray":
     """Resize and normalize an already-decoded PIL image to a float32 NCHW array.
 
     Args:
         pil_img: RGB-converted PIL Image.
         input_shape: [N, C, H, W] as stored in model metadata.
+        mean: Optional normalization mean. When omitted (with std also
+            omitted), the array is left in [0, 1] (today's default).
+        std: Optional normalization std. Must be provided together with mean.
 
     Returns:
-        Float32 array of shape (1, C, H, W) with values in [0, 1].
+        Float32 array of shape (1, C, H, W): raw [0, 1] scale by default, or
+        (arr - mean) / std when both mean and std are given.
+
+    Raises:
+        ValueError: If exactly one of mean/std is provided.
     """
+    if (mean is None) != (std is None):
+        raise ValueError("mean and std must be provided together")
     _, _, h, w = input_shape
     pil_img = pil_img.resize((w, h), PILImage.Resampling.BILINEAR)
     arr = np.array(pil_img, dtype=np.float32) / 255.0
+    if mean is not None and std is not None:
+        arr = (arr - mean) / std
     arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
     return arr
 
@@ -226,17 +288,21 @@ def _normalize_pil(pil_img: "PILImage.Image", input_shape: List[int]) -> "np.nda
 def _preprocess_image(
     image: Union[str, "np.ndarray", "PILImage.Image"],
     input_shape: List[int],
+    mean: Optional[float] = None,
+    std: Optional[float] = None,
 ) -> "np.ndarray":
     """Load, resize, and normalize image to a float32 NCHW array.
 
     Args:
         image: File path, numpy HWC uint8 array, or PIL Image.
         input_shape: [N, C, H, W] as stored in model metadata.
+        mean: Optional normalization mean, forwarded to _normalize_pil.
+        std: Optional normalization std, forwarded to _normalize_pil.
 
     Returns:
-        Float32 array of shape (1, C, H, W) with values in [0, 1].
+        Float32 array of shape (1, C, H, W).
     """
-    return _normalize_pil(_to_pil(image), input_shape)
+    return _normalize_pil(_to_pil(image), input_shape, mean=mean, std=std)
 
 
 def _softmax(logits: "np.ndarray") -> "np.ndarray":

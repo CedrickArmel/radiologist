@@ -115,6 +115,37 @@ class TestPredictCommand:
         assert "ABNORMAL" in result.output
 
 
+class TestPredictCommandNormalizationFlags:
+    def test_predict_with_mean_std_input_shape_changes_output(self, tmp_path):
+        """--mean/--std/--input-shape must be accepted and change output vs.
+        the default (no flags) invocation."""
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        default_result = runner.invoke(
+            app, ["predict", image_path, "--model", det_path]
+        )
+        normalized_result = runner.invoke(
+            app,
+            [
+                "predict",
+                image_path,
+                "--model",
+                det_path,
+                "--mean",
+                "128",
+                "--std",
+                "65",
+                "--input-shape",
+                "1,3,224,224",
+            ],
+        )
+
+        assert default_result.exit_code == 0
+        assert normalized_result.exit_code == 0, normalized_result.output
+        assert default_result.output != normalized_result.output
+
+
 class TestExplainCommand:
     def test_explain_exits_0_and_prints_predicted_class(self, tmp_path):
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
@@ -141,6 +172,29 @@ class TestExplainCommand:
         assert saved.ndim == 2
 
 
+class TestExplainCommandNormalizationFlags:
+    def test_explain_with_mean_std_accepted(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "explain",
+                image_path,
+                "--model",
+                det_path,
+                "--mean",
+                "128",
+                "--std",
+                "65",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Predicted class:" in result.output
+
+
 class TestUncertaintyCommand:
     def test_uncertainty_exits_0_and_prints_stats(self, tmp_path):
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
@@ -162,6 +216,36 @@ class TestUncertaintyCommand:
         )
 
         assert result.exit_code == 0
+        assert "entropy" in result.output.lower()
+
+
+class TestUncertaintyCommandNormalizationFlags:
+    def test_uncertainty_with_mean_std_input_shape_accepted(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "uncertainty",
+                image_path,
+                "--model",
+                det_path,
+                "--mcd-model",
+                mcd_path,
+                "--n-passes",
+                "5",
+                "--mean",
+                "128",
+                "--std",
+                "65",
+                "--input-shape",
+                "1,3,224,224",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
         assert "entropy" in result.output.lower()
 
 

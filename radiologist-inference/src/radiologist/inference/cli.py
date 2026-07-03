@@ -48,6 +48,13 @@ _SELECTOR_REQUIRED_MSG = (
 )
 
 
+def _parse_int_list(value: Optional[str]) -> Optional[List[int]]:
+    """Parse a comma-separated string of ints, e.g. "1,3,224,224"."""
+    if value is None:
+        return None
+    return [int(part) for part in value.split(",")]
+
+
 def _load_predictor(
     predictor_cls: Any,
     model: Optional[str],
@@ -56,15 +63,21 @@ def _load_predictor(
     groups: Optional[List[str]],
     metric: Optional[str],
     local_dir: str,
+    mean: Optional[float] = None,
+    std: Optional[float] = None,
+    input_shape: Optional[str] = None,
 ) -> Any:
     """Dispatch to a registry selector or a local path, per predictor_cls."""
     selector = selector_from_flags(
         path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
     )
+    parsed_input_shape = _parse_int_list(input_shape)
     if selector.is_registry_backed():
         return predictor_cls.from_selector(selector, local_dir=local_dir)
     if model is not None:
-        return predictor_cls.from_path(det_path=model)
+        return predictor_cls.from_path(
+            det_path=model, mean=mean, std=std, input_shape=parsed_input_shape
+        )
     raise ValueError(_SELECTOR_REQUIRED_MSG)
 
 
@@ -76,11 +89,15 @@ def _load_uncertainty_predictor(
     metric: Optional[str],
     local_dir: str,
     mcd_model: Optional[str],
+    mean: Optional[float] = None,
+    std: Optional[float] = None,
+    input_shape: Optional[str] = None,
 ) -> "MCDropoutPredictor":
     """Load det+mcd models: registry pair (run_id / {run_id}-mcd) or local paths."""
     selector = selector_from_flags(
         path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
     )
+    parsed_input_shape = _parse_int_list(input_shape)
     if selector.is_registry_backed():
         det_path = _resolve_and_pull(selector, local_dir)
         mcd_run_id = f"{run_id}-mcd" if run_id else None
@@ -92,9 +109,21 @@ def _load_uncertainty_predictor(
             metric=metric,
         )
         mcd_path = _resolve_and_pull(mcd_selector, local_dir)
-        return MCDropoutPredictor.from_path(det_path=det_path, mcd_path=mcd_path)
+        return MCDropoutPredictor.from_path(
+            det_path=det_path,
+            mcd_path=mcd_path,
+            mean=mean,
+            std=std,
+            input_shape=parsed_input_shape,
+        )
     if model is not None:
-        return MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
+        return MCDropoutPredictor.from_path(
+            det_path=model,
+            mcd_path=mcd_model,
+            mean=mean,
+            std=std,
+            input_shape=parsed_input_shape,
+        )
     raise ValueError(_SELECTOR_REQUIRED_MSG)
 
 
@@ -130,10 +159,30 @@ if _typer is not None:
         groups: Optional[List[str]] = typer.Option(None, "--groups"),
         metric: Optional[str] = typer.Option(None, "--metric"),
         local_dir: str = typer.Option(".", "--local-dir"),
+        mean: Optional[float] = typer.Option(
+            None, "--mean", help="Normalization mean (requires --std)."
+        ),
+        std: Optional[float] = typer.Option(
+            None, "--std", help="Normalization std (requires --mean)."
+        ),
+        input_shape: Optional[str] = typer.Option(
+            None,
+            "--input-shape",
+            help="Fallback [N,C,H,W] as comma-separated ints, e.g. 1,3,224,224.",
+        ),
     ) -> None:
         """Run classification inference on a chest X-ray image."""
         classifier = _load_predictor(
-            Classifier, model, run_id, tags, groups, metric, local_dir
+            Classifier,
+            model,
+            run_id,
+            tags,
+            groups,
+            metric,
+            local_dir,
+            mean=mean,
+            std=std,
+            input_shape=input_shape,
         )
         result = classifier.predict(image=image_path)
         typer.echo(f"Predicted class: {result.predicted_class}")
@@ -157,10 +206,30 @@ if _typer is not None:
         out: Optional[str] = typer.Option(
             None, "--out", help="Path to save the saliency map as a .npy file."
         ),
+        mean: Optional[float] = typer.Option(
+            None, "--mean", help="Normalization mean (requires --std)."
+        ),
+        std: Optional[float] = typer.Option(
+            None, "--std", help="Normalization std (requires --mean)."
+        ),
+        input_shape: Optional[str] = typer.Option(
+            None,
+            "--input-shape",
+            help="Fallback [N,C,H,W] as comma-separated ints, e.g. 1,3,224,224.",
+        ),
     ) -> None:
         """Produce a Score-CAM explanation for a chest X-ray image."""
         explainer = _load_predictor(
-            Explainer, model, run_id, tags, groups, metric, local_dir
+            Explainer,
+            model,
+            run_id,
+            tags,
+            groups,
+            metric,
+            local_dir,
+            mean=mean,
+            std=std,
+            input_shape=input_shape,
         )
         result = explainer.explain(image=image_path)
         typer.echo(f"Predicted class: {result.predicted_class}")
@@ -190,10 +259,30 @@ if _typer is not None:
         n_passes: int = typer.Option(
             30, "--n-passes", help="Number of stochastic forward passes."
         ),
+        mean: Optional[float] = typer.Option(
+            None, "--mean", help="Normalization mean (requires --std)."
+        ),
+        std: Optional[float] = typer.Option(
+            None, "--std", help="Normalization std (requires --mean)."
+        ),
+        input_shape: Optional[str] = typer.Option(
+            None,
+            "--input-shape",
+            help="Fallback [N,C,H,W] as comma-separated ints, e.g. 1,3,224,224.",
+        ),
     ) -> None:
         """Estimate MC-Dropout uncertainty for a chest X-ray image."""
         predictor = _load_uncertainty_predictor(
-            model, run_id, tags, groups, metric, local_dir, mcd_model
+            model,
+            run_id,
+            tags,
+            groups,
+            metric,
+            local_dir,
+            mcd_model,
+            mean=mean,
+            std=std,
+            input_shape=input_shape,
         )
         result = predictor.predict_with_uncertainty(image=image_path, n_passes=n_passes)
         typer.echo("Mean probabilities:")
