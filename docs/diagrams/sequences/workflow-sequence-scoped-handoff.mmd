@@ -1,0 +1,114 @@
+sequenceDiagram
+    autonumber
+
+    box rgb(225,245,225) ORCHESTRATION - decision and scheduling layer, outside this repo
+        participant Orch as Orchestrator (Airflow / Prefect Cloud)
+        actor Op as Operator (manual override)
+    end
+
+    box rgb(225,235,255) DEPLOYMENT PLATFORM - runtime infra, outside this repo
+        participant JobETL as K8s Job - etl container
+        participant JobTrain as K8s Job - train container
+        participant JobPromote as K8s Job - promote container
+        participant SvcInf as K8s Deployment and Service - inference pods
+    end
+
+    box rgb(255,240,225) THIS PROJECT - radiologist monorepo, the building blocks
+        participant ETL as radiologist-etl
+        participant Core as radiologist-core
+        participant Reg as radiologist-registry
+        participant Inf as radiologist-inference
+    end
+
+    participant GCS as GCS
+    participant WB as Weights and Biases
+    actor App as radiologist-app / Clinician
+
+    Note over Orch,App: Three scopes shown as colored lanes. Green = decides WHEN and WHETHER<br/>to run something. Blue = the platform primitives that actually host a container.<br/>Orange = the application code this repo owns. Every arrow crossing a lane<br/>boundary is an interface. NEEDS DESIGN notes mark interfaces that do not<br/>exist in the codebase today and should be scoped as issues.
+
+    alt Orchestrator scheduled trigger
+        Orch->>JobETL: create Job manifest, env SOURCE, DESTINATION, SHARD_ROOT
+    else Operator forces a manual ETL run
+        Op->>JobETL: kubectl apply same Job manifest, env RUN_LABEL=manual-force
+    end
+    Note over Orch,JobETL: NEEDS DESIGN - container entrypoint contract for etl.<br/>Today the only entrypoint is a Hydra CLI expecting key=value argv overrides.<br/>A Job needs a stable env-var or mounted-file contract instead.
+
+    JobETL->>ETL: container entrypoint invokes etl_flow via the new contract
+    activate ETL
+    ETL->>GCS: read raw images, write manifest-RUNID.jsonl and shards
+    ETL->>GCS: write manifests/latest.json pointer
+    Note over ETL,GCS: NEEDS DESIGN - pointer file does not exist today, see prior audit
+    ETL-->>JobETL: exit 0, run_id and manifest_uri
+    deactivate ETL
+    Note over ETL,JobETL: NEEDS DESIGN - structured output contract. How does the Job surface<br/>run_id and manifest_uri to the Orchestrator: a written status file on a shared<br/>volume, a Job termination message, or the Orchestrator reads GCS directly.
+    JobETL-->>Orch: Job status success or failure
+
+    alt Orchestrator triggers training on the new run
+        Orch->>JobTrain: create Job manifest, env SPLIT_MANIFEST_URI, SHARD_ROOT
+    else Operator forces a manual retrain
+        Op->>JobTrain: kubectl apply same Job manifest, custom overrides
+    end
+    JobTrain->>Core: container entrypoint invokes train via the new contract
+    Note over JobTrain,Core: NEEDS DESIGN - same container entrypoint contract as etl.<br/>Existing building block: initialize_config_module plus compose plus train,<br/>already usable inside a single-shot container without CLI argv parsing.
+    activate Core
+    Core->>GCS: read manifest and shards
+    Core->>WB: wandb.init, log metrics and attribution panels during fit
+    Core->>Core: on_fit_end triggers OnnxExportCallback, export_onnx
+    Core->>Reg: log_model_artifacts(det.onnx, mcd.onnx, run_id)
+    Reg->>WB: create Artifact model-RUNID, aliases best and last
+    Core-->>JobTrain: exit 0, run_id, best_metric, det_collection, mcd_collection
+    deactivate Core
+    Note over Core,JobTrain: NEEDS DESIGN - how does best_metric reach the Orchestrator to<br/>gate promotion. Options: write metrics.json to a shared volume, query the<br/>W&B run summary by run_id after the Job exits, or a Job termination message.
+    JobTrain-->>Orch: Job status success or failure
+
+    Orch->>Orch: evaluate best_metric against promotion threshold
+
+    alt metric passes, Orchestrator promotes automatically
+        Orch->>JobPromote: create Job manifest, env DET_COLLECTION, MCD_COLLECTION
+    else metric fails
+        Orch->>Orch: log rejected run, alert on-call, no Job created
+    else Operator forces promotion regardless of metric
+        Op->>JobPromote: kubectl apply same Job manifest, env FORCE=true
+    end
+    JobPromote->>Reg: container entrypoint invokes promote via a new CLI
+    Note over JobPromote,Reg: NEEDS DESIGN - radiologist-registry has no CLI or container<br/>entrypoint at all today. promote and transition_to_production are only<br/>reachable via a raw Python import, with zero callers in the repo.<br/>This is the clearest, cheapest interface to design first.
+    activate Reg
+    Reg->>WB: list_collection_artifacts for both collections
+    Reg->>Reg: alias = staging if a production artifact already exists else production
+    Reg->>WB: link_to_collection with the resolved alias
+    Reg-->>JobPromote: exit 0 or 1
+    deactivate Reg
+    JobPromote-->>Orch: Job status success or failure
+
+    Note over Orch,SvcInf: The inference Deployment is not per-run like the Jobs above.<br/>It is applied once and then stays up across many promotions.
+
+    Orch->>SvcInf: kubectl apply Deployment and Service, once or on new image release
+    SvcInf->>Inf: pod startup invokes the container entrypoint
+    Note over SvcInf,Inf: NEEDS DESIGN - no serve CLI exists. create_app is a library<br/>function with zero launcher today, nothing calls uvicorn.run anywhere.<br/>Also needs liveness and readiness probe endpoints for the Service.
+    activate Inf
+    Inf->>Reg: BasePredictor.from_registry, artifact_path model star production
+    Note over Inf,Reg: NEEDS DESIGN - from_registry exists and is tested but is never<br/>called by cli.py or app.py today, every real command needs a<br/>manually pre-downloaded local file instead.
+    Reg->>WB: download artifact tagged production
+    Reg-->>Inf: local det.onnx and mcd.onnx paths
+    Inf->>Inf: create_app wires predict, explain and uncertainty routes
+
+    Note over JobPromote,Inf: NEEDS DESIGN - how does a running inference pod learn a new<br/>promotion happened, without waiting for a manual redeploy. Three candidate<br/>interfaces, pick one: background poll against the registry alias, a webhook<br/>from the promote Job that calls an admin endpoint, or an explicit Operator<br/>reload command that this repo does not expose today.
+
+    alt background poll detects a new production alias
+        Reg-->>Inf: poll finds new alias
+        Inf->>Reg: from_registry again, artifact_path model star production
+        Inf->>Inf: hot-swap predictor without downtime
+    else Operator forces an immediate reload
+        Op->>SvcInf: CLI radiologist reload-model, or HTTP POST admin reload-model
+        SvcInf->>Inf: forward reload command
+        Inf->>Reg: from_registry again, artifact_path model star production
+        Inf->>Inf: hot-swap predictor without downtime
+    end
+
+    App->>SvcInf: HTTP request, load balanced across pods
+    SvcInf->>Inf: forward request
+    Inf-->>SvcInf: predicted_class, saliency_map, or uncertainty
+    SvcInf-->>App: response
+    deactivate Inf
+
+    Note over Orch,App: Interfaces to scope as issues, in priority order.<br/>1. Container entrypoint contract shared by etl, train and promote jobs.<br/>2. Structured job output contract, run_id, manifest_uri and best_metric.<br/>3. radiologist-registry CLI, promote and transition-to-production, with force.<br/>4. radiologist-inference serve CLI plus liveness and readiness endpoints.<br/>5. from_registry wiring into cli.py and app.py.<br/>6. Hot-swap interface for the running inference pod, poll, webhook or reload command.<br/>7. manifests latest.json pointer written by etl and read by train.
