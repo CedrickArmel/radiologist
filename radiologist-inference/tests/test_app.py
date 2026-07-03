@@ -100,6 +100,11 @@ class TestClassifierApp:
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
+    def test_readyz_returns_200(self, client: TestClient) -> None:
+        response = client.get("/readyz")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ready"}
+
     def test_predict_returns_400_on_missing_image(self, client: TestClient) -> None:
         response = client.post("/predict")
         assert response.status_code == 400
@@ -189,6 +194,10 @@ class TestMCDropoutApp:
         response = client.get("/healthz")
         assert response.status_code == 200
 
+    def test_readyz_returns_200(self, client: TestClient) -> None:
+        response = client.get("/readyz")
+        assert response.status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # AC: a wired route with no predictor injected returns 503.
@@ -221,8 +230,14 @@ class TestNoPredictorInjected:
         )
         assert response.status_code == 503
 
-    def test_healthz_returns_503(self, client: TestClient) -> None:
+    def test_healthz_returns_200(self, client: TestClient) -> None:
+        """healthz is pure liveness: 200 even with no predictor loaded."""
         response = client.get("/healthz")
+        assert response.status_code == 200
+
+    def test_readyz_returns_503(self, client: TestClient) -> None:
+        """readyz owns readiness: 503 when no predictor is loaded."""
+        response = client.get("/readyz")
         assert response.status_code == 503
 
 

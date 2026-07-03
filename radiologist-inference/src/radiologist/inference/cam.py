@@ -32,14 +32,17 @@ def score_cam(
     feature_maps: np.ndarray,
     logits: np.ndarray,
 ) -> np.ndarray:
-    """Compute a Score-CAM saliency map from feature maps and logits.
+    """Compute a Score-CAM saliency map from feature maps via GAP weighting.
 
-    Uses global-average-pooling of each channel as the channel weight
-    (approximation when no ONNX session is available for masked passes).
+    Uses global-average-pooling of each channel as the channel weight —
+    the approximation path used when no ONNX session is available for
+    masked forward passes. ``logits`` is accepted for interface symmetry
+    with ``score_cam_with_session`` but does not affect the result.
 
     Args:
         feature_maps: Feature maps of shape (C, H, W).
-        logits: Model logits of shape (num_classes,).
+        logits: Unused GAP-approximation fallback argument, kept for
+            interface symmetry with score_cam_with_session.
 
     Returns:
         Saliency map of shape (H, W) with values in [0, 1].

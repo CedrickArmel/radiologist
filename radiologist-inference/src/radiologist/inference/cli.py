@@ -32,12 +32,71 @@ from typing import Any, Callable, List, Optional, TypeVar
 
 import numpy as np
 
+from radiologist.inference.app import create_app
+from radiologist.inference.base_predictor import _resolve_and_pull
 from radiologist.inference.classifier import Classifier
 from radiologist.inference.explainer import Explainer
 from radiologist.inference.mc_dropout import MCDropoutPredictor
 from radiologist.inference.optional import _typer, _uvicorn
+from radiologist.registry import RegistrySelector
 
 F = TypeVar("F", bound=Callable[..., None])
+
+_SELECTOR_REQUIRED_MSG = (
+    "Provide either --model or a registry selector "
+    "(--run-id/--tags/--groups/--metric)."
+)
+
+
+def _load_predictor(
+    predictor_cls: Any,
+    model: Optional[str],
+    run_id: Optional[str],
+    tags: Optional[List[str]],
+    groups: Optional[List[str]],
+    metric: Optional[str],
+    local_dir: str,
+) -> Any:
+    """Dispatch to a registry selector or a local path, per predictor_cls."""
+    selector = RegistrySelector(
+        path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
+    )
+    if selector.is_registry_backed():
+        return predictor_cls.from_selector(selector, local_dir=local_dir)
+    if model is not None:
+        return predictor_cls.from_path(det_path=model)
+    raise ValueError(_SELECTOR_REQUIRED_MSG)
+
+
+def _load_uncertainty_predictor(
+    model: Optional[str],
+    run_id: Optional[str],
+    tags: Optional[List[str]],
+    groups: Optional[List[str]],
+    metric: Optional[str],
+    local_dir: str,
+    mcd_model: Optional[str],
+) -> "MCDropoutPredictor":
+    """Load det+mcd models: registry pair (run_id / {run_id}-mcd) or local paths."""
+    selector = RegistrySelector(
+        path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
+    )
+    if selector.is_registry_backed():
+        det_path = _resolve_and_pull(selector, local_dir)
+        mcd_run_id = f"{run_id}-mcd" if run_id else None
+        mcd_selector = RegistrySelector(
+            path=model or "",
+            run_id=mcd_run_id,
+            tags=tags,
+            groups=groups,
+            metric=metric,
+        )
+        mcd_path = _resolve_and_pull(mcd_selector, local_dir)
+        return MCDropoutPredictor.from_path(det_path=det_path, mcd_path=mcd_path)
+    if model is not None:
+        return MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
+    raise ValueError(_SELECTOR_REQUIRED_MSG)
+
 
 if _typer is not None:
     import typer
@@ -73,14 +132,13 @@ if _typer is not None:
         local_dir: str = typer.Option(".", "--local-dir"),
     ) -> None:
         """Run classification inference on a chest X-ray image."""
-        if model is not None:
-            classifier = Classifier.from_path(det_path=model)
-            result = classifier.predict(image=image_path)
-            typer.echo(f"Predicted class: {result.predicted_class}")
-            for cls, prob in result.probabilities.items():
-                typer.echo(f"  {cls}: {prob:.4f}")
-        else:
-            raise NotImplementedError
+        classifier = _load_predictor(
+            Classifier, model, run_id, tags, groups, metric, local_dir
+        )
+        result = classifier.predict(image=image_path)
+        typer.echo(f"Predicted class: {result.predicted_class}")
+        for cls, prob in result.probabilities.items():
+            typer.echo(f"  {cls}: {prob:.4f}")
 
     @app.command()
     @_exit_on_error
@@ -101,17 +159,16 @@ if _typer is not None:
         ),
     ) -> None:
         """Produce a Score-CAM explanation for a chest X-ray image."""
-        if model is not None:
-            explainer = Explainer.from_path(det_path=model)
-            result = explainer.explain(image=image_path)
-            typer.echo(f"Predicted class: {result.predicted_class}")
-            if out is not None:
-                np.save(out, result.saliency_map)
-                typer.echo(f"Saliency map saved to: {out}")
-            else:
-                typer.echo(f"Saliency map shape: {result.saliency_map.shape}")
+        explainer = _load_predictor(
+            Explainer, model, run_id, tags, groups, metric, local_dir
+        )
+        result = explainer.explain(image=image_path)
+        typer.echo(f"Predicted class: {result.predicted_class}")
+        if out is not None:
+            np.save(out, result.saliency_map)
+            typer.echo(f"Saliency map saved to: {out}")
         else:
-            raise NotImplementedError
+            typer.echo(f"Saliency map shape: {result.saliency_map.shape}")
 
     @app.command()
     @_exit_on_error
@@ -135,18 +192,15 @@ if _typer is not None:
         ),
     ) -> None:
         """Estimate MC-Dropout uncertainty for a chest X-ray image."""
-        if model is not None:
-            predictor = MCDropoutPredictor.from_path(det_path=model, mcd_path=mcd_model)
-            result = predictor.predict_with_uncertainty(
-                image=image_path, n_passes=n_passes
-            )
-            typer.echo("Mean probabilities:")
-            for cls, prob in result.mean_probabilities.items():
-                std = result.std_per_class[cls]
-                typer.echo(f"  {cls}: {prob:.4f} (std={std:.4f})")
-            typer.echo(f"Predictive entropy: {result.predictive_entropy:.4f}")
-        else:
-            raise NotImplementedError
+        predictor = _load_uncertainty_predictor(
+            model, run_id, tags, groups, metric, local_dir, mcd_model
+        )
+        result = predictor.predict_with_uncertainty(image=image_path, n_passes=n_passes)
+        typer.echo("Mean probabilities:")
+        for cls, prob in result.mean_probabilities.items():
+            std = result.std_per_class[cls]
+            typer.echo(f"  {cls}: {prob:.4f} (std={std:.4f})")
+        typer.echo(f"Predictive entropy: {result.predictive_entropy:.4f}")
 
     @app.command()
     @_exit_on_error
@@ -166,7 +220,19 @@ if _typer is not None:
                 "The 'serve' extra is required to use the serve command. "
                 "Install it with: pip install radiologist-inference[serve]"
             )
-        raise NotImplementedError
+        selector = RegistrySelector(
+            path=model or "", run_id=run_id, tags=tags, groups=groups, metric=metric
+        )
+        if selector.is_registry_backed():
+            predictor: Optional[Explainer] = Explainer.from_selector(
+                selector, local_dir=local_dir
+            )
+        elif model is not None:
+            predictor = Explainer.from_path(det_path=model)
+        else:
+            predictor = None
+        fastapi_app = create_app(predictor)
+        _uvicorn.run(fastapi_app, host=host, port=port)
 
 else:
     app = None  # type: ignore[assignment]
