@@ -199,6 +199,68 @@ class TestClassifierFromRegistry:
                 )
 
 
+class TestClassifierMeanStdNormalization:
+    def test_predict_with_mean_and_std_differs_from_default(self, det_onnx_path):
+        """Supplying mean/std must change probabilities relative to the
+        default /255.0-only normalization."""
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+
+        default_classifier = Classifier.from_path(det_path=det_onnx_path)
+        normalized_classifier = Classifier.from_path(
+            det_path=det_onnx_path, mean=128.0, std=65.0
+        )
+
+        default_result = default_classifier.predict(image=image)
+        normalized_result = normalized_classifier.predict(image=image)
+
+        assert default_result.probabilities != normalized_result.probabilities
+
+    def test_predict_with_only_mean_raises_value_error(self, det_onnx_path):
+        """Supplying mean without std must raise ValueError on predict."""
+        classifier = Classifier.from_path(det_path=det_onnx_path, mean=128.0)
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+
+        with pytest.raises(ValueError, match="mean and std"):
+            classifier.predict(image=image)
+
+    def test_predict_with_only_std_raises_value_error(self, det_onnx_path):
+        """Supplying std without mean must raise ValueError on predict."""
+        classifier = Classifier.from_path(det_path=det_onnx_path, std=65.0)
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+
+        with pytest.raises(ValueError, match="mean and std"):
+            classifier.predict(image=image)
+
+
+class TestFromPathInputShapeFallback:
+    def test_from_path_without_input_shape_metadata_raises_clear_error(self, tmp_path):
+        """A model with no input_shape metadata and no default given must
+        raise a clear ValueError."""
+        det_path = build_det_onnx(
+            tmp_path, filename="no_shape.onnx", omit_keys=["input_shape"]
+        )
+
+        with pytest.raises(ValueError, match="input_shape"):
+            Classifier.from_path(det_path=det_path)
+
+    def test_from_path_without_input_shape_metadata_succeeds_with_default(
+        self, tmp_path
+    ):
+        """Passing input_shape explicitly must fill in for missing metadata."""
+        det_path = build_det_onnx(
+            tmp_path, filename="no_shape.onnx", omit_keys=["input_shape"]
+        )
+
+        classifier = Classifier.from_path(
+            det_path=det_path, input_shape=[1, 3, 224, 224]
+        )
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+        result = classifier.predict(image=image)
+
+        assert isinstance(result, Prediction)
+        assert set(result.probabilities.keys()) == set(CLASSES)
+
+
 class TestClassifierFromSelector:
     def test_from_selector_with_injected_registry_resolves_and_pulls(
         self, det_onnx_path, tmp_path

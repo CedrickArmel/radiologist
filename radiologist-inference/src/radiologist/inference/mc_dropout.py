@@ -60,7 +60,9 @@ class MCDropoutPredictor(BasePredictor):
                 " loading the predictor via from_path()."
             )
         input_shape = self._state.model_metadata.input_shape
-        arr = _preprocess_image(image, input_shape)
+        arr = _preprocess_image(
+            image, input_shape, mean=self._state.mean, std=self._state.std
+        )
         return mc_dropout_predict(mcd_session, arr, n_passes=n_passes)
 
 

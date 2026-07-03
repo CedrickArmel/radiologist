@@ -61,7 +61,9 @@ class Explainer(Classifier):
         model_metadata = self._state.model_metadata
         input_shape = model_metadata.input_shape
 
-        preprocessed = _normalize_pil(pil_orig, input_shape)
+        preprocessed = _normalize_pil(
+            pil_orig, input_shape, mean=self._state.mean, std=self._state.std
+        )
 
         session = self._state.det_session
         input_name = session.get_inputs()[0].name

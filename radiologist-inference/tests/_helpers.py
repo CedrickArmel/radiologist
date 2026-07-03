@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 import json
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import onnx
@@ -35,7 +35,9 @@ N_FEATURES = 3 * 224 * 224
 
 
 def _add_metadata(
-    model: onnx.ModelProto, extra: Optional[dict] = None
+    model: onnx.ModelProto,
+    extra: Optional[dict] = None,
+    omit_keys: Optional[List[str]] = None,
 ) -> onnx.ModelProto:
     base = {
         "classes": json.dumps(CLASSES),
@@ -45,6 +47,9 @@ def _add_metadata(
     }
     if extra:
         base.update(extra)
+    if omit_keys:
+        for key in omit_keys:
+            base.pop(key, None)
     del model.metadata_props[:]
     for k, v in base.items():
         e = model.metadata_props.add()
@@ -58,6 +63,7 @@ def build_det_onnx(
     priors: Optional[dict] = None,
     filename: str = "model_det.onnx",
     feat_nonzero: bool = False,
+    omit_keys: Optional[List[str]] = None,
 ) -> str:
     """Build a minimal deterministic 2-class ONNX classifier for tests.
 
@@ -110,7 +116,7 @@ def build_det_onnx(
     extra = {}
     if priors is not None:
         extra["training_prior"] = json.dumps(priors)
-    _add_metadata(model, extra)
+    _add_metadata(model, extra, omit_keys=omit_keys)
 
     path = str(tmp_path / filename)
     onnx.save(model, path)
