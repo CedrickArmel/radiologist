@@ -28,7 +28,11 @@ from radiologist.registry.models import (
     LoggedArtifacts,
     PromoteResult,
 )
-from radiologist.registry.selector import RegistrySelector, resolve_selector
+from radiologist.registry.selector import (
+    RegistrySelector,
+    resolve_selector,
+    selector_from_flags,
+)
 from radiologist.registry.wandb_registry import WandbRegistry
 
 __all__ = [
@@ -41,4 +45,5 @@ __all__ = [
     "RegistrySelector",
     "WandbRegistry",
     "resolve_selector",
+    "selector_from_flags",
 ]

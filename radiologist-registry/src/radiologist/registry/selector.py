@@ -50,6 +50,27 @@ class RegistrySelector:
         )
 
 
+def selector_from_flags(
+    path: str,
+    run_id: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    groups: Optional[List[str]] = None,
+    metric: Optional[str] = None,
+    version: Optional[str] = None,
+    include_sweeps: bool = False,
+) -> RegistrySelector:
+    """Build a RegistrySelector from CLI-style flag values."""
+    return RegistrySelector(
+        path=path,
+        run_id=run_id,
+        tags=tags,
+        groups=groups,
+        metric=metric,
+        version=version,
+        include_sweeps=include_sweeps,
+    )
+
+
 def resolve_selector(
     selector: RegistrySelector, registry: ModelRegistry
 ) -> ArtifactRef:
