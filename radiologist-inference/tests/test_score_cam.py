@@ -23,8 +23,8 @@
 """Behavioral tests for the standalone score_cam() saliency function.
 
 Tests drive through the public API only. Explainer.explain()'s behavioral
-coverage lives in test_explainer.py, which exercises the same saliency
-computation through Explainer.explain().
+coverage lives in test_explainer.py, which exercises the different
+score_cam_with_session() masked-ONNX-pass computation, not score_cam().
 """
 
 import numpy as np

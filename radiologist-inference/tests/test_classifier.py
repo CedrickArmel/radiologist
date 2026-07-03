@@ -29,7 +29,7 @@ boundary is exercised via a fake registry or the shared optional._wandb
 sentinel.
 """
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from unittest.mock import patch
 
 import numpy as np
@@ -37,6 +37,7 @@ import pytest
 from _helpers import build_det_onnx
 
 from radiologist.inference import BasePredictor, Classifier, Prediction
+from radiologist.registry import ArtifactRef, RegistrySelector
 
 CLASSES = ["NORMAL", "ABNORMAL"]
 
@@ -48,6 +49,36 @@ class _FakeRegistry:
 
     def pull(self, artifact_path: str, local_dir: str) -> str:
         self.calls.append((artifact_path, local_dir))
+        return self._det_path
+
+
+class _FakeSelectorRegistry:
+    def __init__(self, det_path: str) -> None:
+        self._det_path = det_path
+        self.resolve_calls: List[Tuple[str, Optional[str]]] = []
+        self.pull_calls: List[Tuple[str, str]] = []
+
+    def resolve(
+        self,
+        path: str,
+        run_id=None,
+        groups=None,
+        tags=None,
+        metric=None,
+        version=None,
+        include_sweeps: bool = False,
+    ) -> ArtifactRef:
+        self.resolve_calls.append((path, run_id))
+        resolved_run_id = run_id or "resolved-run"
+        return ArtifactRef(
+            qualified_name=f"{path}/model-{resolved_run_id}:best",
+            run_id=resolved_run_id,
+            artifact_name=f"model-{resolved_run_id}",
+            version="best",
+        )
+
+    def pull(self, artifact_path: str, local_dir: str) -> str:
+        self.pull_calls.append((artifact_path, local_dir))
         return self._det_path
 
 
@@ -152,3 +183,58 @@ class TestClassifierFromRegistry:
                     artifact_path="entity/project/name:v0",
                     local_dir=str(tmp_path),
                 )
+
+    def test_from_registry_names_inference_extra_not_registry_extra(self, tmp_path):
+        """The wandb-missing message must name radiologist-inference[registry],
+        not radiologist-registry[wandb] (bugfix b)."""
+        import radiologist.registry.optional as optional_mod
+
+        with patch.object(optional_mod, "_wandb", None):
+            with pytest.raises(
+                RuntimeError, match=r"radiologist-inference\[registry\]"
+            ):
+                Classifier.from_registry(
+                    artifact_path="entity/project/name:v0",
+                    local_dir=str(tmp_path),
+                )
+
+
+class TestClassifierFromSelector:
+    def test_from_selector_with_injected_registry_resolves_and_pulls(
+        self, det_onnx_path, tmp_path
+    ):
+        """from_selector must resolve the selector then pull the resolved
+        artifact, returning a Classifier equivalent to from_path."""
+        fake_registry = _FakeSelectorRegistry(det_onnx_path)
+        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+
+        classifier = Classifier.from_selector(
+            selector, local_dir=str(tmp_path), registry=fake_registry
+        )
+        path_classifier = Classifier.from_path(det_path=det_onnx_path)
+
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+        selector_result = classifier.predict(image=image)
+        path_result = path_classifier.predict(image=image)
+
+        assert isinstance(classifier, Classifier)
+        assert selector_result.predicted_class == path_result.predicted_class
+        assert fake_registry.resolve_calls == [("entity/project/model", "run123")]
+        assert fake_registry.pull_calls == [
+            ("entity/project/model/model-run123:best", str(tmp_path))
+        ]
+
+    def test_from_selector_raises_runtime_error_naming_inference_extra_when_wandb_absent(
+        self, tmp_path
+    ):
+        """from_selector with no injected registry and wandb absent must raise
+        RuntimeError naming radiologist-inference[registry] (bugfix b)."""
+        import radiologist.registry.optional as optional_mod
+
+        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+
+        with patch.object(optional_mod, "_wandb", None):
+            with pytest.raises(
+                RuntimeError, match=r"radiologist-inference\[registry\]"
+            ):
+                Classifier.from_selector(selector, local_dir=str(tmp_path))
