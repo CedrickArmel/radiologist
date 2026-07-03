@@ -27,7 +27,7 @@ Classifier/Explainer/MCDropoutPredictor, the absence of a pull subcommand,
 and the typer-absent RuntimeError guard.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -38,6 +38,32 @@ from typer.testing import CliRunner
 from radiologist.inference.cli import app
 
 runner = CliRunner()
+
+
+def _make_registry_wandb_mock(qualified_name: str = "entity/project/model-run1:best"):
+    """A wandb mock distinguishing resolve()'s kwargs artifact() call from
+    pull()'s positional artifact() call, per _WandbResolver's two call shapes.
+    """
+    mock_wandb = MagicMock()
+
+    resolved_art = MagicMock()
+    resolved_art.qualified_name = qualified_name
+    resolved_art.version = "best"
+
+    pulled_art = MagicMock()
+
+    best_run = MagicMock()
+    best_run.id = "run1"
+
+    api_instance = MagicMock()
+    api_instance.runs.return_value = [best_run]
+
+    def _artifact(*args, **kwargs):
+        return resolved_art if kwargs else pulled_art
+
+    api_instance.artifact.side_effect = _artifact
+    mock_wandb.Api.return_value = api_instance
+    return mock_wandb, pulled_art
 
 
 def _command_names():
@@ -137,3 +163,161 @@ class TestUncertaintyCommand:
 
         assert result.exit_code == 0
         assert "entropy" in result.output.lower()
+
+
+class TestRegistrySelectorDispatch:
+    def test_predict_with_run_id_resolves_from_registry(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = _make_png_path(tmp_path)
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.return_value = str(tmp_path)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            result = runner.invoke(
+                app,
+                [
+                    "predict",
+                    image_path,
+                    "--run-id",
+                    "run1",
+                    "--local-dir",
+                    str(tmp_path),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "Predicted class:" in result.output
+        assert det_path is not None
+
+    def test_predict_with_tags_passes_repeatable_list(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = _make_png_path(tmp_path)
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.return_value = str(tmp_path)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            result = runner.invoke(
+                app,
+                [
+                    "predict",
+                    image_path,
+                    "--tags",
+                    "a",
+                    "--tags",
+                    "b",
+                    "--local-dir",
+                    str(tmp_path),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        api_instance = mock_wandb.Api.return_value
+        _, kwargs = api_instance.runs.call_args
+        assert kwargs["filters"]["tags"]["$in"] == ["a", "b"]
+        assert det_path is not None
+
+    def test_predict_without_model_or_selector_exits_nonzero(self, tmp_path):
+        image_path = _make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["predict", image_path])
+
+        assert result.exit_code != 0
+        assert "--model" in result.output
+        assert "--run-id" in result.output or "selector" in result.output.lower()
+
+    def test_predict_with_run_id_and_tags_exits_nonzero(self, tmp_path):
+        image_path = _make_png_path(tmp_path)
+
+        result = runner.invoke(
+            app,
+            ["predict", image_path, "--run-id", "run1", "--tags", "a"],
+        )
+
+        assert result.exit_code != 0
+
+    def test_uncertainty_with_run_id_resolves_det_and_mcd_models(self, tmp_path):
+        det_dir = tmp_path / "det"
+        mcd_dir = tmp_path / "mcd"
+        det_dir.mkdir()
+        mcd_dir.mkdir()
+        build_det_onnx(det_dir, filename="det.onnx")
+        build_mcd_onnx(mcd_dir, filename="mcd.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.side_effect = [str(det_dir), str(mcd_dir)]
+
+        import radiologist.registry.resolver as resolver_mod
+
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            result = runner.invoke(
+                app,
+                [
+                    "uncertainty",
+                    image_path,
+                    "--run-id",
+                    "run1",
+                    "--local-dir",
+                    str(tmp_path),
+                    "--n-passes",
+                    "5",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "entropy" in result.output.lower()
+
+    def test_predict_with_run_id_fails_naming_inference_extra_when_wandb_absent(
+        self, tmp_path
+    ):
+        image_path = _make_png_path(tmp_path)
+        import radiologist.registry.optional as optional_mod
+
+        with patch.object(optional_mod, "_wandb", None):
+            result = runner.invoke(app, ["predict", image_path, "--run-id", "run1"])
+
+        assert result.exit_code != 0
+        assert "radiologist-inference[registry]" in result.output
+
+
+class TestServeCommand:
+    def test_serve_with_model_invokes_uvicorn_run(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        import radiologist.inference.cli as cli_mod
+
+        mock_uvicorn = MagicMock()
+        with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
+            result = runner.invoke(
+                app,
+                [
+                    "serve",
+                    "--model",
+                    det_path,
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    "9000",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_uvicorn.run.assert_called_once()
+        _, kwargs = mock_uvicorn.run.call_args
+        assert kwargs["host"] == "0.0.0.0"
+        assert kwargs["port"] == 9000
+
+    def test_serve_raises_runtime_error_naming_serve_extra_when_uvicorn_absent(
+        self, tmp_path
+    ):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        import radiologist.inference.cli as cli_mod
+
+        with patch.object(cli_mod, "_uvicorn", None):
+            result = runner.invoke(app, ["serve", "--model", det_path])
+
+        assert result.exit_code != 0
+        assert "serve" in result.output

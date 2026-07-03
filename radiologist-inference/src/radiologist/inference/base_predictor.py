@@ -37,11 +37,17 @@ import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
 from radiologist.inference.models import ModelMetadata
+from radiologist.registry.selector import resolve_selector
 from radiologist.registry.wandb_registry import WandbRegistry
 
 if TYPE_CHECKING:
     from radiologist.registry.interface import ModelRegistry
     from radiologist.registry.selector import RegistrySelector
+
+_INFERENCE_WANDB_MISSING_MSG = (
+    "wandb is required for registry operations. "
+    "Install with: pip install 'radiologist-inference[registry]'"
+)
 
 
 @dataclass
@@ -115,7 +121,10 @@ class BasePredictor:
             RuntimeError: When the ``registry`` extra (wandb) is not installed.
         """
         reg = registry if registry is not None else WandbRegistry()
-        det_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
+        try:
+            det_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
+        except RuntimeError as exc:
+            raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
         return cls.from_path(det_path=det_path)
 
     @classmethod
@@ -139,7 +148,27 @@ class BasePredictor:
         Raises:
             RuntimeError: When the ``registry`` extra (wandb) is not installed.
         """
-        raise NotImplementedError
+        det_path = _resolve_and_pull(selector, local_dir, registry)
+        return cls.from_path(det_path=det_path)
+
+
+def _resolve_and_pull(
+    selector: "RegistrySelector",
+    local_dir: str,
+    registry: Optional["ModelRegistry"] = None,
+) -> str:
+    """Resolve a selector to an artifact ref, then pull its ONNX file.
+
+    Shared by from_selector() and the CLI uncertainty command's separate
+    deterministic/MC-Dropout resolution, so both surfaces share the same
+    wandb-missing error translation.
+    """
+    reg = registry if registry is not None else WandbRegistry()
+    try:
+        ref = resolve_selector(selector, reg)
+        return reg.pull(artifact_path=ref.qualified_name, local_dir=local_dir)
+    except RuntimeError as exc:
+        raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
 
 
 def _read_metadata(session: "ort.InferenceSession") -> Dict[str, str]:

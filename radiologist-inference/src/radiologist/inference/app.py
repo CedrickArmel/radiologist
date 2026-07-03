@@ -63,7 +63,8 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
     ``Explainer`` additionally gets ``/explain``, and ``MCDropoutPredictor``
     gets ``/uncertainty``. When ``predictor`` is ``None`` the type is unknown,
     so every route is wired and each falls back to the 503 "no model loaded"
-    guard until a predictor is injected. ``/healthz`` is always wired.
+    guard until a predictor is injected. ``/healthz`` (pure liveness) and
+    ``/readyz`` (readiness, 503 until a predictor is loaded) are always wired.
 
     Args:
         fastapi_mod: The imported fastapi module (passed to avoid re-importing).
@@ -164,12 +165,11 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
 
     @app.get("/healthz")
     def healthz() -> Dict[str, str]:
-        _get_predictor()
         return {"status": "ok"}
 
     @app.get("/readyz")
     def readyz() -> Dict[str, str]:
-        # contract (implemented in #6): 503 when no predictor loaded, 200 once one is.
-        raise NotImplementedError
+        _get_predictor()
+        return {"status": "ready"}
 
     return app
