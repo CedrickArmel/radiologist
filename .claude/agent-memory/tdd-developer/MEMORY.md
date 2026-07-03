@@ -21,5 +21,6 @@
 - [Typer CLI + wandb process boundary](feedback_typer_cli_wandb_process_boundary.md) — a CLI module's own `_wandb` sentinel and a facade submodule's `_wandb` are separate bindings; patch each independently
 - [Registry download vs pull semantics](feedback_registry_download_vs_pull_semantics.md) — `.download()` is ckpt-only (training resume), `.pull()` is onnx-only (inference load); don't conflate even if a spec says "download"
 - [Pytest worktree isolation](feedback_pytest_worktree_isolation.md) — stale `.pth` cross-worktree pointers and cross-package plugin-name collisions; run pytest per-package with `--confcutdir=.`
+- [pyenv activate needs shell init](feedback_pyenv_activate_needs_shell_init.md) — Bash calls need `eval "$(pyenv init -)"; eval "$(pyenv virtualenv-init -)"` before `pyenv activate`, else installs silently land in the shared venv
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
