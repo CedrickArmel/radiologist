@@ -28,6 +28,9 @@ fi
 
 # --- SSH ---------------------------------------------------------------
 if ls ~/.ssh/id_* >/dev/null 2>&1; then
+    # ssh-agent refuses to bind if a stale socket file from a dead agent
+    # process is still there (unlike gpgconf, which self-heals on relaunch).
+    rm -f "$HOME/.ssh/agent.sock"
     eval "$(ssh-agent -a "$HOME/.ssh/agent.sock" -s)" >/dev/null
 
     if [ -n "${SSH_KEY_PASSPHRASE:-}" ]; then
