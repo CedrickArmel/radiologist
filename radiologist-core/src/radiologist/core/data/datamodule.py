@@ -116,6 +116,7 @@ class WebDatasetDataModule(L.LightningDataModule):
         seed: int = 42,
         storage_options: dict | None = None,
     ) -> None:
+        """Store dataset configuration; shard discovery is deferred to ``setup``."""
         super().__init__()
         self.shard_root = shard_root
         self._opts = storage_options or {}
@@ -144,6 +145,7 @@ class WebDatasetDataModule(L.LightningDataModule):
 
     @property
     def train_size(self) -> int:
+        """Number of non-excluded training samples; available after ``setup``."""
         # TODO: add full path to record' shard to ensure shard_root matching correctness.
         return len(
             [r for r in self._records if (not r.excluded and r.split == "train")]
@@ -151,11 +153,13 @@ class WebDatasetDataModule(L.LightningDataModule):
 
     @property
     def val_size(self) -> int:
+        """Number of non-excluded validation samples; available after ``setup``."""
         # TODO: add full path to record' shard to ensure shard_root matching correctness.
         return len([r for r in self._records if (not r.excluded and r.split == "val")])
 
     @property
     def test_size(self) -> int:
+        """Number of non-excluded test samples; available after ``setup``."""
         # TODO: add full path to record' shard to ensure shard_root matching correctness.
         return len([r for r in self._records if (not r.excluded and r.split == "test")])
 

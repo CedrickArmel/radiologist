@@ -39,11 +39,27 @@ class WandbDefineSummaryCallback(L.Callback):
     """
 
     def __init__(self, monitor: str, mode: str = "max") -> None:
+        """Initialize the callback with the metric to summarize.
+
+        Args:
+            monitor: name of the metric key to configure a summary for
+                (e.g. ``"val_score"``); its ``best_`` variant is configured too.
+            mode: aggregation used for the W&B summary panel, ``"max"`` or
+                ``"min"``.
+        """
         super().__init__()
         self.monitor = monitor
         self.mode = mode
 
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
+        """Define the W&B summary metric for ``self.monitor`` and its best variant.
+
+        No-op when no W&B run is active.
+
+        Args:
+            trainer: the active ``lightning.Trainer``.
+            pl_module: the ``LightningModule`` about to be fit.
+        """
         run = getattr(wandb, "run", None)
         if run is None:
             return
