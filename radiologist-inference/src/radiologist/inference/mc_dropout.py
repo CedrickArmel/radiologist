@@ -38,6 +38,7 @@ from radiologist.inference.base_predictor import (
     _read_metadata,
     _resolve_and_pull,
     _softmax,
+    _validate_mean_std,
 )
 from radiologist.inference.models import UncertaintyResult
 from radiologist.registry.wandb_registry import WandbRegistry
@@ -82,7 +83,9 @@ class MCDropoutPredictor(BasePredictor):
         Raises:
             RuntimeError: When the ``registry`` extra (wandb) is not
                 installed.
+            ValueError: If exactly one of mean/std is provided.
         """
+        _validate_mean_std(mean, std)
         reg = registry if registry is not None else WandbRegistry()
         det_path = _resolve_and_pull(selector, local_dir, reg)
         mcd_run_id = f"{selector.run_id}-mcd" if selector.run_id else selector.run_id

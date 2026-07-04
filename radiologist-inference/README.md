@@ -84,7 +84,10 @@ classifier = Classifier.from_path(
 ```
 
 `mean` and `std` must be provided together — passing only one raises
-`ValueError`. `input_shape` (`[N, C, H, W]`) is a fallback used only when the
+`ValueError` eagerly at load time (`from_path`/`from_registry`/
+`from_selector`), before any inference request and, for the registry-backed
+loaders, before the ONNX artifact is pulled. `input_shape` (`[N, C, H, W]`)
+is a fallback used only when the
 ONNX file's embedded metadata has no `input_shape` key; if metadata has no
 `input_shape` and none is passed, loading raises `ValueError`.
 

@@ -215,21 +215,19 @@ class TestClassifierMeanStdNormalization:
 
         assert default_result.probabilities != normalized_result.probabilities
 
-    def test_predict_with_only_mean_raises_value_error(self, det_onnx_path):
-        """Supplying mean without std must raise ValueError on predict."""
-        classifier = Classifier.from_path(det_path=det_onnx_path, mean=128.0)
-        image = np.zeros((224, 224, 3), dtype=np.uint8)
-
+    def test_from_path_with_only_mean_raises_value_error(self, det_onnx_path):
+        """Supplying mean without std must raise ValueError eagerly at
+        from_path, before any prediction is requested (fail-fast, bugfix
+        review finding on PR #131)."""
         with pytest.raises(ValueError, match="mean and std"):
-            classifier.predict(image=image)
+            Classifier.from_path(det_path=det_onnx_path, mean=128.0)
 
-    def test_predict_with_only_std_raises_value_error(self, det_onnx_path):
-        """Supplying std without mean must raise ValueError on predict."""
-        classifier = Classifier.from_path(det_path=det_onnx_path, std=65.0)
-        image = np.zeros((224, 224, 3), dtype=np.uint8)
-
+    def test_from_path_with_only_std_raises_value_error(self, det_onnx_path):
+        """Supplying std without mean must raise ValueError eagerly at
+        from_path, before any prediction is requested (fail-fast, bugfix
+        review finding on PR #131)."""
         with pytest.raises(ValueError, match="mean and std"):
-            classifier.predict(image=image)
+            Classifier.from_path(det_path=det_onnx_path, std=65.0)
 
 
 class TestFromPathInputShapeFallback:
@@ -329,3 +327,24 @@ class TestClassifierFromSelector:
 
         assert selector_result.probabilities == path_result.probabilities
         assert selector_result.probabilities != default_result.probabilities
+
+    def test_from_selector_with_mismatched_mean_std_raises_before_any_pull(
+        self, det_onnx_path, tmp_path
+    ):
+        """A mismatched mean/std pair must raise ValueError before the
+        selector is resolved or the artifact pulled — no wasted network I/O
+        on a request that's doomed to fail (bugfix review finding on PR
+        #131)."""
+        fake_registry = _FakeSelectorRegistry(det_onnx_path)
+        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+
+        with pytest.raises(ValueError, match="mean and std"):
+            Classifier.from_selector(
+                selector,
+                local_dir=str(tmp_path),
+                registry=fake_registry,
+                mean=128.0,
+            )
+
+        assert fake_registry.resolve_calls == []
+        assert fake_registry.pull_calls == []

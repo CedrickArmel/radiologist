@@ -274,3 +274,43 @@ class TestMCDropoutFromSelector:
                 RuntimeError, match=r"radiologist-inference\[registry\]"
             ):
                 MCDropoutPredictor.from_selector(selector, local_dir=str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# Tests: MCDropoutPredictor.from_path mean/std eager validation
+# ---------------------------------------------------------------------------
+
+
+class TestMCDropoutFromPathMeanStdValidation:
+    def test_from_path_with_only_mean_raises_value_error(
+        self, det_onnx_path, mcd_onnx_path
+    ):
+        """Supplying mean without std must raise ValueError eagerly at
+        from_path, before any prediction is requested (bugfix review finding
+        on PR #131 — MCDropoutPredictor delegates to the shared
+        BasePredictor.from_path code path)."""
+        with pytest.raises(ValueError, match="mean and std"):
+            MCDropoutPredictor.from_path(
+                det_path=det_onnx_path, mcd_path=mcd_onnx_path, mean=128.0
+            )
+
+    def test_from_selector_with_mismatched_mean_std_raises_before_any_pull(
+        self, det_onnx_path, mcd_onnx_path, tmp_path
+    ):
+        """MCDropoutPredictor.from_selector has its own det+mcd resolve/pull
+        sequence (it does not delegate resolution to BasePredictor); a
+        mismatched mean/std pair must raise before either artifact is
+        resolved or pulled (bugfix review finding on PR #131)."""
+        fake_registry = _FakeMcdSelectorRegistry(det_onnx_path, mcd_onnx_path)
+        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+
+        with pytest.raises(ValueError, match="mean and std"):
+            MCDropoutPredictor.from_selector(
+                selector,
+                local_dir=str(tmp_path),
+                registry=fake_registry,
+                mean=128.0,
+            )
+
+        assert fake_registry.resolve_calls == []
+        assert fake_registry.pull_calls == []
