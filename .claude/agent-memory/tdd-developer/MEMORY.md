@@ -22,5 +22,6 @@
 - [Registry download vs pull semantics](feedback_registry_download_vs_pull_semantics.md) — `.download()` is ckpt-only (training resume), `.pull()` is onnx-only (inference load); don't conflate even if a spec says "download"
 - [Pytest worktree isolation](feedback_pytest_worktree_isolation.md) — stale `.pth` cross-worktree pointers and cross-package plugin-name collisions; run pytest per-package with `--confcutdir=.`
 - [pyenv activate needs shell init](feedback_pyenv_activate_needs_shell_init.md) — Bash calls need `eval "$(pyenv init -)"; eval "$(pyenv virtualenv-init -)"` before `pyenv activate`, else installs silently land in the shared venv
+- [Worktree branch already checked out](feedback_worktree_branch_already_checked_out.md) — git refuses a 2nd worktree for a branch checked out elsewhere; work in-place instead; also watch for uv.lock revision noise from `make dev-install`
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
