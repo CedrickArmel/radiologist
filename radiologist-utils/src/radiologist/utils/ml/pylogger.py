@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""A rank-aware logger adapter for distributed training runs."""
+
 import logging
 from typing import Any, Mapping, MutableMapping, Optional, Tuple
 
@@ -42,6 +44,13 @@ class RankedLogger(logging.LoggerAdapter):
         rank_zero_only: bool = False,
         extra: Optional[Mapping[str, object]] = None,
     ) -> None:
+        """Initialize the rank-aware logger adapter.
+
+        Args:
+            name: Logger name.
+            rank_zero_only: When True, only rank-0 messages are emitted.
+            extra: Additional context merged into every log record.
+        """
         logger = logging.getLogger(name)
         super().__init__(logger, extra or {})
         self._rank_zero_only = rank_zero_only
@@ -54,7 +63,16 @@ class RankedLogger(logging.LoggerAdapter):
         *args: object,
         **kwargs: object,
     ) -> None:
+        """Log ``msg`` at ``level``, filtering by process rank.
 
+        Args:
+            level: Numeric logging level (e.g. ``logging.INFO``).
+            msg: Message to log.
+            rank: Restrict emission to this process rank. Defaults to the
+                current rank when not provided.
+            *args: Positional arguments forwarded to the underlying logger.
+            **kwargs: Keyword arguments forwarded to the underlying logger.
+        """
         if self.isEnabledFor(level):
             msg, kwargs = self.process(str(msg), dict(kwargs))  # type: ignore[arg-type,assignment]
             current_rank = getattr(_rank_zero_only, "rank", 0)
@@ -70,4 +88,13 @@ class RankedLogger(logging.LoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
     ) -> Tuple[str, MutableMapping[str, Any]]:
+        """Merge adapter ``extra`` context into ``kwargs`` before logging.
+
+        Args:
+            msg: Message to log.
+            kwargs: Keyword arguments passed to the logging call.
+
+        Returns:
+            The ``(msg, kwargs)`` pair as processed by the parent adapter.
+        """
         return super().process(msg, kwargs)

@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Lazy, format-agnostic readers for local and remote image datasets."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -41,6 +43,11 @@ class BaseImageReader(ABC):
     """Abstract base for lazy, format-agnostic image readers."""
 
     def __init__(self, source: str) -> None:
+        """Initialize the reader with its source location.
+
+        Args:
+            source: Local path or remote URI to read images from.
+        """
         self.source = source
 
     @abstractmethod
@@ -76,6 +83,16 @@ class LocalImageReader(BaseImageReader):
     """Stream PNG/JPEG images from a local directory tree."""
 
     def iterate(self) -> Iterator[ImageRecord]:
+        """Yield ``(array, metadata)`` for every supported image under ``source``.
+
+        Returns:
+            An iterator over ``(array, metadata)`` tuples, one per supported
+            image file found in the directory tree, in sorted path order.
+
+        Raises:
+            FileNotFoundError: If ``source`` does not exist.
+            NotADirectoryError: If ``source`` exists but is not a directory.
+        """
         root = Path(self.source)
         if not root.exists():
             raise FileNotFoundError(f"Path not found: {self.source!r}")
@@ -95,10 +112,25 @@ class RemoteImageReader(BaseImageReader):
     """
 
     def __init__(self, source: str, storage_options: dict | None = None) -> None:
+        """Initialize the reader with its remote source and fsspec options.
+
+        Args:
+            source: Remote URI to read images from (e.g. ``gs://bucket/scans``).
+            storage_options: Extra kwargs forwarded to fsspec for remote access.
+        """
         super().__init__(source)
         self._storage_options: dict = storage_options or {}
 
     def iterate(self) -> Iterator[ImageRecord]:
+        """Yield ``(array, metadata)`` for every supported image under ``source``.
+
+        Returns:
+            An iterator over ``(array, metadata)`` tuples, one per supported
+            image file found under the remote root, in sorted path order.
+
+        Raises:
+            FileNotFoundError: If the remote root does not exist.
+        """
         fs, root = fsspec.url_to_fs(self.source, **self._storage_options)
         if not fs.exists(root):
             raise FileNotFoundError(f"Remote path not found: {self.source!r}")
