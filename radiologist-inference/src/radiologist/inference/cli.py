@@ -73,11 +73,36 @@ if _typer is not None:
         model: Optional[str] = typer.Option(
             None, "--model", help="Path to the deterministic ONNX model."
         ),
-        run_id: Optional[str] = typer.Option(None, "--run-id"),
-        tags: Optional[List[str]] = typer.Option(None, "--tags"),
-        groups: Optional[List[str]] = typer.Option(None, "--groups"),
-        metric: Optional[str] = typer.Option(None, "--metric"),
-        local_dir: str = typer.Option(".", "--local-dir"),
+        run_id: Optional[str] = typer.Option(
+            None,
+            "--run-id",
+            help="W&B run ID identifying the registry artifact to resolve. "
+            "Mutually exclusive with --model.",
+        ),
+        tags: Optional[List[str]] = typer.Option(
+            None,
+            "--tags",
+            help="Registry artifact tag(s) to filter by when resolving via "
+            "--run-id is not used. Repeatable.",
+        ),
+        groups: Optional[List[str]] = typer.Option(
+            None,
+            "--groups",
+            help="Registry artifact group(s) to filter by when resolving "
+            "without --run-id. Repeatable.",
+        ),
+        metric: Optional[str] = typer.Option(
+            None,
+            "--metric",
+            help="Metric name used to pick the best-scoring artifact among "
+            "candidates matching --tags/--groups.",
+        ),
+        local_dir: str = typer.Option(
+            ".",
+            "--local-dir",
+            help="Local directory the resolved registry artifact is downloaded "
+            "into. Ignored when --model is used.",
+        ),
         mean: Optional[float] = typer.Option(
             None, "--mean", help="Normalization mean (requires --std)."
         ),
@@ -90,7 +115,31 @@ if _typer is not None:
             help="Fallback [N,C,H,W] as comma-separated ints, e.g. 1,3,224,224.",
         ),
     ) -> None:
-        """Run classification inference on a chest X-ray image."""
+        """Run classification inference on a chest X-ray image.
+
+        Loads a :class:`~radiologist.inference.classifier.Classifier` and
+        prints the predicted class label and per-class probabilities.
+
+        The model to load is dispatched via ``verbs.load_predictor``: if any
+        registry selector flag (``--run-id``/``--tags``/``--groups``/
+        ``--metric``) is set, the artifact is resolved and pulled from the
+        W&B Registry into ``--local-dir``; otherwise ``--model`` is loaded
+        directly from a local ONNX path. Exactly one of the two loading
+        strategies must be usable, or the command exits with an error.
+
+        Args:
+            image_path: Path to the input chest X-ray image.
+            model: Path to a local deterministic ONNX model file.
+            run_id: W&B run ID for registry-backed resolution.
+            tags: Registry artifact tags used for selector-based resolution.
+            groups: Registry artifact groups used for selector-based
+                resolution.
+            metric: Metric name used to break ties among selector matches.
+            local_dir: Directory to download registry artifacts into.
+            mean: Optional normalization mean, requires std.
+            std: Optional normalization std, requires mean.
+            input_shape: Optional fallback [N, C, H, W] input shape.
+        """
         classifier = verbs.load_predictor(
             verbs.get_verb("predict"),
             model,
@@ -117,11 +166,36 @@ if _typer is not None:
         model: Optional[str] = typer.Option(
             None, "--model", help="Path to the deterministic ONNX model."
         ),
-        run_id: Optional[str] = typer.Option(None, "--run-id"),
-        tags: Optional[List[str]] = typer.Option(None, "--tags"),
-        groups: Optional[List[str]] = typer.Option(None, "--groups"),
-        metric: Optional[str] = typer.Option(None, "--metric"),
-        local_dir: str = typer.Option(".", "--local-dir"),
+        run_id: Optional[str] = typer.Option(
+            None,
+            "--run-id",
+            help="W&B run ID identifying the registry artifact to resolve. "
+            "Mutually exclusive with --model.",
+        ),
+        tags: Optional[List[str]] = typer.Option(
+            None,
+            "--tags",
+            help="Registry artifact tag(s) to filter by when resolving via "
+            "--run-id is not used. Repeatable.",
+        ),
+        groups: Optional[List[str]] = typer.Option(
+            None,
+            "--groups",
+            help="Registry artifact group(s) to filter by when resolving "
+            "without --run-id. Repeatable.",
+        ),
+        metric: Optional[str] = typer.Option(
+            None,
+            "--metric",
+            help="Metric name used to pick the best-scoring artifact among "
+            "candidates matching --tags/--groups.",
+        ),
+        local_dir: str = typer.Option(
+            ".",
+            "--local-dir",
+            help="Local directory the resolved registry artifact is downloaded "
+            "into. Ignored when --model is used.",
+        ),
         out: Optional[str] = typer.Option(
             None, "--out", help="Path to save the saliency map as a .npy file."
         ),
@@ -137,7 +211,33 @@ if _typer is not None:
             help="Fallback [N,C,H,W] as comma-separated ints, e.g. 1,3,224,224.",
         ),
     ) -> None:
-        """Produce a Score-CAM explanation for a chest X-ray image."""
+        """Produce a Score-CAM explanation for a chest X-ray image.
+
+        Loads an :class:`~radiologist.inference.explainer.Explainer` and
+        prints the predicted class label, then either saves the saliency map
+        to ``--out`` as a ``.npy`` file or prints its shape.
+
+        Uses the same registry-selector-vs-local-path dispatch as
+        ``predict``, via ``verbs.load_predictor``: registry selector flags
+        (``--run-id``/``--tags``/``--groups``/``--metric``) resolve and pull
+        the artifact into ``--local-dir``; otherwise ``--model`` is loaded
+        directly.
+
+        Args:
+            image_path: Path to the input chest X-ray image.
+            model: Path to a local deterministic ONNX model file.
+            run_id: W&B run ID for registry-backed resolution.
+            tags: Registry artifact tags used for selector-based resolution.
+            groups: Registry artifact groups used for selector-based
+                resolution.
+            metric: Metric name used to break ties among selector matches.
+            local_dir: Directory to download registry artifacts into.
+            out: Optional path to save the saliency map as a .npy file. When
+                omitted, only the saliency map's shape is printed.
+            mean: Optional normalization mean, requires std.
+            std: Optional normalization std, requires mean.
+            input_shape: Optional fallback [N, C, H, W] input shape.
+        """
         explainer = verbs.load_predictor(
             verbs.get_verb("explain"),
             model,
@@ -167,11 +267,36 @@ if _typer is not None:
         model: Optional[str] = typer.Option(
             None, "--model", help="Path to the MC-Dropout ONNX model."
         ),
-        run_id: Optional[str] = typer.Option(None, "--run-id"),
-        tags: Optional[List[str]] = typer.Option(None, "--tags"),
-        groups: Optional[List[str]] = typer.Option(None, "--groups"),
-        metric: Optional[str] = typer.Option(None, "--metric"),
-        local_dir: str = typer.Option(".", "--local-dir"),
+        run_id: Optional[str] = typer.Option(
+            None,
+            "--run-id",
+            help="W&B run ID identifying the registry artifact to resolve. "
+            "Mutually exclusive with --model.",
+        ),
+        tags: Optional[List[str]] = typer.Option(
+            None,
+            "--tags",
+            help="Registry artifact tag(s) to filter by when resolving via "
+            "--run-id is not used. Repeatable.",
+        ),
+        groups: Optional[List[str]] = typer.Option(
+            None,
+            "--groups",
+            help="Registry artifact group(s) to filter by when resolving "
+            "without --run-id. Repeatable.",
+        ),
+        metric: Optional[str] = typer.Option(
+            None,
+            "--metric",
+            help="Metric name used to pick the best-scoring artifact among "
+            "candidates matching --tags/--groups.",
+        ),
+        local_dir: str = typer.Option(
+            ".",
+            "--local-dir",
+            help="Local directory the resolved registry artifact is downloaded "
+            "into. Ignored when --model is used.",
+        ),
         n_passes: int = typer.Option(
             30, "--n-passes", help="Number of stochastic forward passes."
         ),
@@ -187,7 +312,34 @@ if _typer is not None:
             help="Fallback [N,C,H,W] as comma-separated ints, e.g. 1,3,224,224.",
         ),
     ) -> None:
-        """Estimate MC-Dropout uncertainty for a chest X-ray image."""
+        """Estimate MC-Dropout uncertainty for a chest X-ray image.
+
+        Loads an :class:`~radiologist.inference.mc_dropout.MCDropoutPredictor`
+        (single-session: one ONNX model runs both the deterministic and the
+        stochastic MC-Dropout forward passes), runs ``n_passes`` stochastic
+        forward passes, and prints per-class mean probability with standard
+        deviation plus the overall predictive entropy.
+
+        Uses the same registry-selector-vs-local-path dispatch as
+        ``predict``/``explain``, via ``verbs.load_predictor``: registry
+        selector flags (``--run-id``/``--tags``/``--groups``/``--metric``)
+        resolve and pull the artifact into ``--local-dir``; otherwise
+        ``--model`` is loaded directly.
+
+        Args:
+            image_path: Path to the input chest X-ray image.
+            model: Path to a local MC-Dropout ONNX model file.
+            run_id: W&B run ID for registry-backed resolution.
+            tags: Registry artifact tags used for selector-based resolution.
+            groups: Registry artifact groups used for selector-based
+                resolution.
+            metric: Metric name used to break ties among selector matches.
+            local_dir: Directory to download registry artifacts into.
+            n_passes: Number of stochastic forward passes to average over.
+            mean: Optional normalization mean, requires std.
+            std: Optional normalization std, requires mean.
+            input_shape: Optional fallback [N, C, H, W] input shape.
+        """
         predictor = verbs.load_predictor(
             verbs.get_verb("uncertainty"),
             model,
@@ -210,14 +362,45 @@ if _typer is not None:
     @app.command()
     @_exit_on_error
     def serve(
-        model: Optional[str] = typer.Option(None, "--model"),
-        run_id: Optional[str] = typer.Option(None, "--run-id"),
-        tags: Optional[List[str]] = typer.Option(None, "--tags"),
-        groups: Optional[List[str]] = typer.Option(None, "--groups"),
-        metric: Optional[str] = typer.Option(None, "--metric"),
-        local_dir: str = typer.Option(".", "--local-dir"),
-        host: str = typer.Option("127.0.0.1", "--host"),
-        port: int = typer.Option(8000, "--port"),
+        model: Optional[str] = typer.Option(
+            None, "--model", help="Path to the deterministic ONNX model."
+        ),
+        run_id: Optional[str] = typer.Option(
+            None,
+            "--run-id",
+            help="W&B run ID identifying the registry artifact to resolve. "
+            "Mutually exclusive with --model.",
+        ),
+        tags: Optional[List[str]] = typer.Option(
+            None,
+            "--tags",
+            help="Registry artifact tag(s) to filter by when resolving via "
+            "--run-id is not used. Repeatable.",
+        ),
+        groups: Optional[List[str]] = typer.Option(
+            None,
+            "--groups",
+            help="Registry artifact group(s) to filter by when resolving "
+            "without --run-id. Repeatable.",
+        ),
+        metric: Optional[str] = typer.Option(
+            None,
+            "--metric",
+            help="Metric name used to pick the best-scoring artifact among "
+            "candidates matching --tags/--groups.",
+        ),
+        local_dir: str = typer.Option(
+            ".",
+            "--local-dir",
+            help="Local directory the resolved registry artifact is downloaded "
+            "into. Ignored when --model is used.",
+        ),
+        host: str = typer.Option(
+            "127.0.0.1", "--host", help="Host interface to bind the HTTP server to."
+        ),
+        port: int = typer.Option(
+            8000, "--port", help="TCP port to bind the HTTP server to."
+        ),
         predict: bool = typer.Option(
             False, "--predict", help="Serve a Classifier (predict verb)."
         ),
@@ -230,7 +413,37 @@ if _typer is not None:
             help="Serve an MCDropoutPredictor (uncertainty verb).",
         ),
     ) -> None:
-        """Launch the FastAPI inference server via uvicorn."""
+        """Launch the FastAPI inference server via uvicorn.
+
+        Loads a predictor matching exactly one of ``--predict``/``--explain``/
+        ``--uncertainty`` (default ``explain``) using the same
+        registry-selector-vs-local-path dispatch as the other commands: if a
+        registry selector (``--run-id``/``--tags``/``--groups``/``--metric``)
+        is set, the artifact is resolved and pulled into ``--local-dir``; if
+        ``--model`` is set, it is loaded directly; if neither is set, the
+        server starts with no predictor loaded and ``/predict``, ``/explain``,
+        and ``/uncertainty`` respond with a 503 "no model loaded" error until
+        a predictor becomes available. ``/healthz`` and ``/readyz`` are
+        always available.
+
+        Args:
+            model: Path to a local ONNX model file.
+            run_id: W&B run ID for registry-backed resolution.
+            tags: Registry artifact tags used for selector-based resolution.
+            groups: Registry artifact groups used for selector-based
+                resolution.
+            metric: Metric name used to break ties among selector matches.
+            local_dir: Directory to download registry artifacts into.
+            host: Host interface uvicorn binds the HTTP server to.
+            port: TCP port uvicorn binds the HTTP server to.
+            predict: Serve a Classifier (predict verb).
+            explain: Serve an Explainer (explain verb, default).
+            uncertainty: Serve an MCDropoutPredictor (uncertainty verb).
+
+        Raises:
+            ValueError: When more than one of --predict/--explain/
+                --uncertainty is set.
+        """
         if _uvicorn is None:
             raise RuntimeError(
                 "The 'serve' extra is required to use the serve command. "
