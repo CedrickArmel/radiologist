@@ -26,5 +26,6 @@
 - [Issue test-scope incomplete](feedback_issue_test_scope_incomplete.md) — an issue's test-update list can omit call sites broken by a signature change; grep the old signature across the whole suite before declaring green
 - [onnxruntime NoSuchFile vs FileNotFoundError](feedback_onnxruntime_no_such_file_vs_file_not_found.md) — onnxruntime raises its own NoSuchFile on a missing path, not FileNotFoundError; check existence explicitly if the AC requires the stdlib type
 - [Epic seam convention ownership move](feedback_epic_seam_convention_ownership_move.md) — when a new shared seam's contract says a convention "now lives here"/"is no longer done automatically", grep sibling methods for the old inline version and simplify it away, don't double-apply
+- [Narrowed shared-helper signature drops params](feedback_narrowed_shared_helper_signature_drops_params.md) — a "rewire onto shared helper X" issue's literal call-signature snippet can predate optional kwargs that landed afterward; grep old call sites' full kwargs before deleting any, extend the helper instead of regressing
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
