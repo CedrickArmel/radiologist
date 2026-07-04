@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""A plain command-line logger built on the standard library."""
+
 import logging
 from typing import Mapping, Optional
 
@@ -32,12 +34,26 @@ class Logger(logging.LoggerAdapter):
         name: str = __name__,
         extra: Optional[Mapping[str, object]] = None,
     ) -> None:
+        """Initialize the logger adapter.
+
+        Args:
+            name: Name of the underlying standard library logger.
+            extra: Additional context merged into every log record.
+        """
         logger = logging.getLogger(name)
         super().__init__(logger=logger, extra=extra)
 
     def log(  # type: ignore[override]
         self, level: int, msg: str, *args, **kwargs
     ) -> None:
+        """Log ``msg`` at ``level`` if the logger is enabled for it.
+
+        Args:
+            level: Numeric logging level (e.g. ``logging.INFO``).
+            msg: Message to log.
+            *args: Positional arguments forwarded to the underlying logger.
+            **kwargs: Keyword arguments forwarded to the underlying logger.
+        """
         if self.isEnabledFor(level):
             msg, kwargs = self.process(msg, kwargs)  # type: ignore[assignment]
             self.logger.log(level, msg, *args, **kwargs)
