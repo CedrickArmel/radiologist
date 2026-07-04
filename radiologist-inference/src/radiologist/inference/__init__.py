@@ -20,6 +20,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""ONNX inference, Score-CAM explanation, MC-Dropout uncertainty, and serving.
+
+Public API:
+    * Predictor hierarchy: :class:`BasePredictor` (loading/preprocessing),
+      :class:`Classifier` (deterministic prediction), :class:`Explainer`
+      (Score-CAM), :class:`MCDropoutPredictor` (uncertainty estimation).
+    * Result dataclasses: :class:`Prediction`, :class:`Explanation`,
+      :class:`UncertaintyResult`, :class:`ModelMetadata`.
+    * Module-level functions: :func:`score_cam`, :func:`mc_dropout_predict`.
+    * Serving: :func:`create_app` builds the FastAPI application used by the
+      ``serve`` CLI command.
+"""
+
 from radiologist.inference.app import create_app
 from radiologist.inference.base_predictor import BasePredictor
 from radiologist.inference.cam import score_cam
