@@ -39,7 +39,6 @@ def log_hyperparameters(object_dict: dict) -> None:
             (LightningModule), and "trainer" (Trainer). No-op when the
             trainer has no logger attached.
     """
-
     logger.info("Logging hyperparameters...")
 
     trainer = object_dict.get("trainer")
