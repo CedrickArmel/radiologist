@@ -94,6 +94,7 @@ class BasePredictor:
             ValueError: If exactly one of mean/std is provided, or if no
                 input_shape can be resolved from metadata or the argument.
         """
+        _validate_mean_std(mean, std)
         det_session = ort.InferenceSession(det_path)
         metadata = _read_metadata(det_session)
 
@@ -145,7 +146,9 @@ class BasePredictor:
 
         Raises:
             RuntimeError: When the ``registry`` extra (wandb) is not installed.
+            ValueError: If exactly one of mean/std is provided.
         """
+        _validate_mean_std(mean, std)
         reg = registry if registry is not None else WandbRegistry()
         try:
             det_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
@@ -182,7 +185,9 @@ class BasePredictor:
 
         Raises:
             RuntimeError: When the ``registry`` extra (wandb) is not installed.
+            ValueError: If exactly one of mean/std is provided.
         """
+        _validate_mean_std(mean, std)
         det_path = _resolve_and_pull(selector, local_dir, registry)
         return cls.from_path(
             det_path=det_path, mean=mean, std=std, input_shape=input_shape
@@ -201,6 +206,20 @@ def _resolve_and_pull(
         return reg.pull(artifact_path=ref.qualified_name, local_dir=local_dir)
     except RuntimeError as exc:
         raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
+
+
+def _validate_mean_std(mean: Optional[float], std: Optional[float]) -> None:
+    """Ensure mean and std are either both given or both omitted.
+
+    Args:
+        mean: Optional normalization mean.
+        std: Optional normalization std.
+
+    Raises:
+        ValueError: If exactly one of mean/std is provided.
+    """
+    if (mean is None) != (std is None):
+        raise ValueError("mean and std must be provided together")
 
 
 def _read_metadata(session: "ort.InferenceSession") -> Dict[str, str]:
@@ -283,8 +302,7 @@ def _normalize_pil(
     Raises:
         ValueError: If exactly one of mean/std is provided.
     """
-    if (mean is None) != (std is None):
-        raise ValueError("mean and std must be provided together")
+    _validate_mean_std(mean, std)
     _, _, h, w = input_shape
     pil_img = pil_img.resize((w, h), PILImage.Resampling.BILINEAR)
     arr = np.array(pil_img, dtype=np.float32) / 255.0
