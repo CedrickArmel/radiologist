@@ -85,16 +85,35 @@ class _FakeSelectorRegistry:
 class TestClassifierFromPath:
     def test_from_path_returns_classifier_instance(self, det_onnx_path):
         """from_path called on Classifier must return a Classifier instance."""
-        classifier = Classifier.from_path(det_path=det_onnx_path)
+        classifier = Classifier.from_path(model_path=det_onnx_path)
         assert isinstance(classifier, Classifier)
         assert isinstance(classifier, BasePredictor)
+
+    def test_from_path_missing_file_raises_file_not_found_error(self, tmp_path):
+        """Loading from a path that does not exist must raise FileNotFoundError."""
+        missing_path = str(tmp_path / "does_not_exist.onnx")
+        with pytest.raises(FileNotFoundError):
+            Classifier.from_path(model_path=missing_path)
+
+    def test_from_path_constructs_exactly_one_onnx_session(self, det_onnx_path):
+        """Loading any predictor from a valid path must construct exactly one
+        ONNX session, regardless of predictor type (spy on the true process
+        boundary: onnxruntime.InferenceSession)."""
+        import onnxruntime as ort
+
+        with patch(
+            "radiologist.inference.base_predictor.ort.InferenceSession",
+            wraps=ort.InferenceSession,
+        ) as spy:
+            Classifier.from_path(model_path=det_onnx_path)
+            assert spy.call_count == 1
 
 
 class TestClassifierPredict:
     def test_predict_returns_prediction_with_class_keys_and_argmax(self, det_onnx_path):
         """predict must return a Prediction whose probability keys equal the
         model classes and whose predicted_class is the argmax."""
-        classifier = Classifier.from_path(det_path=det_onnx_path)
+        classifier = Classifier.from_path(model_path=det_onnx_path)
 
         image = np.zeros((224, 224, 3), dtype=np.uint8)
         result = classifier.predict(image=image)
@@ -112,7 +131,7 @@ class TestClassifierDeploymentPrior:
     ):
         """Supplying deployment_prior must change probabilities while the
         result still sums to ~1."""
-        classifier = Classifier.from_path(det_path=det_onnx_path)
+        classifier = Classifier.from_path(model_path=det_onnx_path)
         image = np.zeros((224, 224, 3), dtype=np.uint8)
 
         no_prior = classifier.predict(image=image)
@@ -136,10 +155,12 @@ class TestClassifierEmbeddedPrior:
         onnx_no_prior = build_det_onnx(tmp_path, priors=None, filename="no_prior.onnx")
         image = np.zeros((224, 224, 3), dtype=np.uint8)
 
-        with_embedded = Classifier.from_path(det_path=onnx_with_prior).predict(
+        with_embedded = Classifier.from_path(model_path=onnx_with_prior).predict(
             image=image
         )
-        no_embedded = Classifier.from_path(det_path=onnx_no_prior).predict(image=image)
+        no_embedded = Classifier.from_path(model_path=onnx_no_prior).predict(
+            image=image
+        )
 
         assert with_embedded.probabilities != no_embedded.probabilities
 
@@ -157,7 +178,7 @@ class TestClassifierFromRegistry:
             local_dir=str(tmp_path),
             registry=fake_registry,
         )
-        path_classifier = Classifier.from_path(det_path=det_onnx_path)
+        path_classifier = Classifier.from_path(model_path=det_onnx_path)
 
         image = np.zeros((224, 224, 3), dtype=np.uint8)
         registry_result = registry_classifier.predict(image=image)
@@ -205,9 +226,9 @@ class TestClassifierMeanStdNormalization:
         default /255.0-only normalization."""
         image = np.zeros((224, 224, 3), dtype=np.uint8)
 
-        default_classifier = Classifier.from_path(det_path=det_onnx_path)
+        default_classifier = Classifier.from_path(model_path=det_onnx_path)
         normalized_classifier = Classifier.from_path(
-            det_path=det_onnx_path, mean=128.0, std=65.0
+            model_path=det_onnx_path, mean=128.0, std=65.0
         )
 
         default_result = default_classifier.predict(image=image)
@@ -220,14 +241,14 @@ class TestClassifierMeanStdNormalization:
         from_path, before any prediction is requested (fail-fast, bugfix
         review finding on PR #131)."""
         with pytest.raises(ValueError, match="mean and std"):
-            Classifier.from_path(det_path=det_onnx_path, mean=128.0)
+            Classifier.from_path(model_path=det_onnx_path, mean=128.0)
 
     def test_from_path_with_only_std_raises_value_error(self, det_onnx_path):
         """Supplying std without mean must raise ValueError eagerly at
         from_path, before any prediction is requested (fail-fast, bugfix
         review finding on PR #131)."""
         with pytest.raises(ValueError, match="mean and std"):
-            Classifier.from_path(det_path=det_onnx_path, std=65.0)
+            Classifier.from_path(model_path=det_onnx_path, std=65.0)
 
 
 class TestFromPathInputShapeFallback:
@@ -239,7 +260,7 @@ class TestFromPathInputShapeFallback:
         )
 
         with pytest.raises(ValueError, match="input_shape"):
-            Classifier.from_path(det_path=det_path)
+            Classifier.from_path(model_path=det_path)
 
     def test_from_path_without_input_shape_metadata_succeeds_with_default(
         self, tmp_path
@@ -250,7 +271,7 @@ class TestFromPathInputShapeFallback:
         )
 
         classifier = Classifier.from_path(
-            det_path=det_path, input_shape=[1, 3, 224, 224]
+            model_path=det_path, input_shape=[1, 3, 224, 224]
         )
         image = np.zeros((224, 224, 3), dtype=np.uint8)
         result = classifier.predict(image=image)
@@ -271,7 +292,7 @@ class TestClassifierFromSelector:
         classifier = Classifier.from_selector(
             selector, local_dir=str(tmp_path), registry=fake_registry
         )
-        path_classifier = Classifier.from_path(det_path=det_onnx_path)
+        path_classifier = Classifier.from_path(model_path=det_onnx_path)
 
         image = np.zeros((224, 224, 3), dtype=np.uint8)
         selector_result = classifier.predict(image=image)
@@ -316,9 +337,9 @@ class TestClassifierFromSelector:
             std=65.0,
         )
         path_classifier = Classifier.from_path(
-            det_path=det_onnx_path, mean=128.0, std=65.0
+            model_path=det_onnx_path, mean=128.0, std=65.0
         )
-        default_classifier = Classifier.from_path(det_path=det_onnx_path)
+        default_classifier = Classifier.from_path(model_path=det_onnx_path)
 
         image = np.zeros((224, 224, 3), dtype=np.uint8)
         selector_result = selector_classifier.predict(image=image)

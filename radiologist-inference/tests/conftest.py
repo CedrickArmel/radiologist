@@ -47,20 +47,11 @@ def mcd_onnx_path(tmp_path):
 
 
 @pytest.fixture()
-def predictor_with_mcd(tmp_path):
+def predictor(tmp_path):
     from radiologist.inference.mc_dropout import MCDropoutPredictor
 
-    det = build_det_onnx(tmp_path, filename="det.onnx")
     mcd = build_mcd_onnx(tmp_path, filename="mcd.onnx")
-    return MCDropoutPredictor.from_path(det_path=det, mcd_path=mcd)
-
-
-@pytest.fixture()
-def predictor_without_mcd(tmp_path):
-    from radiologist.inference.mc_dropout import MCDropoutPredictor
-
-    det = build_det_onnx(tmp_path, filename="det_only.onnx")
-    return MCDropoutPredictor.from_path(det_path=det)
+    return MCDropoutPredictor.from_path(model_path=mcd)
 
 
 @pytest.fixture()

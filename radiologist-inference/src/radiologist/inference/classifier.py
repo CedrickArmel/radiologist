@@ -67,7 +67,7 @@ class Classifier(BasePredictor):
             image, input_shape, mean=self._state.mean, std=self._state.std
         )
 
-        session = self._state.det_session
+        session = self._state.session
         input_name = session.get_inputs()[0].name
         outputs = session.run(["logits"], {input_name: arr})
         logits: np.ndarray = outputs[0][0]

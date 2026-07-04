@@ -45,20 +45,19 @@ def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
 @pytest.fixture()
 def classifier(tmp_path) -> Classifier:
     det_path = build_det_onnx(tmp_path, filename="det.onnx")
-    return Classifier.from_path(det_path=det_path)
+    return Classifier.from_path(model_path=det_path)
 
 
 @pytest.fixture()
 def explainer(tmp_path) -> Explainer:
     det_path = build_det_onnx(tmp_path, filename="det.onnx")
-    return Explainer.from_path(det_path=det_path)
+    return Explainer.from_path(model_path=det_path)
 
 
 @pytest.fixture()
 def mcd_predictor(tmp_path) -> MCDropoutPredictor:
-    det_path = build_det_onnx(tmp_path, filename="det.onnx")
     mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
-    return MCDropoutPredictor.from_path(det_path=det_path, mcd_path=mcd_path)
+    return MCDropoutPredictor.from_path(model_path=mcd_path)
 
 
 # ---------------------------------------------------------------------------

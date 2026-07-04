@@ -61,15 +61,17 @@ class MCDropoutPredictor(BasePredictor):
         std: Optional[float] = None,
         input_shape: Optional[List[int]] = None,
     ) -> "MCDropoutPredictor":
-        """Resolve det + MC-Dropout ({run_id}-mcd) artifacts and load via from_path.
+        """Resolve the MC-Dropout ({run_id}-mcd) artifact and load via from_path.
 
         Args:
-            selector: Selector for the deterministic artifact. When
-                selector.run_id is set, the MC-Dropout counterpart is looked
-                up at f"{run_id}-mcd"; otherwise the same selector
-                (tags/groups/metric) is reused for both, matching today's CLI
-                fallback behavior.
-            local_dir: Local directory where both ONNX files will be saved.
+            selector: Selector for the deterministic counterpart run. When
+                selector.run_id is set, the MC-Dropout artifact is looked up
+                at f"{run_id}-mcd"; otherwise the same selector
+                (tags/groups/metric) is reused, matching today's CLI fallback
+                behavior. Only the resolved MC-Dropout artifact is loaded —
+                the single session state for an MCDropoutPredictor is the
+                stochastic model.
+            local_dir: Local directory where the ONNX file will be saved.
             registry: Registry to resolve/download from. Defaults to a single
                 shared WandbRegistry() instance when omitted.
             mean: Optional normalization mean, forwarded to from_path.
@@ -87,13 +89,12 @@ class MCDropoutPredictor(BasePredictor):
         """
         _validate_mean_std(mean, std)
         reg = registry if registry is not None else WandbRegistry()
-        det_path = _resolve_and_pull(selector, local_dir, reg)
+        _resolve_and_pull(selector, local_dir, reg)
         mcd_run_id = f"{selector.run_id}-mcd" if selector.run_id else selector.run_id
         mcd_selector = replace(selector, run_id=mcd_run_id)
         mcd_path = _resolve_and_pull(mcd_selector, local_dir, reg)
         return cls.from_path(
-            det_path=det_path,
-            mcd_path=mcd_path,
+            model_path=mcd_path,
             mean=mean,
             std=std,
             input_shape=input_shape,
@@ -104,22 +105,13 @@ class MCDropoutPredictor(BasePredictor):
         image: Union[str, "np.ndarray", "PILImage.Image"],
         n_passes: int = 30,
     ) -> UncertaintyResult:
-        """Run MC-Dropout inference and return uncertainty estimates.
-
-        Raises:
-            RuntimeError: When no stochastic (MC-Dropout) session was loaded.
-        """
-        mcd_session = self._state.mcd_session
-        if mcd_session is None:
-            raise RuntimeError(
-                "MC-Dropout inference requires mcd_path to be supplied when"
-                " loading the predictor via from_path()."
-            )
+        """Run MC-Dropout inference and return uncertainty estimates."""
+        session = self._state.session
         input_shape = self._state.model_metadata.input_shape
         arr = _preprocess_image(
             image, input_shape, mean=self._state.mean, std=self._state.std
         )
-        return mc_dropout_predict(mcd_session, arr, n_passes=n_passes)
+        return mc_dropout_predict(session, arr, n_passes=n_passes)
 
 
 def mc_dropout_predict(

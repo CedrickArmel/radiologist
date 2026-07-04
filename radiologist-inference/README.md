@@ -38,20 +38,18 @@ matching the capabilities you need.
 from radiologist.inference import Classifier, Explainer, MCDropoutPredictor
 
 # Deterministic prediction only
-classifier = Classifier.from_path(det_path="model.onnx")
+classifier = Classifier.from_path(model_path="model.onnx")
 result = classifier.predict("chest_xray.png")
 print(result.predicted_class)          # "NORMAL"
 print(result.probabilities)            # {"NORMAL": 0.93, "PNEUMONIA": 0.07}
 
 # Score-CAM explanation (Explainer inherits predict from Classifier)
-explainer = Explainer.from_path(det_path="model.onnx")
+explainer = Explainer.from_path(model_path="model.onnx")
 explanation = explainer.explain("chest_xray.png")
 print(explanation.saliency_map.shape)  # (H, W)
 
-# MC-Dropout uncertainty (requires mcd_path)
-mcd_predictor = MCDropoutPredictor.from_path(
-    det_path="model.onnx", mcd_path="model_mcd.onnx"
-)
+# MC-Dropout uncertainty (loaded from a stochastic MC-Dropout ONNX model)
+mcd_predictor = MCDropoutPredictor.from_path(model_path="model_mcd.onnx")
 uncertainty = mcd_predictor.predict_with_uncertainty("chest_xray.png", n_passes=30)
 print(uncertainty.predictive_entropy)
 print(uncertainty.std_per_class)
@@ -79,7 +77,7 @@ train/serve-consistent preprocessing:
 
 ```python
 classifier = Classifier.from_path(
-    det_path="model.onnx", mean=128.0, std=65.0,
+    model_path="model.onnx", mean=128.0, std=65.0,
 )
 ```
 
@@ -93,7 +91,7 @@ ONNX file's embedded metadata has no `input_shape` key; if metadata has no
 
 ```python
 classifier = Classifier.from_path(
-    det_path="model_without_shape_metadata.onnx", input_shape=[1, 3, 224, 224],
+    model_path="model_without_shape_metadata.onnx", input_shape=[1, 3, 224, 224],
 )
 ```
 
@@ -156,7 +154,7 @@ Common loading surface shared by every predictor class.
 
 | Method | Signature | Description |
 |---|---|---|
-| `from_path` | `(det_path: str, mcd_path: Optional[str] = None, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Load from local ONNX files |
+| `from_path` | `(model_path: str, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Load from a local ONNX file |
 | `from_registry` | `(artifact_path: str, local_dir: str, registry=None, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Download from W&B Registry and load; requires `registry` extra |
 
 ### `Classifier(BasePredictor)`
@@ -175,7 +173,7 @@ Common loading surface shared by every predictor class.
 
 | Method | Signature | Description |
 |---|---|---|
-| `predict_with_uncertainty` | `(image, n_passes: int = 30) -> UncertaintyResult` | MC-Dropout stochastic inference; requires `mcd_path` at load time |
+| `predict_with_uncertainty` | `(image, n_passes: int = 30) -> UncertaintyResult` | MC-Dropout stochastic inference |
 
 ### `score_cam`
 
@@ -214,7 +212,7 @@ above). Requires the `serve` extra.
 | `Prediction` | `probabilities: Dict[str, float]`, `predicted_class: str` |
 | `Explanation` | `saliency_map: np.ndarray`, `predicted_class: str` |
 | `UncertaintyResult` | `mean_probabilities: Dict[str, float]`, `std_per_class: Dict[str, float]`, `predictive_entropy: float`, `n_passes: int` |
-| `ModelMetadata` | `classes: List[str]`, `input_shape: List[int]`, `cam_target_layer: str`, `output_names: List[str]`, `mc_dropout: bool` |
+| `ModelMetadata` | `classes: List[str]`, `input_shape: List[int]`, `cam_target_layer: str`, `output_names: List[str]` |
 
 ## Development setup
 

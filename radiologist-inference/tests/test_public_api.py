@@ -116,9 +116,22 @@ def test_result_dataclasses_are_importable():
         input_shape=[1, 3, 224, 224],
         cam_target_layer="features",
         output_names=["output"],
-        mc_dropout=False,
     )
     assert meta.classes == ["a", "b"]
+
+
+def test_model_metadata_rejects_mc_dropout_kwarg():
+    """ModelMetadata must have no mc_dropout field; passing it raises TypeError."""
+    from radiologist.inference import ModelMetadata
+
+    with pytest.raises(TypeError):
+        ModelMetadata(
+            classes=["a", "b"],
+            input_shape=[1, 3, 224, 224],
+            cam_target_layer="features",
+            output_names=["output"],
+            mc_dropout=False,
+        )
 
 
 def test_predictor_subclass_relationships_hold():
