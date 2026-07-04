@@ -1,0 +1,62 @@
+site_name: Radiologist
+site_description: Reproducible chest X-ray classification pipeline
+repo_url: https://github.com/CedrickArmel/radiologist
+docs_dir: docs
+
+theme:
+  name: material
+  features: [navigation.sections, navigation.top, content.code.copy, content.code.annotate]
+
+plugins:
+  - search
+  - include-markdown
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [radiologist-utils/src, radiologist-core/src, radiologist-etl/src,
+                  radiologist-inference/src, radiologist-registry/src]
+          options:
+            docstring_style: google
+            show_source: true
+            members_order: source
+            merge_init_into_class: true
+            show_root_heading: true
+            # Docstrings are written per-package in later Epic issues; disable
+            # griffe's docstring-parsing warnings here so `mkdocs build --strict`
+            # stays green while pre-existing docstrings are incrementally fixed.
+            docstring_options:
+              warnings: false
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+# READMEs are single-sourced via include-markdown and keep their original
+# cross-package relative links (e.g. to sibling `radiologist-*/README.md`
+# files), which live outside `docs_dir` and are therefore unresolvable as
+# internal doc links. Downgrade that specific validation to non-fatal.
+validation:
+  links:
+    not_found: info
+
+nav:
+  - Home: index.md
+  - Contributing: contributing.md
+  - Packages:
+      - utils: pkg/utils.md
+      - core: pkg/core.md
+      - etl: pkg/etl.md
+      - inference: pkg/inference.md
+      - registry: pkg/registry.md
+  - CLI & Config:
+      - Training (Hydra): reference/config-core.md
+      - ETL (Hydra): reference/config-etl.md
+      - Inference CLI: reference/cli-inference.md
+      - Registry CLI: reference/cli-registry.md
+  - API Reference:
+      - utils: reference/api-utils.md
+      - core: reference/api-core.md
+      - etl: reference/api-etl.md
+      - inference: reference/api-inference.md
+      - registry: reference/api-registry.md

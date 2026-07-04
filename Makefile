@@ -121,6 +121,7 @@ export UVALIASES
         sync sync-all sync-registry dev-install \
         test test-core test-etl test-utils test-inference test-registry \
         lint format type-check \
+        docs-install docs-serve docs-build docstrings \
         clean
 
 # --------------------------------------------------------------------------- #
@@ -237,6 +238,22 @@ format:  ## run black + isort in-place
 
 type-check:  ## run mypy across all packages
 	@uv run --active mypy $(PKG_CORE)/src $(PKG_ETL)/src $(PKG_UTILS)/src $(PKG_INFERENCE)/src $(PKG_REGISTRY)/src
+
+# --------------------------------------------------------------------------- #
+#  Documentation                                                               #
+# --------------------------------------------------------------------------- #
+
+docs-install:  ## sync docs deps + all extras (mkdocstrings must import CLI modules)
+	@uv sync --active --group docs --all-extras
+
+docs-serve:  ## live-reload docs at localhost:8000
+	@uv run --active mkdocs serve
+
+docs-build:  ## strict build — fails on broken refs / missing docstrings pages
+	@uv run --active mkdocs build --strict
+
+docstrings:  ## opt-in Google-style docstring check (before enforcement flip)
+	@uv run --active flake8 --select=D radiologist-*/src
 
 # --------------------------------------------------------------------------- #
 #  Maintenance                                                                 #
