@@ -25,7 +25,8 @@
 from __future__ import annotations
 
 import json
-from typing import List, Union
+from dataclasses import replace
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
@@ -35,13 +36,65 @@ from radiologist.inference.base_predictor import (
     BasePredictor,
     _preprocess_image,
     _read_metadata,
+    _resolve_and_pull,
     _softmax,
 )
 from radiologist.inference.models import UncertaintyResult
+from radiologist.registry.wandb_registry import WandbRegistry
+
+if TYPE_CHECKING:
+    from radiologist.registry.interface import ModelRegistry
+    from radiologist.registry.selector import RegistrySelector
 
 
 class MCDropoutPredictor(BasePredictor):
     """Adds MC-Dropout uncertainty estimation to BasePredictor."""
+
+    @classmethod
+    def from_selector(
+        cls,
+        selector: "RegistrySelector",
+        local_dir: str,
+        registry: Optional["ModelRegistry"] = None,
+        mean: Optional[float] = None,
+        std: Optional[float] = None,
+        input_shape: Optional[List[int]] = None,
+    ) -> "MCDropoutPredictor":
+        """Resolve det + MC-Dropout ({run_id}-mcd) artifacts and load via from_path.
+
+        Args:
+            selector: Selector for the deterministic artifact. When
+                selector.run_id is set, the MC-Dropout counterpart is looked
+                up at f"{run_id}-mcd"; otherwise the same selector
+                (tags/groups/metric) is reused for both, matching today's CLI
+                fallback behavior.
+            local_dir: Local directory where both ONNX files will be saved.
+            registry: Registry to resolve/download from. Defaults to a single
+                shared WandbRegistry() instance when omitted.
+            mean: Optional normalization mean, forwarded to from_path.
+            std: Optional normalization std, forwarded to from_path.
+            input_shape: Optional input_shape fallback, forwarded to
+                from_path.
+
+        Returns:
+            Loaded MCDropoutPredictor instance.
+
+        Raises:
+            RuntimeError: When the ``registry`` extra (wandb) is not
+                installed.
+        """
+        reg = registry if registry is not None else WandbRegistry()
+        det_path = _resolve_and_pull(selector, local_dir, reg)
+        mcd_run_id = f"{selector.run_id}-mcd" if selector.run_id else selector.run_id
+        mcd_selector = replace(selector, run_id=mcd_run_id)
+        mcd_path = _resolve_and_pull(mcd_selector, local_dir, reg)
+        return cls.from_path(
+            det_path=det_path,
+            mcd_path=mcd_path,
+            mean=mean,
+            std=std,
+            input_shape=input_shape,
+        )
 
     def predict_with_uncertainty(
         self,

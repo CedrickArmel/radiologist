@@ -300,3 +300,32 @@ class TestClassifierFromSelector:
                 RuntimeError, match=r"radiologist-inference\[registry\]"
             ):
                 Classifier.from_selector(selector, local_dir=str(tmp_path))
+
+    def test_from_selector_with_mean_std_matches_from_path_normalization(
+        self, det_onnx_path, tmp_path
+    ):
+        """from_selector must forward mean/std to from_path so a
+        registry-backed load normalizes identically to a local-path load with
+        the same params (bugfix #139)."""
+        fake_registry = _FakeSelectorRegistry(det_onnx_path)
+        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+
+        selector_classifier = Classifier.from_selector(
+            selector,
+            local_dir=str(tmp_path),
+            registry=fake_registry,
+            mean=128.0,
+            std=65.0,
+        )
+        path_classifier = Classifier.from_path(
+            det_path=det_onnx_path, mean=128.0, std=65.0
+        )
+        default_classifier = Classifier.from_path(det_path=det_onnx_path)
+
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+        selector_result = selector_classifier.predict(image=image)
+        path_result = path_classifier.predict(image=image)
+        default_result = default_classifier.predict(image=image)
+
+        assert selector_result.probabilities == path_result.probabilities
+        assert selector_result.probabilities != default_result.probabilities
