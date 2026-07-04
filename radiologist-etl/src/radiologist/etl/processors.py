@@ -148,6 +148,12 @@ class StatsProcessor:
         extractors: list[StatExtractor],
         workers: int | None = None,
     ) -> None:
+        """Initialize the processor.
+
+        Args:
+            extractors: list of StatExtractor callables to apply to each image.
+            workers: number of worker processes; defaults to 1 when None.
+        """
         self._extractors = extractors
         self._workers = workers or 1
 
@@ -170,7 +176,6 @@ class StatsProcessor:
             List of ManifestRecord, one per successfully processed image.
             Failed images are logged and skipped.
         """
-
         logger.info("Processing images to extract statistics...")
 
         fs, root = fsspec.url_to_fs(source, **(storage_options or {}))

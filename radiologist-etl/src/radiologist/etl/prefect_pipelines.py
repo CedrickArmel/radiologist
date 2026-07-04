@@ -291,7 +291,6 @@ def etl_flow(cfg: DictConfig) -> str:
     Returns:
         Path to the final JSONL manifest file.
     """
-
     if not _PREFECT_AVAILABLE:
         logger.warning(
             f"{_PREFECT_IMPORT_ERROR}: prefect is missing. This flow will not be recorded!"
@@ -370,7 +369,6 @@ def main(cfg: DictConfig) -> None:
     Args:
         cfg: Hydra DictConfig populated from conf/etl.yaml and CLI overrides.
     """
-
     etl_flow(cfg)
 
 
