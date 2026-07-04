@@ -47,12 +47,30 @@ _DEFAULT_ANGLES: list[float] = [0.0, math.pi / 4, math.pi / 2, 3 * math.pi / 4]
 
 
 class StatExtractor(Protocol):
+    """Callable protocol for a single-image feature extractor.
+
+    Any callable matching this signature — a plain function or a
+    ``functools.partial`` produced by :func:`make_haralick` — can be
+    plugged into :class:`~radiologist.etl.processors.StatsProcessor`.
+    """
+
     def __call__(
         self,
         image: np.ndarray,
         metadata: dict[str, str],
         mask: np.ndarray | None = None,
-    ) -> dict[str, float]: ...
+    ) -> dict[str, float]:
+        """Extract features from a single image.
+
+        Args:
+            image: H x W or H x W x C array of pixel data.
+            metadata: arbitrary string key-value pairs associated with the image.
+            mask: optional segmentation mask; None when unavailable.
+
+        Returns:
+            Dict mapping feature name to scalar value.
+        """
+        ...
 
 
 def _to_uint8_gray(image: np.ndarray) -> np.ndarray:

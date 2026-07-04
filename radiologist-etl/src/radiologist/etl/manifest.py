@@ -230,6 +230,15 @@ class JsonlWriter:
 
 
 def records_reader(path: str, storage_options) -> list[ManifestRecord]:
+    """Read a JSONL manifest back into a list of :class:`ManifestRecord`.
+
+    Args:
+        path: local path or remote URI to the JSONL manifest.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        List of ManifestRecord instances, one per non-empty line, in file order.
+    """
     fs, mpath = fsspec.url_to_fs(path, **storage_options)
     records: list[ManifestRecord] = []
     with fs.open(mpath, "rt", encoding="utf-8") as f:
