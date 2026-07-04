@@ -187,14 +187,16 @@ class TestMcDropoutPredict:
 
 
 class TestMCDropoutFromSelector:
-    def test_from_selector_resolves_det_and_mcd_suffixed_run_id(self, tmp_path):
-        """from_selector with a run_id must resolve both the det artifact
-        (run_id) and the mcd artifact ({run_id}-mcd), threading mean/std/
-        input_shape into the loaded predictor (bugfix #139)."""
+    def test_from_selector_resolves_single_artifact_for_given_selector(self, tmp_path):
+        """from_selector performs a single resolve/pull against whatever
+        selector it is given, threading mean/std/input_shape into the loaded
+        predictor. The {run_id}-mcd naming convention is applied by the
+        caller (radiologist.inference.verbs.load_predictor), not here — the
+        deterministic model is no longer pulled by this method."""
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
         mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
         fake_registry = _FakeMcdSelectorRegistry(det_path, mcd_path)
-        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+        selector = RegistrySelector(path="entity/project/model", run_id="run123-mcd")
 
         predictor = MCDropoutPredictor.from_selector(
             selector,
@@ -211,11 +213,9 @@ class TestMCDropoutFromSelector:
         assert set(result.mean_probabilities.keys()) == set(CLASSES)
         assert abs(sum(result.mean_probabilities.values()) - 1.0) < 1e-5
         assert fake_registry.resolve_calls == [
-            ("entity/project/model", "run123"),
             ("entity/project/model", "run123-mcd"),
         ]
         assert fake_registry.pull_calls == [
-            ("entity/project/model/model-run123:best", str(tmp_path)),
             ("entity/project/model/model-run123-mcd:best", str(tmp_path)),
         ]
 
@@ -226,12 +226,12 @@ class TestMCDropoutFromSelector:
         mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
 
         default_predictor = MCDropoutPredictor.from_selector(
-            RegistrySelector(path="entity/project/model", run_id="run123"),
+            RegistrySelector(path="entity/project/model", run_id="run123-mcd"),
             local_dir=str(tmp_path),
             registry=_FakeMcdSelectorRegistry(det_path, mcd_path),
         )
         normalized_predictor = MCDropoutPredictor.from_selector(
-            RegistrySelector(path="entity/project/model", run_id="run123"),
+            RegistrySelector(path="entity/project/model", run_id="run123-mcd"),
             local_dir=str(tmp_path),
             registry=_FakeMcdSelectorRegistry(det_path, mcd_path),
             mean=128.0,
@@ -242,12 +242,12 @@ class TestMCDropoutFromSelector:
         assert normalized_predictor._state.mean == 128.0
         assert normalized_predictor._state.std == 65.0
 
-    def test_from_selector_without_run_id_reuses_same_selector_for_det_and_mcd(
+    def test_from_selector_without_run_id_resolves_once_with_tags_selector(
         self, tmp_path
     ):
         """When selector.run_id is None (tags/groups/metric-based selection),
-        the same selector must be reused for both det and mcd resolution —
-        no -mcd suffix — matching today's CLI fallback behavior."""
+        the selector is resolved exactly once — no -mcd suffix is applied
+        here."""
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
         mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
         fake_registry = _FakeMcdSelectorRegistry(det_path, mcd_path)
@@ -259,7 +259,6 @@ class TestMCDropoutFromSelector:
 
         assert isinstance(predictor, MCDropoutPredictor)
         assert fake_registry.resolve_calls == [
-            ("entity/project/model", None),
             ("entity/project/model", None),
         ]
 
@@ -296,10 +295,11 @@ class TestMCDropoutFromPathMeanStdValidation:
     def test_from_selector_with_mismatched_mean_std_raises_before_any_pull(
         self, det_onnx_path, mcd_onnx_path, tmp_path
     ):
-        """MCDropoutPredictor.from_selector has its own det+mcd resolve/pull
-        sequence (it does not delegate resolution to BasePredictor); a
-        mismatched mean/std pair must raise before either artifact is
-        resolved or pulled (bugfix review finding on PR #131)."""
+        """MCDropoutPredictor.from_selector validates mean/std itself before
+        resolving or pulling anything (it does not delegate to
+        BasePredictor.from_selector); a mismatched mean/std pair must raise
+        before the artifact is resolved or pulled (bugfix review finding on
+        PR #131)."""
         fake_registry = _FakeMcdSelectorRegistry(det_onnx_path, mcd_onnx_path)
         selector = RegistrySelector(path="entity/project/model", run_id="run123")
 
