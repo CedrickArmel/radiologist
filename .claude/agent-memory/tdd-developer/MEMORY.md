@@ -27,5 +27,6 @@
 - [onnxruntime NoSuchFile vs FileNotFoundError](feedback_onnxruntime_no_such_file_vs_file_not_found.md) — onnxruntime raises its own NoSuchFile on a missing path, not FileNotFoundError; check existence explicitly if the AC requires the stdlib type
 - [Epic seam convention ownership move](feedback_epic_seam_convention_ownership_move.md) — when a new shared seam's contract says a convention "now lives here"/"is no longer done automatically", grep sibling methods for the old inline version and simplify it away, don't double-apply
 - [Narrowed shared-helper signature drops params](feedback_narrowed_shared_helper_signature_drops_params.md) — a "rewire onto shared helper X" issue's literal call-signature snippet can predate optional kwargs that landed afterward; grep old call sites' full kwargs before deleting any, extend the helper instead of regressing
+- [Review-fix reverts epic seam scope creep](feedback_review_fix_reverts_epic_seam_scope_creep.md) — when a review says an internal seam leaked into `__all__`, revert both the export and the test's expected set atomically; don't just widen the test to match the leak
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
