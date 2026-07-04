@@ -81,7 +81,7 @@ def _load_predictor(
         )
     if model is not None:
         return predictor_cls.from_path(
-            det_path=model, mean=mean, std=std, input_shape=parsed_input_shape
+            model_path=model, mean=mean, std=std, input_shape=parsed_input_shape
         )
     raise ValueError(_SELECTOR_REQUIRED_MSG)
 
@@ -113,8 +113,7 @@ def _load_uncertainty_predictor(
         )
     if model is not None:
         return MCDropoutPredictor.from_path(
-            det_path=model,
-            mcd_path=mcd_model,
+            model_path=mcd_model if mcd_model is not None else model,
             mean=mean,
             std=std,
             input_shape=parsed_input_shape,
@@ -312,7 +311,7 @@ if _typer is not None:
                 selector, local_dir=local_dir
             )
         elif model is not None:
-            predictor = Explainer.from_path(det_path=model)
+            predictor = Explainer.from_path(model_path=model)
         else:
             predictor = None
         fastapi_app = create_app(predictor)

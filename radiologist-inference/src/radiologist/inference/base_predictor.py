@@ -29,6 +29,7 @@ in the subclasses defined in classifier.py, explainer.py, and mc_dropout.py.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
@@ -52,10 +53,9 @@ _INFERENCE_WANDB_MISSING_MSG = (
 
 @dataclass
 class _PredictorState:
-    det_session: ort.InferenceSession
+    session: ort.InferenceSession
     metadata: Dict[str, str]
     model_metadata: ModelMetadata
-    mcd_session: Optional[ort.InferenceSession] = field(default=None)
     mean: Optional[float] = field(default=None)
     std: Optional[float] = field(default=None)
 
@@ -68,17 +68,18 @@ class BasePredictor:
     @classmethod
     def from_path(
         cls,
-        det_path: str,
-        mcd_path: Optional[str] = None,
+        model_path: str,
         mean: Optional[float] = None,
         std: Optional[float] = None,
         input_shape: Optional[List[int]] = None,
     ) -> "BasePredictor":
-        """Load a predictor instance from local ONNX file paths.
+        """Load a predictor instance from a local ONNX file path.
 
         Args:
-            det_path: Path to the deterministic ONNX model file.
-            mcd_path: Optional path to the MC-Dropout ONNX model file.
+            model_path: Path to the ONNX model file. For an MCDropoutPredictor
+                this must be the stochastic (MC-Dropout) model — the single
+                session state is verb-agnostic and holds whichever model was
+                loaded.
             mean: Optional normalization mean. When omitted (with std also
                 omitted), preprocessing keeps today's /255.0-only scaling.
             std: Optional normalization std. Must be provided together with
@@ -90,30 +91,26 @@ class BasePredictor:
             Loaded instance of the calling subclass.
 
         Raises:
-            FileNotFoundError: If det_path does not exist.
+            FileNotFoundError: If model_path does not exist.
             ValueError: If exactly one of mean/std is provided, or if no
                 input_shape can be resolved from metadata or the argument.
         """
         _validate_mean_std(mean, std)
-        det_session = ort.InferenceSession(det_path)
-        metadata = _read_metadata(det_session)
-
-        mcd_session: Optional[ort.InferenceSession] = None
-        if mcd_path is not None:
-            mcd_session = ort.InferenceSession(mcd_path)
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"No such ONNX model file: {model_path}")
+        session = ort.InferenceSession(model_path)
+        metadata = _read_metadata(session)
 
         model_metadata = _parse_model_metadata(
             metadata,
-            mc_dropout=mcd_session is not None,
             default_input_shape=input_shape,
         )
 
         instance = cls.__new__(cls)
         instance._state = _PredictorState(
-            det_session=det_session,
+            session=session,
             metadata=metadata,
             model_metadata=model_metadata,
-            mcd_session=mcd_session,
             mean=mean,
             std=std,
         )
@@ -151,11 +148,11 @@ class BasePredictor:
         _validate_mean_std(mean, std)
         reg = registry if registry is not None else WandbRegistry()
         try:
-            det_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
+            model_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
         except RuntimeError as exc:
             raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
         return cls.from_path(
-            det_path=det_path, mean=mean, std=std, input_shape=input_shape
+            model_path=model_path, mean=mean, std=std, input_shape=input_shape
         )
 
     @classmethod
@@ -188,9 +185,9 @@ class BasePredictor:
             ValueError: If exactly one of mean/std is provided.
         """
         _validate_mean_std(mean, std)
-        det_path = _resolve_and_pull(selector, local_dir, registry)
+        model_path = _resolve_and_pull(selector, local_dir, registry)
         return cls.from_path(
-            det_path=det_path, mean=mean, std=std, input_shape=input_shape
+            model_path=model_path, mean=mean, std=std, input_shape=input_shape
         )
 
 
@@ -229,14 +226,12 @@ def _read_metadata(session: "ort.InferenceSession") -> Dict[str, str]:
 
 def _parse_model_metadata(
     metadata: Dict[str, str],
-    mc_dropout: bool,
     default_input_shape: Optional[List[int]] = None,
 ) -> ModelMetadata:
     """Parse the raw ONNX metadata dict into a typed ModelMetadata.
 
     Args:
-        metadata: Raw custom_metadata_map from the deterministic session.
-        mc_dropout: Whether a stochastic (MC-Dropout) session was also loaded.
+        metadata: Raw custom_metadata_map from the loaded session.
         default_input_shape: Fallback [N, C, H, W] used when the metadata has
             no input_shape key.
 
@@ -260,7 +255,6 @@ def _parse_model_metadata(
         input_shape=input_shape,
         cam_target_layer=metadata["cam_target_layer"],
         output_names=json.loads(metadata["output_names"]),
-        mc_dropout=mc_dropout,
     )
 
 

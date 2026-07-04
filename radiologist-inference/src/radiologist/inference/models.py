@@ -62,4 +62,3 @@ class ModelMetadata:
     input_shape: List[int]
     cam_target_layer: str
     output_names: List[str]
-    mc_dropout: bool

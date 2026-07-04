@@ -65,7 +65,7 @@ class Explainer(Classifier):
             pil_orig, input_shape, mean=self._state.mean, std=self._state.std
         )
 
-        session = self._state.det_session
+        session = self._state.session
         input_name = session.get_inputs()[0].name
         outputs = session.run(["logits", "feature_maps"], {input_name: preprocessed})
         logits: np.ndarray = outputs[0][0]

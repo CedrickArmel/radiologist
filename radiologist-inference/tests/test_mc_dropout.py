@@ -86,54 +86,57 @@ class _FakeMcdSelectorRegistry:
 
 
 class TestPredictWithUncertainty:
-    def test_returns_uncertainty_result_type(self, predictor_with_mcd, sample_image):
+    def test_returns_uncertainty_result_type(self, predictor, sample_image):
         """predict_with_uncertainty must return an UncertaintyResult."""
         from radiologist.inference.models import UncertaintyResult
 
-        result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=10)
+        result = predictor.predict_with_uncertainty(sample_image, n_passes=10)
         assert isinstance(result, UncertaintyResult)
 
-    def test_mean_probabilities_sum_to_one(self, predictor_with_mcd, sample_image):
+    def test_mean_probabilities_sum_to_one(self, predictor, sample_image):
         """mean_probabilities must sum to 1.0 within floating tolerance."""
-        result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=10)
+        result = predictor.predict_with_uncertainty(sample_image, n_passes=10)
         total = sum(result.mean_probabilities.values())
         assert abs(total - 1.0) < 1e-5
 
-    def test_mean_probabilities_keyed_by_class_names(
-        self, predictor_with_mcd, sample_image
-    ):
+    def test_mean_probabilities_keyed_by_class_names(self, predictor, sample_image):
         """mean_probabilities keys must match class names from model metadata."""
-        result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=10)
+        result = predictor.predict_with_uncertainty(sample_image, n_passes=10)
         assert set(result.mean_probabilities.keys()) == set(CLASSES)
 
-    def test_std_per_class_is_nonzero(self, predictor_with_mcd, sample_image):
+    def test_std_per_class_is_nonzero(self, predictor, sample_image):
         """std_per_class must be non-zero across stochastic passes."""
-        result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=30)
+        result = predictor.predict_with_uncertainty(sample_image, n_passes=30)
         assert any(v > 0 for v in result.std_per_class.values())
 
-    def test_predictive_entropy_is_nonnegative(self, predictor_with_mcd, sample_image):
+    def test_predictive_entropy_is_nonnegative(self, predictor, sample_image):
         """predictive_entropy must be >= 0."""
-        result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=10)
+        result = predictor.predict_with_uncertainty(sample_image, n_passes=10)
         assert result.predictive_entropy >= 0.0
 
-    def test_n_passes_reflects_requested_count(self, predictor_with_mcd, sample_image):
+    def test_n_passes_reflects_requested_count(self, predictor, sample_image):
         """UncertaintyResult.n_passes must equal the requested number of passes."""
-        result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=15)
+        result = predictor.predict_with_uncertainty(sample_image, n_passes=15)
         assert result.n_passes == 15
 
-    def test_larger_n_passes_reflected_in_result(
-        self, predictor_with_mcd, sample_image
-    ):
+    def test_larger_n_passes_reflected_in_result(self, predictor, sample_image):
         """Calling with n_passes=50 must report n_passes=50."""
-        result = predictor_with_mcd.predict_with_uncertainty(sample_image, n_passes=50)
+        result = predictor.predict_with_uncertainty(sample_image, n_passes=50)
         assert result.n_passes == 50
 
-    def test_raises_runtime_error_when_no_mcd_model(
-        self, predictor_without_mcd, sample_image
-    ):
-        """predict_with_uncertainty on a predictor loaded without mcd_path must raise RuntimeError."""
-        with pytest.raises(RuntimeError, match="MC-Dropout"):
-            predictor_without_mcd.predict_with_uncertainty(sample_image)
+    def test_from_path_constructs_exactly_one_onnx_session(self, mcd_onnx_path):
+        """Loading an MCDropoutPredictor must construct exactly one ONNX
+        session (spy on the true process boundary:
+        onnxruntime.InferenceSession) — the load-time requirement of a
+        second (deterministic) model is gone."""
+        import onnxruntime as ort
+
+        with patch(
+            "radiologist.inference.base_predictor.ort.InferenceSession",
+            wraps=ort.InferenceSession,
+        ) as spy:
+            MCDropoutPredictor.from_path(model_path=mcd_onnx_path)
+            assert spy.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -282,17 +285,13 @@ class TestMCDropoutFromSelector:
 
 
 class TestMCDropoutFromPathMeanStdValidation:
-    def test_from_path_with_only_mean_raises_value_error(
-        self, det_onnx_path, mcd_onnx_path
-    ):
+    def test_from_path_with_only_mean_raises_value_error(self, mcd_onnx_path):
         """Supplying mean without std must raise ValueError eagerly at
         from_path, before any prediction is requested (bugfix review finding
         on PR #131 — MCDropoutPredictor delegates to the shared
         BasePredictor.from_path code path)."""
         with pytest.raises(ValueError, match="mean and std"):
-            MCDropoutPredictor.from_path(
-                det_path=det_onnx_path, mcd_path=mcd_onnx_path, mean=128.0
-            )
+            MCDropoutPredictor.from_path(model_path=mcd_onnx_path, mean=128.0)
 
     def test_from_selector_with_mismatched_mean_std_raises_before_any_pull(
         self, det_onnx_path, mcd_onnx_path, tmp_path

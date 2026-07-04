@@ -39,7 +39,7 @@ CLASSES = ["NORMAL", "ABNORMAL"]
 class TestExplainerFromPath:
     def test_from_path_returns_explainer_instance(self, det_onnx_path_nonzero):
         """from_path called on Explainer must return an Explainer instance."""
-        explainer = Explainer.from_path(det_path=det_onnx_path_nonzero)
+        explainer = Explainer.from_path(model_path=det_onnx_path_nonzero)
         assert isinstance(explainer, Explainer)
         assert isinstance(explainer, Classifier)
 
@@ -47,7 +47,7 @@ class TestExplainerFromPath:
 class TestExplainSpatialDimensions:
     def test_saliency_map_matches_input_image_spatial_dims(self, det_onnx_path_nonzero):
         """saliency_map must have H x W dimensions matching the original image."""
-        explainer = Explainer.from_path(det_path=det_onnx_path_nonzero)
+        explainer = Explainer.from_path(model_path=det_onnx_path_nonzero)
 
         h, w = 128, 96
         image = np.zeros((h, w, 3), dtype=np.uint8)
@@ -57,7 +57,7 @@ class TestExplainSpatialDimensions:
 
     def test_saliency_map_matches_pil_image_spatial_dims(self, det_onnx_path_nonzero):
         """saliency_map dims must match a PIL Image input, not the model input shape."""
-        explainer = Explainer.from_path(det_path=det_onnx_path_nonzero)
+        explainer = Explainer.from_path(model_path=det_onnx_path_nonzero)
 
         h, w = 200, 150
         pil_img = PILImage.fromarray(np.zeros((h, w, 3), dtype=np.uint8), mode="RGB")
@@ -68,7 +68,7 @@ class TestExplainSpatialDimensions:
 class TestExplainPredictedClass:
     def test_explain_predicted_class_matches_predict(self, det_onnx_path_nonzero):
         """Explanation.predicted_class must agree with predict() for the same image."""
-        explainer = Explainer.from_path(det_path=det_onnx_path_nonzero)
+        explainer = Explainer.from_path(model_path=det_onnx_path_nonzero)
         image = np.zeros((224, 224, 3), dtype=np.uint8)
 
         explanation = explainer.explain(image=image)
@@ -86,7 +86,9 @@ class TestExplainRespectsEmbeddedPrior:
         raw_path = build_det_onnx(tmp_path, priors=None, filename="raw.onnx")
         image = np.zeros((224, 224, 3), dtype=np.uint8)
         raw_predicted = (
-            Classifier.from_path(det_path=raw_path).predict(image=image).predicted_class
+            Classifier.from_path(model_path=raw_path)
+            .predict(image=image)
+            .predicted_class
         )
         other_class = next(c for c in CLASSES if c != raw_predicted)
 
@@ -95,7 +97,7 @@ class TestExplainRespectsEmbeddedPrior:
             priors={raw_predicted: 0.01, other_class: 0.99},
             filename="skewed.onnx",
         )
-        explainer = Explainer.from_path(det_path=skewed_path)
+        explainer = Explainer.from_path(model_path=skewed_path)
 
         explanation = explainer.explain(image=image)
         prediction = explainer.predict(image=image)
@@ -107,7 +109,7 @@ class TestExplainRespectsEmbeddedPrior:
 class TestExplainSaliencyValues:
     def test_all_saliency_values_in_0_1(self, det_onnx_path_nonzero):
         """Every value in saliency_map must lie in [0, 1]."""
-        explainer = Explainer.from_path(det_path=det_onnx_path_nonzero)
+        explainer = Explainer.from_path(model_path=det_onnx_path_nonzero)
         image = np.zeros((224, 224, 3), dtype=np.uint8)
 
         result = explainer.explain(image=image)
@@ -119,7 +121,7 @@ class TestExplainSaliencyValues:
 class TestExplainerInheritsPredict:
     def test_explainer_also_serves_predict(self, det_onnx_path_nonzero):
         """An Explainer instance must also answer predict() and return a Prediction."""
-        explainer = Explainer.from_path(det_path=det_onnx_path_nonzero)
+        explainer = Explainer.from_path(model_path=det_onnx_path_nonzero)
         image = np.zeros((224, 224, 3), dtype=np.uint8)
 
         result = explainer.predict(image=image)
