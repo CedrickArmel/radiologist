@@ -97,6 +97,7 @@ class AttributionCallback(L.Callback):
         save_to_file: bool = True,
         ig_n_steps: Optional[int] = None,
     ) -> None:
+        """Initialize the callback with attribution scheduling and output options."""
         super().__init__()
         self.target_layer = target_layer
         self.every_n_val_epochs = every_n_val_epochs
@@ -115,6 +116,18 @@ class AttributionCallback(L.Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
+        """Run attribution on eligible validation batches on the global-zero rank.
+
+        Args:
+            trainer: the active ``lightning.Trainer``.
+            pl_module: the ``LightningModule`` being validated.
+            outputs: the module's output for this batch, expected to be the
+                raw logits tensor; skipped when ``None`` or not a tensor.
+            batch: the validation batch dict, must contain ``"input"``,
+                ``"target"``, and ``"key"``.
+            batch_idx: index of the current batch within the epoch.
+            dataloader_idx: index of the dataloader, for multi-loader setups.
+        """
         if (
             not trainer.is_global_zero
             or batch_idx % self._every_n_batches != 0
@@ -132,6 +145,18 @@ class AttributionCallback(L.Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
+        """Run attribution on eligible test batches on the global-zero rank.
+
+        Args:
+            trainer: the active ``lightning.Trainer``.
+            pl_module: the ``LightningModule`` being tested.
+            outputs: the module's output for this batch, expected to be the
+                raw logits tensor; skipped when ``None`` or not a tensor.
+            batch: the test batch dict, must contain ``"input"``, ``"target"``,
+                and ``"key"``.
+            batch_idx: index of the current batch within the epoch.
+            dataloader_idx: index of the dataloader, for multi-loader setups.
+        """
         if (
             not trainer.is_global_zero
             or batch_idx % (self._every_n_test_batches or self._every_n_batches) != 0

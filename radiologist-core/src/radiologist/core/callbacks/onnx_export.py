@@ -46,6 +46,16 @@ class OnnxExportCallback(L.Callback):
         cam_target_layer: str,
         opset: int = 18,
     ) -> None:
+        """Initialize the callback with the export shape, classes, and ONNX opset.
+
+        Args:
+            input_shape: shape of the dummy input tensor used to trace the
+                model for ONNX export, e.g. ``(1, 3, 224, 224)``.
+            classes: ordered class names, embedded in the exported artifacts.
+            cam_target_layer: dot-path to the conv layer used for the
+                deterministic export's GradCAM forward hook.
+            opset: ONNX opset version to export with.
+        """
         super().__init__()
         self.input_shape = input_shape
         self.classes = classes
@@ -54,6 +64,15 @@ class OnnxExportCallback(L.Callback):
         self._registry = WandbRegistry()
 
     def on_fit_end(self, trainer: Any, pl_module: Any) -> None:
+        """Export the best checkpoint to ONNX and log it to the active W&B run.
+
+        No-op when no W&B run is active or when the trainer has no best
+        checkpoint recorded.
+
+        Args:
+            trainer: the active ``lightning.Trainer``.
+            pl_module: the ``LightningModule`` that was trained.
+        """
         run = getattr(wandb, "run", None)
         if run is None:
             return

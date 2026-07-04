@@ -40,12 +40,12 @@ class LModule(L.LightningModule):
     """Lightning module wrapping an arbitrary ``net`` with focal-loss training.
 
     Args:
-        cfg (DictConfig): Configuration containing the following keys.
-            The ``net``, ``loss``, ``metric``, ``optimizer``, and ``scheduler``
-            keys should each include a ``_target_`` field so that they can be
-            instantiated by Hydra. ``metric``, ``optimizer``, and ``scheduler``
-            should additionally include ``_partial_: true``, since they must
-            be partially instantiated.
+        cfg: Configuration containing the following keys. The ``net``,
+            ``loss``, ``metric``, ``optimizer``, and ``scheduler`` keys should
+            each include a ``_target_`` field so that they can be instantiated
+            by Hydra. ``metric``, ``optimizer``, and ``scheduler`` should
+            additionally include ``_partial_: true``, since they must be
+            partially instantiated.
 
             net: Backbone network.
             loss: Loss function (e.g. FocalLoss).
@@ -57,6 +57,7 @@ class LModule(L.LightningModule):
     """
 
     def __init__(self, cfg: DictConfig) -> None:
+        """Instantiate the net, loss, metrics, and optimizer/scheduler from ``cfg``."""
         super().__init__()
         self.save_hyperparameters()
 
@@ -91,8 +92,11 @@ class LModule(L.LightningModule):
             freeze all -> selective unfreeze -> prior bias init if priors set.
         From scratch (trainable_layers is None):
             re-initialise net weights with initialize_weights(net, dist="normal").
-        """
 
+        Args:
+            stage: the Lightning stage identifier (``"fit"``, ``"validate"``,
+                ``"test"``, or ``"predict"``); only ``"fit"`` triggers setup.
+        """
         if stage == "fit":
             trainable_layers = self.hparams.get("trainable_layers", None)  # type: ignore[union-attr]
             if trainable_layers is not None:
@@ -184,6 +188,12 @@ class LModule(L.LightningModule):
         return self.net(x)
 
     def configure_optimizers(self) -> Any:
+        """Build the optimizer and, when configured, the step-wise LR scheduler.
+
+        Returns:
+            A dict with key ``"optimizer"``, plus ``"lr_scheduler"`` (with
+            ``interval: "step"``) when a scheduler factory is configured.
+        """
         _opt_factory: partial = self.optimizer  # type: ignore[index]
         _sched_factory: Optional[partial] = self.scheduler
 
@@ -202,6 +212,11 @@ class LModule(L.LightningModule):
         self.log("grad_norm", grad_norm, on_step=True, prog_bar=False)
 
     def on_save_checkpoint(self, checkpoint):
+        """Store the trainer's active precision alongside the checkpoint.
+
+        Args:
+            checkpoint: the checkpoint dict Lightning is about to persist.
+        """
         checkpoint["precision"] = self.trainer.precision
 
     def configure_gradient_clipping(
@@ -222,12 +237,30 @@ class LModule(L.LightningModule):
         )
 
     def training_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
+        """Run one training step, logging the running mean training loss.
+
+        Args:
+            batch: dict with ``"input"`` and ``"target"`` tensors.
+            batch_idx: index of this batch within the epoch.
+
+        Returns:
+            The scalar loss tensor for this batch.
+        """
         _, loss, _ = self._shared_step(batch)
         self.train_loss(loss)
         self.log("train_loss", self.train_loss, on_step=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
+        """Run one validation step, logging epoch-level loss and score.
+
+        Args:
+            batch: dict with ``"input"`` and ``"target"`` tensors.
+            batch_idx: index of this batch within the epoch.
+
+        Returns:
+            The raw logits tensor for this batch.
+        """
         logits, loss, preds = self._shared_step(batch)
         self.val_loss(loss)
         self.val_score(preds, batch["target"])
@@ -236,6 +269,18 @@ class LModule(L.LightningModule):
         return logits
 
     def test_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
+        """Run one test step, logging epoch-level loss/score and buffering preds.
+
+        Predictions are appended to ``self.output`` for later persistence in
+        ``on_test_epoch_end``.
+
+        Args:
+            batch: dict with ``"input"`` and ``"target"`` tensors.
+            batch_idx: index of this batch within the epoch.
+
+        Returns:
+            The raw logits tensor for this batch.
+        """
         logits, loss, preds = self._shared_step(batch)
         self.test_loss(loss)
         self.test_score(preds, batch["target"])
@@ -262,6 +307,13 @@ class LModule(L.LightningModule):
             torch.save(output, path)
 
     def on_train_batch_end(self, outputs: Any, batch: Any, batch_idx: int) -> None:
+        """Log the post-step L2 weight norm. Fires after every training batch.
+
+        Args:
+            outputs: the training step's return value (unused).
+            batch: the training batch (unused).
+            batch_idx: index of the batch just processed (unused).
+        """
         weight_norm = self._get_weight_norm()
         self.log("weight_norm", weight_norm, on_step=True, prog_bar=False)
 

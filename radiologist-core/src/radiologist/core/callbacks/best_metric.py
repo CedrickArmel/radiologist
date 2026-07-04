@@ -34,6 +34,17 @@ class BestMetricCallback(L.Callback):
     """
 
     def __init__(self, monitor: str, mode: str = "max") -> None:
+        """Initialize the tracker for a monitored metric.
+
+        Args:
+            monitor: name of the metric key in ``trainer.callback_metrics``
+                to track (e.g. ``"val_score"``).
+            mode: ``"max"`` keeps the highest observed value, ``"min"`` keeps
+                the lowest.
+
+        Raises:
+            ValueError: if ``mode`` is not ``"min"`` or ``"max"``.
+        """
         if mode not in {"min", "max"}:
             raise ValueError(f"mode must be 'min' or 'max', got '{mode}'")
         super().__init__()
@@ -42,6 +53,17 @@ class BestMetricCallback(L.Callback):
         self._best: Any = None
 
     def on_validation_epoch_end(self, trainer: Any, pl_module: Any) -> None:
+        """Update and log the best-so-far value of the monitored metric.
+
+        Reads ``self.monitor`` from ``trainer.callback_metrics``, updates the
+        running best according to ``self.mode``, writes it back under
+        ``best_{monitor}``, and logs it to every trainer logger on the
+        global-zero rank.
+
+        Args:
+            trainer: the active ``lightning.Trainer``.
+            pl_module: the ``LightningModule`` being validated.
+        """
         current = trainer.callback_metrics.get(self.monitor)
         if current is None:
             return

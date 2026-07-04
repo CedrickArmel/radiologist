@@ -48,6 +48,12 @@ class FocalLoss(nn.Module):
         reduction: str = "mean",
         use_softmax: bool = True,
     ) -> None:
+        """Initialize the loss with its focusing, scaling, and reduction settings.
+
+        Raises:
+            ValueError: if ``reduction`` is not one of ``"mean"``, ``"sum"``,
+                or ``"none"``.
+        """
         if reduction not in self._VALID_REDUCTIONS:
             raise ValueError(
                 f"reduction must be one of {self._VALID_REDUCTIONS}, got {reduction!r}"
@@ -69,7 +75,6 @@ class FocalLoss(nn.Module):
         Returns:
             Scalar loss (reduction "mean"/"sum") or ``(N,)`` tensor ("none").
         """
-
         num_classes = logits.size(1)
 
         if self.use_softmax:
