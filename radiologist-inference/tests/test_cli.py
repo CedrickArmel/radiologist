@@ -32,6 +32,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from _helpers import build_det_onnx, build_mcd_onnx
+from fastapi.testclient import TestClient
 from PIL import Image as PILImage
 from typer.testing import CliRunner
 
@@ -496,30 +497,44 @@ class TestServeCommand:
         assert "serve" in result.output
 
     def test_serve_with_predict_flag_serves_a_classifier(self, tmp_path):
+        """--predict must wire a Classifier into the served app: /predict
+        works and /explain, /uncertainty are absent (mirrors test_app.py's
+        TestClassifierApp, driven end-to-end through the serve command)."""
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
         import radiologist.inference.cli as cli_mod
-        from radiologist.inference import Classifier
 
         mock_uvicorn = MagicMock()
         with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
-            with patch.object(cli_mod, "create_app") as mock_create_app:
-                mock_create_app.return_value = MagicMock()
-                result = runner.invoke(app, ["serve", "--predict", "--model", det_path])
+            result = runner.invoke(app, ["serve", "--predict", "--model", det_path])
 
         assert result.exit_code == 0, result.output
         mock_uvicorn.run.assert_called_once()
-        (predictor,), _ = mock_create_app.call_args
-        assert isinstance(predictor, Classifier)
+        (fastapi_app,), _ = mock_uvicorn.run.call_args
+        client = TestClient(fastapi_app)
+        image_path = _make_png_path(tmp_path)
+        with open(image_path, "rb") as f:
+            predict_response = client.post(
+                "/predict", files={"image": ("input.png", f, "image/png")}
+            )
+        assert predict_response.status_code == 200
+        with open(image_path, "rb") as f:
+            explain_response = client.post(
+                "/explain", files={"image": ("input.png", f, "image/png")}
+            )
+        assert explain_response.status_code == 404
 
     def test_serve_with_uncertainty_and_run_id_resolves_via_mcd_convention(
         self, tmp_path
     ):
+        """--uncertainty --run-id must wire an MCDropoutPredictor into the
+        served app via the {run_id}-mcd convention: /uncertainty works and
+        /predict is absent (mirrors test_app.py's TestMCDropoutApp, driven
+        end-to-end through the serve command)."""
         mcd_dir = tmp_path / "mcd"
         mcd_dir.mkdir()
         build_mcd_onnx(mcd_dir, filename="mcd.onnx")
 
         import radiologist.inference.cli as cli_mod
-        from radiologist.inference import MCDropoutPredictor
 
         mock_wandb, pulled_art = _make_registry_wandb_mock()
         pulled_art.download.return_value = str(mcd_dir)
@@ -529,25 +544,34 @@ class TestServeCommand:
         mock_uvicorn = MagicMock()
         with patch.object(resolver_mod, "_wandb", mock_wandb):
             with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
-                with patch.object(cli_mod, "create_app") as mock_create_app:
-                    mock_create_app.return_value = MagicMock()
-                    result = runner.invoke(
-                        app,
-                        [
-                            "serve",
-                            "--uncertainty",
-                            "--run-id",
-                            "run1",
-                            "--local-dir",
-                            str(tmp_path),
-                        ],
-                    )
+                result = runner.invoke(
+                    app,
+                    [
+                        "serve",
+                        "--uncertainty",
+                        "--run-id",
+                        "run1",
+                        "--local-dir",
+                        str(tmp_path),
+                    ],
+                )
 
         assert result.exit_code == 0, result.output
         mock_uvicorn.run.assert_called_once()
-        (predictor,), _ = mock_create_app.call_args
-        assert isinstance(predictor, MCDropoutPredictor)
         assert pulled_art.download.call_count == 1
+        (fastapi_app,), _ = mock_uvicorn.run.call_args
+        client = TestClient(fastapi_app)
+        image_path = _make_png_path(tmp_path)
+        with open(image_path, "rb") as f:
+            uncertainty_response = client.post(
+                "/uncertainty", files={"image": ("input.png", f, "image/png")}
+            )
+        assert uncertainty_response.status_code == 200
+        with open(image_path, "rb") as f:
+            predict_response = client.post(
+                "/predict", files={"image": ("input.png", f, "image/png")}
+            )
+        assert predict_response.status_code == 404
 
     def test_serve_with_two_verb_flags_exits_nonzero(self, tmp_path):
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
@@ -562,15 +586,23 @@ class TestServeCommand:
         assert result.exit_code != 0
 
     def test_serve_with_no_source_starts_with_no_predictor(self, tmp_path):
+        """No --model/registry selector must start the app with no predictor
+        injected: every predictor route 503s (mirrors test_app.py's
+        TestNoPredictorInjected, driven end-to-end through the serve
+        command)."""
         import radiologist.inference.cli as cli_mod
 
         mock_uvicorn = MagicMock()
         with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
-            with patch.object(cli_mod, "create_app") as mock_create_app:
-                mock_create_app.return_value = MagicMock()
-                result = runner.invoke(app, ["serve"])
+            result = runner.invoke(app, ["serve"])
 
         assert result.exit_code == 0, result.output
         mock_uvicorn.run.assert_called_once()
-        (predictor,), _ = mock_create_app.call_args
-        assert predictor is None
+        (fastapi_app,), _ = mock_uvicorn.run.call_args
+        client = TestClient(fastapi_app)
+        image_path = _make_png_path(tmp_path)
+        with open(image_path, "rb") as f:
+            predict_response = client.post(
+                "/predict", files={"image": ("input.png", f, "image/png")}
+            )
+        assert predict_response.status_code == 503
