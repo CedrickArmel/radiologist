@@ -23,5 +23,7 @@
 - [Pytest worktree isolation](feedback_pytest_worktree_isolation.md) — stale `.pth` cross-worktree pointers and cross-package plugin-name collisions; run pytest per-package with `--confcutdir=.`
 - [pyenv activate needs shell init](feedback_pyenv_activate_needs_shell_init.md) — Bash calls need `eval "$(pyenv init -)"; eval "$(pyenv virtualenv-init -)"` before `pyenv activate`, else installs silently land in the shared venv
 - [Worktree branch already checked out](feedback_worktree_branch_already_checked_out.md) — git refuses a 2nd worktree for a branch checked out elsewhere; work in-place instead; also watch for uv.lock revision noise from `make dev-install`
+- [Issue test-scope incomplete](feedback_issue_test_scope_incomplete.md) — an issue's test-update list can omit call sites broken by a signature change; grep the old signature across the whole suite before declaring green
+- [onnxruntime NoSuchFile vs FileNotFoundError](feedback_onnxruntime_no_such_file_vs_file_not_found.md) — onnxruntime raises its own NoSuchFile on a missing path, not FileNotFoundError; check existence explicitly if the AC requires the stdlib type
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
