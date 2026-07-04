@@ -21,9 +21,18 @@
 # SOFTWARE.
 
 from dataclasses import dataclass
-from typing import List, Optional, Type
+from typing import Dict, List, Optional, Type
 
 from radiologist.inference.base_predictor import BasePredictor
+from radiologist.inference.classifier import Classifier
+from radiologist.inference.explainer import Explainer
+from radiologist.inference.mc_dropout import MCDropoutPredictor
+from radiologist.registry import selector_from_flags
+
+_SELECTOR_REQUIRED_MSG = (
+    "Provide either --model or a registry selector "
+    "(--run-id/--tags/--groups/--metric)."
+)
 
 
 @dataclass(frozen=True)
@@ -37,12 +46,22 @@ class PredictorVerb:
     mcd_convention: bool
 
 
+_VERBS: Dict[str, PredictorVerb] = {
+    v.name: v
+    for v in (
+        PredictorVerb("predict", Classifier, False),
+        PredictorVerb("explain", Explainer, False),
+        PredictorVerb("uncertainty", MCDropoutPredictor, True),
+    )
+}
+
+
 def get_verb(name: str) -> PredictorVerb:
     """Return the registered ``PredictorVerb`` for ``name``.
 
     Raises ``KeyError`` for an unknown name.
     """
-    raise NotImplementedError
+    return _VERBS[name]
 
 
 def apply_mcd_convention(run_id: Optional[str]) -> Optional[str]:
@@ -51,7 +70,7 @@ def apply_mcd_convention(run_id: Optional[str]) -> Optional[str]:
     Encodes the repo-wide det/mcd registry pairing used by the uncertainty
     verb.
     """
-    raise NotImplementedError
+    return f"{run_id}-mcd" if run_id else None
 
 
 def load_predictor(
@@ -72,4 +91,16 @@ def load_predictor(
     ``verb.mcd_convention`` is ``True``, ``run_id`` is rewritten via
     ``apply_mcd_convention`` before building the selector.
     """
-    raise NotImplementedError
+    effective_run_id = apply_mcd_convention(run_id) if verb.mcd_convention else run_id
+    selector = selector_from_flags(
+        path=model or "",
+        run_id=effective_run_id,
+        tags=tags,
+        groups=groups,
+        metric=metric,
+    )
+    if selector.is_registry_backed():
+        return verb.predictor_cls.from_selector(selector, local_dir=local_dir)
+    if model is not None:
+        return verb.predictor_cls.from_path(model_path=model)
+    raise ValueError(_SELECTOR_REQUIRED_MSG)

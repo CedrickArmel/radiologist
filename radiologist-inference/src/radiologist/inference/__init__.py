@@ -32,6 +32,12 @@ from radiologist.inference.models import (
     Prediction,
     UncertaintyResult,
 )
+from radiologist.inference.verbs import (
+    PredictorVerb,
+    apply_mcd_convention,
+    get_verb,
+    load_predictor,
+)
 
 __all__ = [
     "BasePredictor",
@@ -45,4 +51,8 @@ __all__ = [
     "score_cam",
     "mc_dropout_predict",
     "create_app",
+    "PredictorVerb",
+    "get_verb",
+    "apply_mcd_convention",
+    "load_predictor",
 ]

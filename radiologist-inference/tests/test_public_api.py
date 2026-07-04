@@ -54,6 +54,10 @@ def test_all_public_names_present():
         "score_cam",
         "mc_dropout_predict",
         "create_app",
+        "PredictorVerb",
+        "get_verb",
+        "apply_mcd_convention",
+        "load_predictor",
     }
     assert set(pkg.__all__) == expected
     for name in expected:

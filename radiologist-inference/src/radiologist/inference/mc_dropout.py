@@ -25,7 +25,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
@@ -61,16 +60,17 @@ class MCDropoutPredictor(BasePredictor):
         std: Optional[float] = None,
         input_shape: Optional[List[int]] = None,
     ) -> "MCDropoutPredictor":
-        """Resolve the MC-Dropout ({run_id}-mcd) artifact and load via from_path.
+        """Resolve the selector and load the single MC-Dropout artifact.
+
+        The caller (``radiologist.inference.verbs.load_predictor``) is
+        responsible for applying the repo-wide ``{run_id}-mcd`` naming
+        convention to ``selector`` before calling this method — this method
+        performs a single resolve/pull against whatever selector it is
+        given; the deterministic model is no longer pulled here.
 
         Args:
-            selector: Selector for the deterministic counterpart run. When
-                selector.run_id is set, the MC-Dropout artifact is looked up
-                at f"{run_id}-mcd"; otherwise the same selector
-                (tags/groups/metric) is reused, matching today's CLI fallback
-                behavior. Only the resolved MC-Dropout artifact is loaded —
-                the single session state for an MCDropoutPredictor is the
-                stochastic model.
+            selector: Selector already naming the MC-Dropout artifact to
+                resolve.
             local_dir: Local directory where the ONNX file will be saved.
             registry: Registry to resolve/download from. Defaults to a single
                 shared WandbRegistry() instance when omitted.
@@ -89,10 +89,7 @@ class MCDropoutPredictor(BasePredictor):
         """
         _validate_mean_std(mean, std)
         reg = registry if registry is not None else WandbRegistry()
-        _resolve_and_pull(selector, local_dir, reg)
-        mcd_run_id = f"{selector.run_id}-mcd" if selector.run_id else selector.run_id
-        mcd_selector = replace(selector, run_id=mcd_run_id)
-        mcd_path = _resolve_and_pull(mcd_selector, local_dir, reg)
+        mcd_path = _resolve_and_pull(selector, local_dir, reg)
         return cls.from_path(
             model_path=mcd_path,
             mean=mean,
