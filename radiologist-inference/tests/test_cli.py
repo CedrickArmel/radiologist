@@ -304,6 +304,79 @@ class TestRegistrySelectorDispatch:
         assert kwargs["filters"]["tags"]["$in"] == ["a", "b"]
         assert det_path is not None
 
+    def test_predict_with_run_id_and_mean_std_input_shape_changes_output(
+        self, tmp_path
+    ):
+        """--mean/--std/--input-shape must not be silently dropped when the
+        predictor is loaded via a registry selector (--run-id) instead of
+        --model (bugfix #139)."""
+        build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        def _invoke(extra_args):
+            mock_wandb, pulled_art = _make_registry_wandb_mock()
+            pulled_art.download.return_value = str(tmp_path)
+            with patch.object(resolver_mod, "_wandb", mock_wandb):
+                return runner.invoke(
+                    app,
+                    [
+                        "predict",
+                        image_path,
+                        "--run-id",
+                        "run1",
+                        "--local-dir",
+                        str(tmp_path),
+                        *extra_args,
+                    ],
+                )
+
+        default_result = _invoke([])
+        normalized_result = _invoke(
+            ["--mean", "128", "--std", "65", "--input-shape", "1,3,224,224"]
+        )
+
+        assert default_result.exit_code == 0, default_result.output
+        assert normalized_result.exit_code == 0, normalized_result.output
+        assert default_result.output != normalized_result.output
+
+    def test_explain_with_run_id_and_mean_std_input_shape_changes_output(
+        self, tmp_path
+    ):
+        """Same as predict: explain must thread --mean/--std/--input-shape
+        through a registry-selector load (bugfix #139)."""
+        build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        def _invoke(extra_args):
+            mock_wandb, pulled_art = _make_registry_wandb_mock()
+            pulled_art.download.return_value = str(tmp_path)
+            with patch.object(resolver_mod, "_wandb", mock_wandb):
+                return runner.invoke(
+                    app,
+                    [
+                        "explain",
+                        image_path,
+                        "--run-id",
+                        "run1",
+                        "--local-dir",
+                        str(tmp_path),
+                        *extra_args,
+                    ],
+                )
+
+        default_result = _invoke([])
+        normalized_result = _invoke(
+            ["--mean", "128", "--std", "65", "--input-shape", "1,3,224,224"]
+        )
+
+        assert default_result.exit_code == 0, default_result.output
+        assert normalized_result.exit_code == 0, normalized_result.output
+        assert default_result.output != normalized_result.output
+
     def test_predict_without_model_or_selector_exits_nonzero(self, tmp_path):
         image_path = _make_png_path(tmp_path)
 

@@ -27,10 +27,57 @@ Tests drive through the public API only. Fixtures build real ONNX models so
 no mocks are needed for local code.
 """
 
+from typing import List, Optional, Tuple
+from unittest.mock import patch
+
 import numpy as np
 import pytest
+from _helpers import build_det_onnx, build_mcd_onnx
+
+from radiologist.inference import MCDropoutPredictor
+from radiologist.registry import ArtifactRef, RegistrySelector
 
 CLASSES = ["NORMAL", "ABNORMAL"]
+
+
+class _FakeMcdSelectorRegistry:
+    """Fake registry resolving det (run_id) vs mcd ({run_id}-mcd) artifacts.
+
+    When run_id is None (tags/groups/metric-based selection), the same
+    artifact path is returned for both resolutions, matching today's
+    fallback semantics.
+    """
+
+    def __init__(self, det_path: str, mcd_path: str) -> None:
+        self._det_path = det_path
+        self._mcd_path = mcd_path
+        self.resolve_calls: List[Tuple[str, Optional[str]]] = []
+        self.pull_calls: List[Tuple[str, str]] = []
+
+    def resolve(
+        self,
+        path: str,
+        run_id=None,
+        groups=None,
+        tags=None,
+        metric=None,
+        version=None,
+        include_sweeps: bool = False,
+    ) -> ArtifactRef:
+        self.resolve_calls.append((path, run_id))
+        resolved_run_id = run_id or "resolved-run"
+        return ArtifactRef(
+            qualified_name=f"{path}/model-{resolved_run_id}:best",
+            run_id=resolved_run_id,
+            artifact_name=f"model-{resolved_run_id}",
+            version="best",
+        )
+
+    def pull(self, artifact_path: str, local_dir: str) -> str:
+        self.pull_calls.append((artifact_path, local_dir))
+        if artifact_path.endswith("-mcd:best"):
+            return self._mcd_path
+        return self._det_path
 
 
 # ---------------------------------------------------------------------------
@@ -129,3 +176,101 @@ class TestMcDropoutPredict:
         preprocessed = sample_image.astype(np.float32).transpose(2, 0, 1)[np.newaxis]
         result = mc_dropout_predict(session, preprocessed, n_passes=20)
         assert result.n_passes == 20
+
+
+# ---------------------------------------------------------------------------
+# Tests: MCDropoutPredictor.from_selector
+# ---------------------------------------------------------------------------
+
+
+class TestMCDropoutFromSelector:
+    def test_from_selector_resolves_det_and_mcd_suffixed_run_id(self, tmp_path):
+        """from_selector with a run_id must resolve both the det artifact
+        (run_id) and the mcd artifact ({run_id}-mcd), threading mean/std/
+        input_shape into the loaded predictor (bugfix #139)."""
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+        fake_registry = _FakeMcdSelectorRegistry(det_path, mcd_path)
+        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+
+        predictor = MCDropoutPredictor.from_selector(
+            selector,
+            local_dir=str(tmp_path),
+            registry=fake_registry,
+            mean=128.0,
+            std=65.0,
+        )
+
+        image = np.zeros((224, 224, 3), dtype=np.uint8)
+        result = predictor.predict_with_uncertainty(image, n_passes=10)
+
+        assert isinstance(predictor, MCDropoutPredictor)
+        assert set(result.mean_probabilities.keys()) == set(CLASSES)
+        assert abs(sum(result.mean_probabilities.values()) - 1.0) < 1e-5
+        assert fake_registry.resolve_calls == [
+            ("entity/project/model", "run123"),
+            ("entity/project/model", "run123-mcd"),
+        ]
+        assert fake_registry.pull_calls == [
+            ("entity/project/model/model-run123:best", str(tmp_path)),
+            ("entity/project/model/model-run123-mcd:best", str(tmp_path)),
+        ]
+
+    def test_from_selector_mean_std_changes_normalization(self, tmp_path):
+        """mean/std supplied to from_selector must actually change the
+        normalization applied before MC-Dropout inference."""
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+
+        default_predictor = MCDropoutPredictor.from_selector(
+            RegistrySelector(path="entity/project/model", run_id="run123"),
+            local_dir=str(tmp_path),
+            registry=_FakeMcdSelectorRegistry(det_path, mcd_path),
+        )
+        normalized_predictor = MCDropoutPredictor.from_selector(
+            RegistrySelector(path="entity/project/model", run_id="run123"),
+            local_dir=str(tmp_path),
+            registry=_FakeMcdSelectorRegistry(det_path, mcd_path),
+            mean=128.0,
+            std=65.0,
+        )
+
+        assert default_predictor._state.mean is None
+        assert normalized_predictor._state.mean == 128.0
+        assert normalized_predictor._state.std == 65.0
+
+    def test_from_selector_without_run_id_reuses_same_selector_for_det_and_mcd(
+        self, tmp_path
+    ):
+        """When selector.run_id is None (tags/groups/metric-based selection),
+        the same selector must be reused for both det and mcd resolution —
+        no -mcd suffix — matching today's CLI fallback behavior."""
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+        fake_registry = _FakeMcdSelectorRegistry(det_path, mcd_path)
+        selector = RegistrySelector(path="entity/project/model", tags=["a", "b"])
+
+        predictor = MCDropoutPredictor.from_selector(
+            selector, local_dir=str(tmp_path), registry=fake_registry
+        )
+
+        assert isinstance(predictor, MCDropoutPredictor)
+        assert fake_registry.resolve_calls == [
+            ("entity/project/model", None),
+            ("entity/project/model", None),
+        ]
+
+    def test_from_selector_raises_runtime_error_naming_inference_extra_when_wandb_absent(
+        self, tmp_path
+    ):
+        """from_selector with no injected registry and wandb absent must
+        raise RuntimeError naming radiologist-inference[registry]."""
+        import radiologist.registry.optional as optional_mod
+
+        selector = RegistrySelector(path="entity/project/model", run_id="run123")
+
+        with patch.object(optional_mod, "_wandb", None):
+            with pytest.raises(
+                RuntimeError, match=r"radiologist-inference\[registry\]"
+            ):
+                MCDropoutPredictor.from_selector(selector, local_dir=str(tmp_path))

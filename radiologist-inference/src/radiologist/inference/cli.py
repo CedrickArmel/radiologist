@@ -33,7 +33,6 @@ from typing import Any, Callable, List, Optional, TypeVar
 import numpy as np
 
 from radiologist.inference.app import create_app
-from radiologist.inference.base_predictor import _resolve_and_pull
 from radiologist.inference.classifier import Classifier
 from radiologist.inference.explainer import Explainer
 from radiologist.inference.mc_dropout import MCDropoutPredictor
@@ -73,7 +72,13 @@ def _load_predictor(
     )
     parsed_input_shape = _parse_int_list(input_shape)
     if selector.is_registry_backed():
-        return predictor_cls.from_selector(selector, local_dir=local_dir)
+        return predictor_cls.from_selector(
+            selector,
+            local_dir=local_dir,
+            mean=mean,
+            std=std,
+            input_shape=parsed_input_shape,
+        )
     if model is not None:
         return predictor_cls.from_path(
             det_path=model, mean=mean, std=std, input_shape=parsed_input_shape
@@ -99,19 +104,9 @@ def _load_uncertainty_predictor(
     )
     parsed_input_shape = _parse_int_list(input_shape)
     if selector.is_registry_backed():
-        det_path = _resolve_and_pull(selector, local_dir)
-        mcd_run_id = f"{run_id}-mcd" if run_id else None
-        mcd_selector = selector_from_flags(
-            path=model or "",
-            run_id=mcd_run_id,
-            tags=tags,
-            groups=groups,
-            metric=metric,
-        )
-        mcd_path = _resolve_and_pull(mcd_selector, local_dir)
-        return MCDropoutPredictor.from_path(
-            det_path=det_path,
-            mcd_path=mcd_path,
+        return MCDropoutPredictor.from_selector(
+            selector,
+            local_dir=local_dir,
             mean=mean,
             std=std,
             input_shape=parsed_input_shape,

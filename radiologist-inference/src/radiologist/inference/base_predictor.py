@@ -161,6 +161,9 @@ class BasePredictor:
         selector: "RegistrySelector",
         local_dir: str,
         registry: Optional["ModelRegistry"] = None,
+        mean: Optional[float] = None,
+        std: Optional[float] = None,
+        input_shape: Optional[List[int]] = None,
     ) -> "BasePredictor":
         """Resolve a selector against a registry and load via from_path.
 
@@ -169,6 +172,10 @@ class BasePredictor:
             local_dir: Local directory where the ONNX file will be saved.
             registry: Registry to resolve/download from. Defaults to
                 WandbRegistry() when omitted.
+            mean: Optional normalization mean, forwarded to from_path.
+            std: Optional normalization std, forwarded to from_path.
+            input_shape: Optional input_shape fallback, forwarded to
+                from_path.
 
         Returns:
             Loaded instance of the calling subclass.
@@ -177,7 +184,9 @@ class BasePredictor:
             RuntimeError: When the ``registry`` extra (wandb) is not installed.
         """
         det_path = _resolve_and_pull(selector, local_dir, registry)
-        return cls.from_path(det_path=det_path)
+        return cls.from_path(
+            det_path=det_path, mean=mean, std=std, input_shape=input_shape
+        )
 
 
 def _resolve_and_pull(
