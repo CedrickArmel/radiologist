@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""W&B model registry facade — resolve, download, push, and promote artifacts."""
+
 from radiologist.registry.interface import ModelRegistry
 from radiologist.registry.models import (
     ArtifactRef,

@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Framework-neutral artifact selector shared by the CLI and library layers."""
+
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -34,6 +36,16 @@ class RegistrySelector:
     Precedence when resolved: run_id (direct lookup) else tags (filtered search)
     else path (raw artifact path / local file). See resolve_selector for the
     strict validation the CLI layer adds on top of the underlying resolve().
+
+    Attributes:
+        path: Base artifact path, e.g. ``"entity/project"`` or a raw
+            artifact path when not registry-backed.
+        run_id: If given, resolve the artifact logged by this run directly.
+        groups: Restrict the run search to these W&B group name(s).
+        tags: Restrict the run search to runs carrying these tag(s).
+        metric: Summary metric name used to rank candidate runs.
+        version: Explicit version or alias to resolve.
+        include_sweeps: Whether sweep runs are eligible candidates.
     """
 
     path: str
@@ -45,6 +57,13 @@ class RegistrySelector:
     include_sweeps: bool = False
 
     def is_registry_backed(self) -> bool:
+        """Report whether this selector carries any registry search criteria.
+
+        Returns:
+            True if any of `run_id`, `tags`, `groups`, `metric`, or
+            `version` is set — meaning the selector should be resolved via
+            the registry rather than treated as a raw path.
+        """
         return bool(
             self.run_id or self.tags or self.groups or self.metric or self.version
         )
@@ -59,7 +78,20 @@ def selector_from_flags(
     version: Optional[str] = None,
     include_sweeps: bool = False,
 ) -> RegistrySelector:
-    """Build a RegistrySelector from CLI-style flag values."""
+    """Build a RegistrySelector from CLI-style flag values.
+
+    Args:
+        path: Base artifact path.
+        run_id: Direct run ID to resolve, if any.
+        tags: Tag(s) to filter candidate runs by.
+        groups: Group(s) to filter candidate runs by.
+        metric: Summary metric used to rank candidate runs.
+        version: Explicit version or alias to resolve.
+        include_sweeps: Whether sweep runs are eligible candidates.
+
+    Returns:
+        The constructed selector.
+    """
     return RegistrySelector(
         path=path,
         run_id=run_id,
@@ -74,6 +106,18 @@ def selector_from_flags(
 def resolve_selector(
     selector: RegistrySelector, registry: ModelRegistry
 ) -> ArtifactRef:
+    """Validate a selector and resolve it against a registry backend.
+
+    Args:
+        selector: Selector describing which artifact to resolve.
+        registry: Registry backend used to perform the resolution.
+
+    Returns:
+        The resolved artifact pointer.
+
+    Raises:
+        ValueError: If both `run_id` and `tags` are set on the selector.
+    """
     if selector.run_id and selector.tags:
         raise ValueError("Provide either --run-id or --tags, not both.")
     return registry.resolve(

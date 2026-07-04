@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Internal W&B seam for artifact resolution and download operations."""
+
 import glob
 import os
 from typing import List, Optional, Union
@@ -53,6 +55,23 @@ class _WandbResolver:
         version: Optional[str] = None,
         include_sweeps: bool = False,
     ) -> ArtifactRef:
+        """Resolve a single artifact matching the given criteria.
+
+        Args:
+            path: Base artifact path.
+            run_id: If given, resolve the artifact logged by this run
+                directly instead of searching.
+            groups: Restrict the run search to these W&B group name(s).
+            tags: Restrict the run search to runs carrying these tag(s).
+            metric: Summary metric name used to rank candidate runs.
+            version: Explicit version or alias to resolve (defaults to
+                ``"best"`` when omitted).
+            include_sweeps: Whether runs that are part of a sweep are
+                eligible candidates.
+
+        Returns:
+            The resolved artifact pointer.
+        """
         _guard_wandb()
         api = _wandb.Api()  # type: ignore[union-attr]
 
@@ -92,6 +111,19 @@ class _WandbResolver:
         return _artifact_ref(art, run_id)
 
     def download(self, ref: ArtifactRef, local_dir: str) -> str:
+        """Download the checkpoint file (``*.ckpt``) for an artifact.
+
+        Args:
+            ref: Previously resolved artifact pointer.
+            local_dir: Directory to download the artifact contents into.
+
+        Returns:
+            Filesystem path to the downloaded ``.ckpt`` file.
+
+        Raises:
+            FileNotFoundError: If no ``.ckpt`` file is found in the
+                downloaded artifact contents.
+        """
         _guard_wandb()
         api = _wandb.Api()  # type: ignore[union-attr]
         art = api.artifact(ref.qualified_name)
@@ -106,6 +138,19 @@ class _WandbResolver:
         return ckpt_files[0]
 
     def pull(self, artifact_path: str, local_dir: str) -> str:
+        """Download the ONNX file (``*.onnx``) for a qualified artifact path.
+
+        Args:
+            artifact_path: Fully qualified artifact path.
+            local_dir: Directory to download the artifact contents into.
+
+        Returns:
+            Filesystem path to the downloaded ``.onnx`` file.
+
+        Raises:
+            FileNotFoundError: If no ``.onnx`` file is found in the
+                downloaded artifact contents.
+        """
         _guard_wandb()
         api = _wandb.Api()  # type: ignore[union-attr]
         art = api.artifact(artifact_path)

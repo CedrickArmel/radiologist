@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Internal W&B seam for listing registry collection members."""
+
 from typing import List
 
 from radiologist.registry.models import CollectionMember
@@ -34,6 +36,15 @@ class _WandbCollectionLister:
         type_name: str,
         collection_name: str,
     ) -> List[CollectionMember]:
+        """List every artifact version in a collection with its aliases.
+
+        Args:
+            type_name: Artifact type of the collection (e.g. ``"model"``).
+            collection_name: Name of the collection to list.
+
+        Returns:
+            One `CollectionMember` per artifact version in the collection.
+        """
         _guard_wandb()
         api = _wandb.Api()  # type: ignore[union-attr]
         collection = api.artifact_collection(type_name, collection_name)
