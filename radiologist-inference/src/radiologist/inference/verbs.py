@@ -81,6 +81,9 @@ def load_predictor(
     groups: Optional[List[str]],
     metric: Optional[str],
     local_dir: str,
+    mean: Optional[float] = None,
+    std: Optional[float] = None,
+    input_shape: Optional[List[int]] = None,
 ) -> BasePredictor:
     """Single loading path for every verb.
 
@@ -89,7 +92,9 @@ def load_predictor(
     path, ``verb.predictor_cls.from_path(model_path=model)``; else raises
     ``ValueError`` naming ``--model`` and the registry selector flags. When
     ``verb.mcd_convention`` is ``True``, ``run_id`` is rewritten via
-    ``apply_mcd_convention`` before building the selector.
+    ``apply_mcd_convention`` before building the selector. ``mean``/``std``/
+    ``input_shape`` are forwarded unchanged to the predictor's
+    ``from_selector``/``from_path`` constructor for preprocessing overrides.
     """
     effective_run_id = apply_mcd_convention(run_id) if verb.mcd_convention else run_id
     selector = selector_from_flags(
@@ -100,7 +105,15 @@ def load_predictor(
         metric=metric,
     )
     if selector.is_registry_backed():
-        return verb.predictor_cls.from_selector(selector, local_dir=local_dir)
+        return verb.predictor_cls.from_selector(
+            selector,
+            local_dir=local_dir,
+            mean=mean,
+            std=std,
+            input_shape=input_shape,
+        )
     if model is not None:
-        return verb.predictor_cls.from_path(model_path=model)
+        return verb.predictor_cls.from_path(
+            model_path=model, mean=mean, std=std, input_shape=input_shape
+        )
     raise ValueError(_SELECTOR_REQUIRED_MSG)

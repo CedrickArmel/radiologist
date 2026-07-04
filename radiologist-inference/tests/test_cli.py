@@ -197,7 +197,6 @@ class TestExplainCommandNormalizationFlags:
 
 class TestUncertaintyCommand:
     def test_uncertainty_exits_0_and_prints_stats(self, tmp_path):
-        det_path = build_det_onnx(tmp_path, filename="det.onnx")
         mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
         image_path = _make_png_path(tmp_path)
 
@@ -207,8 +206,6 @@ class TestUncertaintyCommand:
                 "uncertainty",
                 image_path,
                 "--model",
-                det_path,
-                "--mcd-model",
                 mcd_path,
                 "--n-passes",
                 "5",
@@ -218,10 +215,7 @@ class TestUncertaintyCommand:
         assert result.exit_code == 0
         assert "entropy" in result.output.lower()
 
-
-class TestUncertaintyCommandNormalizationFlags:
-    def test_uncertainty_with_mean_std_input_shape_accepted(self, tmp_path):
-        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+    def test_uncertainty_exposes_no_mcd_model_option(self, tmp_path):
         mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
         image_path = _make_png_path(tmp_path)
 
@@ -231,8 +225,29 @@ class TestUncertaintyCommandNormalizationFlags:
                 "uncertainty",
                 image_path,
                 "--model",
-                det_path,
+                mcd_path,
                 "--mcd-model",
+                mcd_path,
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "--mcd-model" in result.output or "no such option" in (
+            result.output.lower()
+        )
+
+
+class TestUncertaintyCommandNormalizationFlags:
+    def test_uncertainty_with_mean_std_input_shape_accepted(self, tmp_path):
+        mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "uncertainty",
+                image_path,
+                "--model",
                 mcd_path,
                 "--n-passes",
                 "5",
@@ -396,17 +411,17 @@ class TestRegistrySelectorDispatch:
 
         assert result.exit_code != 0
 
-    def test_uncertainty_with_run_id_resolves_det_and_mcd_models(self, tmp_path):
-        det_dir = tmp_path / "det"
+    def test_uncertainty_with_run_id_resolves_mcd_model_via_convention(self, tmp_path):
+        """uncertainty --run-id must resolve a single model via the
+        ``{run_id}-mcd`` convention — exactly one registry pull, no
+        deterministic-model pull (bugfix landed in the verb registry, #142)."""
         mcd_dir = tmp_path / "mcd"
-        det_dir.mkdir()
         mcd_dir.mkdir()
-        build_det_onnx(det_dir, filename="det.onnx")
         build_mcd_onnx(mcd_dir, filename="mcd.onnx")
         image_path = _make_png_path(tmp_path)
 
         mock_wandb, pulled_art = _make_registry_wandb_mock()
-        pulled_art.download.side_effect = [str(det_dir), str(mcd_dir)]
+        pulled_art.download.return_value = str(mcd_dir)
 
         import radiologist.registry.resolver as resolver_mod
 
@@ -427,6 +442,7 @@ class TestRegistrySelectorDispatch:
 
         assert result.exit_code == 0, result.output
         assert "entropy" in result.output.lower()
+        assert pulled_art.download.call_count == 1
 
     def test_predict_with_run_id_fails_naming_inference_extra_when_wandb_absent(
         self, tmp_path
@@ -478,3 +494,83 @@ class TestServeCommand:
 
         assert result.exit_code != 0
         assert "serve" in result.output
+
+    def test_serve_with_predict_flag_serves_a_classifier(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        import radiologist.inference.cli as cli_mod
+        from radiologist.inference import Classifier
+
+        mock_uvicorn = MagicMock()
+        with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
+            with patch.object(cli_mod, "create_app") as mock_create_app:
+                mock_create_app.return_value = MagicMock()
+                result = runner.invoke(app, ["serve", "--predict", "--model", det_path])
+
+        assert result.exit_code == 0, result.output
+        mock_uvicorn.run.assert_called_once()
+        (predictor,), _ = mock_create_app.call_args
+        assert isinstance(predictor, Classifier)
+
+    def test_serve_with_uncertainty_and_run_id_resolves_via_mcd_convention(
+        self, tmp_path
+    ):
+        mcd_dir = tmp_path / "mcd"
+        mcd_dir.mkdir()
+        build_mcd_onnx(mcd_dir, filename="mcd.onnx")
+
+        import radiologist.inference.cli as cli_mod
+        from radiologist.inference import MCDropoutPredictor
+
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.return_value = str(mcd_dir)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        mock_uvicorn = MagicMock()
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
+                with patch.object(cli_mod, "create_app") as mock_create_app:
+                    mock_create_app.return_value = MagicMock()
+                    result = runner.invoke(
+                        app,
+                        [
+                            "serve",
+                            "--uncertainty",
+                            "--run-id",
+                            "run1",
+                            "--local-dir",
+                            str(tmp_path),
+                        ],
+                    )
+
+        assert result.exit_code == 0, result.output
+        mock_uvicorn.run.assert_called_once()
+        (predictor,), _ = mock_create_app.call_args
+        assert isinstance(predictor, MCDropoutPredictor)
+        assert pulled_art.download.call_count == 1
+
+    def test_serve_with_two_verb_flags_exits_nonzero(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        import radiologist.inference.cli as cli_mod
+
+        mock_uvicorn = MagicMock()
+        with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
+            result = runner.invoke(
+                app, ["serve", "--predict", "--explain", "--model", det_path]
+            )
+
+        assert result.exit_code != 0
+
+    def test_serve_with_no_source_starts_with_no_predictor(self, tmp_path):
+        import radiologist.inference.cli as cli_mod
+
+        mock_uvicorn = MagicMock()
+        with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
+            with patch.object(cli_mod, "create_app") as mock_create_app:
+                mock_create_app.return_value = MagicMock()
+                result = runner.invoke(app, ["serve"])
+
+        assert result.exit_code == 0, result.output
+        mock_uvicorn.run.assert_called_once()
+        (predictor,), _ = mock_create_app.call_args
+        assert predictor is None
