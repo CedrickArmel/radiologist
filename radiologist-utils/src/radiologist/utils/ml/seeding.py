@@ -41,7 +41,6 @@ def set_seed(
         use_deterministic_algorithms: Whether to enforce deterministic algorithms.
         warn_only: If True, warn instead of error on non-deterministic ops.
     """
-
     seed = (torch.default_generator.seed() if seed is None else seed) % (2**32)
 
     os.environ["PYTHONHASHSEED"] = str(seed)
