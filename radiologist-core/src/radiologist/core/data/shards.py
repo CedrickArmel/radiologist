@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Shard discovery and label resolution for WebDataset chest X-ray shards."""
+
 import re
 from typing import Dict, List
 

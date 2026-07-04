@@ -20,8 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Small dtype helpers for WebDataset sample decoding."""
+
 import torch
 
 
-def torch_float_32():
+def torch_float_32() -> torch.dtype:
+    """Return ``torch.float32``.
+
+    Returns:
+        The ``torch.float32`` dtype object.
+    """
     return torch.float32

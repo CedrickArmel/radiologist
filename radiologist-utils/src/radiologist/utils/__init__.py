@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Filesystem helpers, logging, and image readers shared across packages."""
+
 from radiologist.utils.filesystem import pathjoin, pathname, pathparent, pathstem
 from radiologist.utils.loggers import Logger
 from radiologist.utils.ml.pylogger import RankedLogger

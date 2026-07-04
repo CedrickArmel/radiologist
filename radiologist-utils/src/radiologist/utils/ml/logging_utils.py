@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Log resolved hyperparameters to every configured trainer logger."""
+
 from lightning_utilities.core.rank_zero import (
     rank_zero_only,  # type: ignore[import-untyped]
 )

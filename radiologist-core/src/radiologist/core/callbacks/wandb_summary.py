@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Callback that configures the W&B run summary panel for a monitored metric."""
+
 from typing import Any
 
 import lightning as L

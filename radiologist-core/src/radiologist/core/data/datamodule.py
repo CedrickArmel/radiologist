@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Lightning ``DataModule`` that streams sharded WebDataset chest X-rays."""
+
 from __future__ import annotations
 
 from functools import partial

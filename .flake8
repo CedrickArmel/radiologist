@@ -1,4 +1,6 @@
 [flake8]
 max-line-length = 88
-extend-ignore = E203, E266, E501, E704, W503, D1
+extend-ignore = E203, E266, E501, E704, W503
 docstring-convention = google
+per-file-ignores =
+    */tests/*: D

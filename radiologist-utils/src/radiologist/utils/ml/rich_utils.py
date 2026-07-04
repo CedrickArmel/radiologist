@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Rich-formatted config tree printing and interactive tag enforcement."""
+
 from __future__ import annotations
 
 import os

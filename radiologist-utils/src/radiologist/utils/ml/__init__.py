@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Hydra/Lightning training utilities: instantiators, seeding, logging, nn init."""
+
 from radiologist.utils.ml.hydra_utils import extras, get_metric_value, task_wrapper
 from radiologist.utils.ml.instantiators import (
     instantiate_callbacks,

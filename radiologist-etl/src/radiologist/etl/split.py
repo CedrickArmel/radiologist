@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Deterministic train/val/test split assignment via MD5 hashing."""
+
 from __future__ import annotations
 
 import hashlib

@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Callback that tracks the best value of a monitored validation metric."""
+
 from typing import Any
 
 import lightning as L

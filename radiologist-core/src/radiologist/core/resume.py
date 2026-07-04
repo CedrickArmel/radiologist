@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Resolve the checkpoint path to resume a training run from."""
+
 from typing import Optional, Tuple
 
 import torch

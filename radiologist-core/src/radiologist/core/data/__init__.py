@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""WebDataset-backed Lightning datamodule for sharded chest X-ray data."""
+
 from radiologist.core.data.datamodule import WebDatasetDataModule
 
 __all__ = ["WebDatasetDataModule"]

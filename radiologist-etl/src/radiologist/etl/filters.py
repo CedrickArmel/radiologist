@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""IQR and lung-out-of-frame outlier filters for the stats DataFrame."""
+
 from __future__ import annotations
 
 import numpy as np

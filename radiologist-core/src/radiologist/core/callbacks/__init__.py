@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Lightning callbacks: attribution, best-metric tracking, ONNX export, W&B."""
+
 from radiologist.core.callbacks.attribution import AttributionCallback
 from radiologist.core.callbacks.best_metric import BestMetricCallback
 from radiologist.core.callbacks.onnx_export import OnnxExportCallback

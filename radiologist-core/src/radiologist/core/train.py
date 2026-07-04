@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Hydra-driven training entry point for the classifier."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple

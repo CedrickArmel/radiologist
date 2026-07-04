@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Prefect flow and tasks orchestrating the end-to-end ETL pipeline."""
+
 from __future__ import annotations
 
 import json
@@ -47,19 +49,21 @@ try:
 except ImportError as ex:  # pragma: no cover
 
     def flow(fn=None, **_):  # type: ignore[misc, no-redef]
+        """No-op stand-in for ``prefect.flow`` when prefect is not installed."""
         return fn if fn is not None else (lambda f: f)
 
     def task(fn=None, **_):  # type: ignore[misc, no-redef]
+        """No-op stand-in for ``prefect.task`` when prefect is not installed."""
         return fn if fn is not None else (lambda f: f)
 
     def create_link_artifact(**_):  # type: ignore[misc, no-redef]
-        pass
+        """No-op stand-in for ``prefect.artifacts.create_link_artifact``."""
 
     def create_markdown_artifact(**_):
-        pass
+        """No-op stand-in for ``prefect.artifacts.create_markdown_artifact``."""
 
     def create_table_artifact(**_):  # type: ignore[misc, no-redef]
-        pass
+        """No-op stand-in for ``prefect.artifacts.create_table_artifact``."""
 
     _PREFECT_AVAILABLE = False
     _PREFECT_IMPORT_ERROR: str = str(ex)

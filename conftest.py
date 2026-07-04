@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Root pytest conftest: add each workspace package's ``src`` to ``sys.path``."""
+
 import sys
 from pathlib import Path
 

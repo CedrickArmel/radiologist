@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Parallel stats computation over an image root directory."""
+
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor, as_completed

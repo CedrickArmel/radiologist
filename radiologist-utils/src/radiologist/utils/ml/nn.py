@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Weight initialization helpers for ``torch.nn`` modules."""
+
 from typing import Literal
 
 import torch.nn as nn

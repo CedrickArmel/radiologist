@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Focal loss for multi-class chest X-ray classification."""
+
 from __future__ import annotations
 
 import torch

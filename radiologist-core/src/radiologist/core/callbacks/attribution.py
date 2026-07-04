@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Score-CAM / Integrated Gradients attribution callback for Lightning."""
+
 from __future__ import annotations
 
 import functools
