@@ -25,5 +25,6 @@
 - [Worktree branch already checked out](feedback_worktree_branch_already_checked_out.md) — git refuses a 2nd worktree for a branch checked out elsewhere; work in-place instead; also watch for uv.lock revision noise from `make dev-install`
 - [Issue test-scope incomplete](feedback_issue_test_scope_incomplete.md) — an issue's test-update list can omit call sites broken by a signature change; grep the old signature across the whole suite before declaring green
 - [onnxruntime NoSuchFile vs FileNotFoundError](feedback_onnxruntime_no_such_file_vs_file_not_found.md) — onnxruntime raises its own NoSuchFile on a missing path, not FileNotFoundError; check existence explicitly if the AC requires the stdlib type
+- [Epic seam convention ownership move](feedback_epic_seam_convention_ownership_move.md) — when a new shared seam's contract says a convention "now lives here"/"is no longer done automatically", grep sibling methods for the old inline version and simplify it away, don't double-apply
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
