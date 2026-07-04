@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Internal W&B seam for artifact upload and collection-linking operations."""
+
 from typing import Any, Optional
 
 from radiologist.registry.alias_manager import _WandbAliasManager
@@ -35,6 +37,7 @@ class _WandbUploader:
     """W&B seam for artifact upload operations."""
 
     def __init__(self) -> None:
+        """Construct with an internal alias manager for rollback on failure."""
         self._alias_manager = _WandbAliasManager()
 
     def log_model_artifacts(
@@ -44,6 +47,20 @@ class _WandbUploader:
         ckpt_path: str,
         last_ckpt_path: Optional[str] = None,
     ) -> LoggedArtifacts:
+        """Log the deterministic and MC-Dropout exports to an active run.
+
+        Args:
+            export_result: Paths and metadata for the freshly exported
+                model pair.
+            run: Active run object used to log the artifacts.
+            ckpt_path: Checkpoint path bundled with the deterministic
+                artifact.
+            last_ckpt_path: Optional path to the last (non-best) checkpoint,
+                logged under the ``"last"`` alias when given.
+
+        Returns:
+            Qualified names of the artifacts just logged.
+        """
         _guard_wandb()
         run_id = export_result.run_id
         det_name = f"model-{run_id}"
@@ -85,6 +102,26 @@ class _WandbUploader:
         mcd_collection: str,
         alias: str,
     ) -> PromoteResult:
+        """Link both artifacts to their collections under a shared alias.
+
+        If linking the MC-Dropout artifact fails, the deterministic
+        artifact's alias is removed before the error is re-raised, so the
+        two collections don't end up with only one side linked.
+
+        Args:
+            det_qualified_name: Qualified name of the deterministic
+                artifact to link.
+            mcd_qualified_name: Qualified name of the MC-Dropout artifact
+                to link.
+            det_collection: Collection to link the deterministic artifact
+                to.
+            mcd_collection: Collection to link the MC-Dropout artifact to.
+            alias: Alias to apply to both linked artifacts.
+
+        Returns:
+            The alias applied and the qualified names of both linked
+            artifacts.
+        """
         _guard_wandb()
         api = _wandb.Api()  # type: ignore[union-attr]
 

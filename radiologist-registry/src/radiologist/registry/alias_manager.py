@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Internal W&B seam for artifact alias management, used by WandbRegistry."""
+
 from typing import List
 
 from radiologist.registry.optional import _guard_wandb, _wandb

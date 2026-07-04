@@ -20,13 +20,28 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Frozen dataclasses exchanged across the registry facade's public API.
+
+These carry no behavior — they are plain, immutable value objects passed
+between `WandbRegistry`, `resolve_selector`, and the CLI layer.
+"""
+
 from dataclasses import dataclass
 from typing import List, Tuple
 
 
 @dataclass(frozen=True)
 class ArtifactRef:
-    """Resolved W&B artifact pointer — output of WandbRegistry.resolve()."""
+    """Resolved W&B artifact pointer — output of WandbRegistry.resolve().
+
+    Attributes:
+        qualified_name: Fully qualified artifact path, e.g.
+            ``"entity/project/model-run123:best"``.
+        run_id: W&B run ID that produced the artifact.
+        artifact_name: Bare artifact name without entity/project/version,
+            e.g. ``"model-run123"``.
+        version: Resolved version or alias, e.g. ``"best"`` or ``"v3"``.
+    """
 
     qualified_name: str
     run_id: str
@@ -39,6 +54,13 @@ class ExportResult:
     """Paths to exported ONNX files — produced by core.export_onnx().
 
     Consumed by WandbRegistry.log_model_artifacts().
+
+    Attributes:
+        det_path: Filesystem path to the deterministic ONNX export.
+        mcd_path: Filesystem path to the MC-Dropout ONNX export.
+        run_id: W&B run ID the exports belong to.
+        input_shape: Model input tensor shape, e.g. ``(1, 3, 224, 224)``.
+        classes: Ordered list of class labels the model predicts.
     """
 
     det_path: str
@@ -50,7 +72,16 @@ class ExportResult:
 
 @dataclass(frozen=True)
 class PromoteResult:
-    """Result of a link/transition transaction — det+mcd always share one alias."""
+    """Result of a link/transition transaction — det+mcd always share one alias.
+
+    Attributes:
+        det_qualified_name: Qualified name of the deterministic artifact
+            after the transaction.
+        mcd_qualified_name: Qualified name of the MC-Dropout artifact after
+            the transaction.
+        alias: Alias applied to both artifacts (``"staging"`` or
+            ``"production"``).
+    """
 
     det_qualified_name: str
     mcd_qualified_name: str
@@ -63,6 +94,13 @@ class LoggedArtifacts:
 
     These are logged-but-not-linked: resolvable by run_id, carrying version aliases
     ('best'/'last'), but not yet attached to any registry collection.
+
+    Attributes:
+        det_qualified_name: Qualified name of the freshly logged deterministic
+            artifact.
+        mcd_qualified_name: Qualified name of the freshly logged MC-Dropout
+            artifact.
+        run_id: W&B run ID the artifacts were logged under.
     """
 
     det_qualified_name: str
@@ -72,7 +110,12 @@ class LoggedArtifacts:
 
 @dataclass(frozen=True)
 class CollectionMember:
-    """One artifact version in a W&B collection together with its current alias list."""
+    """One artifact version in a W&B collection together with its current alias list.
+
+    Attributes:
+        qualified_name: Fully qualified artifact path of this member.
+        aliases: Aliases currently attached to this artifact version.
+    """
 
     qualified_name: str
     aliases: List[str]
