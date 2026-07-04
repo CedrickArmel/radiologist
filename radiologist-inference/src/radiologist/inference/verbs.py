@@ -39,9 +39,14 @@ _SELECTOR_REQUIRED_MSG = (
 
 @dataclass(frozen=True)
 class PredictorVerb:
-    """Immutable descriptor binding a CLI verb name to the predictor class it
-    constructs and whether registry resolution applies the ``{run_id}-mcd``
-    convention."""
+    """Immutable descriptor binding a CLI verb name to a predictor class.
+
+    Attributes:
+        name: CLI verb name (e.g. "predict", "explain", "uncertainty").
+        predictor_cls: Predictor class the verb constructs.
+        mcd_convention: Whether registry resolution applies the
+            ``{run_id}-mcd`` naming convention for this verb.
+    """
 
     name: str
     predictor_cls: Type[BasePredictor]
