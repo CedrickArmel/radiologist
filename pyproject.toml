@@ -6,6 +6,7 @@ requires = ["uv_build>=0.9.28,<0.10.0"]
 lint = [
     "black>=25.12.0",
     "flake8>=7.3.0",
+    "flake8-docstrings>=1.7",
     "isort>=7.0.0",
     "pre-commit>=4.5.1",
 ]
@@ -14,6 +15,12 @@ test = [
     "pytest>=8.0.0",
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.0.0",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+    "mkdocs-include-markdown-plugin>=6.2",
 ]
 [project]
 name = "radiologist"
