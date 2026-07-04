@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import List, Union
 
 import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
@@ -35,67 +35,20 @@ from radiologist.inference.base_predictor import (
     BasePredictor,
     _preprocess_image,
     _read_metadata,
-    _resolve_and_pull,
     _softmax,
-    _validate_mean_std,
 )
 from radiologist.inference.models import UncertaintyResult
-from radiologist.registry.wandb_registry import WandbRegistry
-
-if TYPE_CHECKING:
-    from radiologist.registry.interface import ModelRegistry
-    from radiologist.registry.selector import RegistrySelector
 
 
 class MCDropoutPredictor(BasePredictor):
-    """Adds MC-Dropout uncertainty estimation to BasePredictor."""
+    """Adds MC-Dropout uncertainty estimation to BasePredictor.
 
-    @classmethod
-    def from_selector(
-        cls,
-        selector: "RegistrySelector",
-        local_dir: str,
-        registry: Optional["ModelRegistry"] = None,
-        mean: Optional[float] = None,
-        std: Optional[float] = None,
-        input_shape: Optional[List[int]] = None,
-    ) -> "MCDropoutPredictor":
-        """Resolve the selector and load the single MC-Dropout artifact.
-
-        The caller (``radiologist.inference.verbs.load_predictor``) is
-        responsible for applying the repo-wide ``{run_id}-mcd`` naming
-        convention to ``selector`` before calling this method — this method
-        performs a single resolve/pull against whatever selector it is
-        given; the deterministic model is no longer pulled here.
-
-        Args:
-            selector: Selector already naming the MC-Dropout artifact to
-                resolve.
-            local_dir: Local directory where the ONNX file will be saved.
-            registry: Registry to resolve/download from. Defaults to a single
-                shared WandbRegistry() instance when omitted.
-            mean: Optional normalization mean, forwarded to from_path.
-            std: Optional normalization std, forwarded to from_path.
-            input_shape: Optional input_shape fallback, forwarded to
-                from_path.
-
-        Returns:
-            Loaded MCDropoutPredictor instance.
-
-        Raises:
-            RuntimeError: When the ``registry`` extra (wandb) is not
-                installed.
-            ValueError: If exactly one of mean/std is provided.
-        """
-        _validate_mean_std(mean, std)
-        reg = registry if registry is not None else WandbRegistry()
-        mcd_path = _resolve_and_pull(selector, local_dir, reg)
-        return cls.from_path(
-            model_path=mcd_path,
-            mean=mean,
-            std=std,
-            input_shape=input_shape,
-        )
+    Inherits ``BasePredictor.from_selector`` unchanged: the caller
+    (``radiologist.inference.verbs.load_predictor``) is responsible for
+    applying the repo-wide ``{run_id}-mcd`` naming convention to the
+    selector before calling ``from_selector`` — the base implementation
+    performs a single resolve/pull against whatever selector it is given.
+    """
 
     def predict_with_uncertainty(
         self,

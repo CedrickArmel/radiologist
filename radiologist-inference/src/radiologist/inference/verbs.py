@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Predictor-verb registry binding CLI verb names to predictor classes."""
+
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Type
 
@@ -59,16 +61,27 @@ _VERBS: Dict[str, PredictorVerb] = {
 def get_verb(name: str) -> PredictorVerb:
     """Return the registered ``PredictorVerb`` for ``name``.
 
-    Raises ``KeyError`` for an unknown name.
+    Args:
+        name: Verb name to look up (e.g. ``"predict"``, ``"explain"``,
+            ``"uncertainty"``).
+
+    Returns:
+        The registered ``PredictorVerb`` for ``name``.
+
+    Raises:
+        KeyError: If ``name`` is not a registered verb.
     """
     return _VERBS[name]
 
 
 def apply_mcd_convention(run_id: Optional[str]) -> Optional[str]:
-    """Return ``f"{run_id}-mcd"`` when ``run_id`` is truthy, else ``None``.
+    """Encode the repo-wide det/mcd registry naming convention.
 
-    Encodes the repo-wide det/mcd registry pairing used by the uncertainty
-    verb.
+    Args:
+        run_id: Deterministic model's run id, or ``None``.
+
+    Returns:
+        ``f"{run_id}-mcd"`` when ``run_id`` is truthy, else ``None``.
     """
     return f"{run_id}-mcd" if run_id else None
 
@@ -92,9 +105,33 @@ def load_predictor(
     path, ``verb.predictor_cls.from_path(model_path=model)``; else raises
     ``ValueError`` naming ``--model`` and the registry selector flags. When
     ``verb.mcd_convention`` is ``True``, ``run_id`` is rewritten via
-    ``apply_mcd_convention`` before building the selector. ``mean``/``std``/
-    ``input_shape`` are forwarded unchanged to the predictor's
-    ``from_selector``/``from_path`` constructor for preprocessing overrides.
+    ``apply_mcd_convention`` before building the selector.
+
+    Args:
+        verb: Registered verb descriptor naming the predictor class to
+            construct and whether the ``{run_id}-mcd`` convention applies.
+        model: Local ONNX file path. Mutually exclusive with the registry
+            selector flags (``run_id``/``tags``/``groups``/``metric``).
+        run_id: Registry selector run id. Rewritten via
+            ``apply_mcd_convention`` when ``verb.mcd_convention`` is ``True``.
+        tags: Registry selector tags.
+        groups: Registry selector groups.
+        metric: Registry selector metric name.
+        local_dir: Local directory where a registry-resolved ONNX file will
+            be saved.
+        mean: Optional normalization mean, forwarded unchanged to the
+            predictor's ``from_selector``/``from_path`` constructor.
+        std: Optional normalization std, forwarded unchanged to the
+            predictor's ``from_selector``/``from_path`` constructor.
+        input_shape: Optional input_shape fallback, forwarded unchanged to
+            the predictor's ``from_selector``/``from_path`` constructor.
+
+    Returns:
+        Loaded predictor instance of ``verb.predictor_cls``.
+
+    Raises:
+        ValueError: If neither ``model`` nor a registry selector flag
+            (``run_id``/``tags``/``groups``/``metric``) is provided.
     """
     effective_run_id = apply_mcd_convention(run_id) if verb.mcd_convention else run_id
     selector = selector_from_flags(

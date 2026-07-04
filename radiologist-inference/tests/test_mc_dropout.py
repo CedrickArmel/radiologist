@@ -295,11 +295,10 @@ class TestMCDropoutFromPathMeanStdValidation:
     def test_from_selector_with_mismatched_mean_std_raises_before_any_pull(
         self, det_onnx_path, mcd_onnx_path, tmp_path
     ):
-        """MCDropoutPredictor.from_selector validates mean/std itself before
-        resolving or pulling anything (it does not delegate to
-        BasePredictor.from_selector); a mismatched mean/std pair must raise
-        before the artifact is resolved or pulled (bugfix review finding on
-        PR #131)."""
+        """MCDropoutPredictor.from_selector inherits BasePredictor.from_selector
+        unchanged, which validates mean/std before resolving or pulling
+        anything; a mismatched mean/std pair must raise before the artifact
+        is resolved or pulled (bugfix review finding on PR #131)."""
         fake_registry = _FakeMcdSelectorRegistry(det_onnx_path, mcd_onnx_path)
         selector = RegistrySelector(path="entity/project/model", run_id="run123")
 
