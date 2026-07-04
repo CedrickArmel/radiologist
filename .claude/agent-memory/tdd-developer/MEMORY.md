@@ -28,5 +28,6 @@
 - [Epic seam convention ownership move](feedback_epic_seam_convention_ownership_move.md) — when a new shared seam's contract says a convention "now lives here"/"is no longer done automatically", grep sibling methods for the old inline version and simplify it away, don't double-apply
 - [Narrowed shared-helper signature drops params](feedback_narrowed_shared_helper_signature_drops_params.md) — a "rewire onto shared helper X" issue's literal call-signature snippet can predate optional kwargs that landed afterward; grep old call sites' full kwargs before deleting any, extend the helper instead of regressing
 - [Review-fix reverts epic seam scope creep](feedback_review_fix_reverts_epic_seam_scope_creep.md) — when a review says an internal seam leaked into `__all__`, revert both the export and the test's expected set atomically; don't just widen the test to match the leak
+- [Docstring lint cutover scope](feedback_docstring_lint_cutover_scope.md) — a "clean" claim measured under a still-suppressed rule isn't proof the flip is clean; re-verify after; scope src-only enforcement via per-file-ignores instead of writing test docstrings
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
