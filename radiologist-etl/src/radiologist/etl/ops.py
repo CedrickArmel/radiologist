@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Internal ETL stage operations composed by the Prefect flow."""
+
 from __future__ import annotations
 
 import hashlib

@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Hydra experiment utilities: config extras, metric lookup, task wrapping."""
+
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional

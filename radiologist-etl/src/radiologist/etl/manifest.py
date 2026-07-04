@@ -42,6 +42,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Manifest record dataclass and Parquet/JSONL reader-writer helpers."""
+
 from __future__ import annotations
 
 import json

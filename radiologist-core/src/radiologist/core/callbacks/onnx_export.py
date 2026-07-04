@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Callback that exports the best checkpoint to ONNX and logs it to W&B."""
+
 from typing import Any, List, Tuple
 
 import lightning as L

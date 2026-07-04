@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Hydra-driven instantiation of callbacks, loggers, and LR schedulers."""
+
 from __future__ import annotations
 
 from functools import partial

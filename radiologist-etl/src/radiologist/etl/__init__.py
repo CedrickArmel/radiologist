@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""ETL pipeline: outlier filtering, splitting, manifests, and shard building."""
+
 from __future__ import annotations
 
 from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame

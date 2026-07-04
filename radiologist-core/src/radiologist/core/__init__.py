@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""Training loop, datamodule, focal loss, and callbacks for the classifier."""
+
 from radiologist.core.callbacks import (
     AttributionCallback,
     BestMetricCallback,

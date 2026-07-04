@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""ONNX export helpers for publishing trained checkpoints to the registry."""
+
 from radiologist.core.registry.export import export_onnx
 
 __all__ = ["export_onnx"]
