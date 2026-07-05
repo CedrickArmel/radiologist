@@ -101,7 +101,7 @@ class TestLoadPredictorFromLocalPath:
 
         predictor = load_predictor(
             verb,
-            model=det_path,
+            path=det_path,
             run_id=None,
             tags=None,
             groups=None,
@@ -117,7 +117,7 @@ class TestLoadPredictorFromLocalPath:
 
         predictor = load_predictor(
             verb,
-            model=det_path,
+            path=det_path,
             run_id=None,
             tags=None,
             groups=None,
@@ -135,7 +135,7 @@ class TestLoadPredictorFromLocalPath:
 
         predictor = load_predictor(
             verb,
-            model=mcd_path,
+            path=mcd_path,
             run_id=None,
             tags=None,
             groups=None,
@@ -158,7 +158,7 @@ class TestLoadPredictorFromRegistry:
         with patch.object(resolver_mod, "_wandb", mock_wandb):
             predictor = load_predictor(
                 verb,
-                model=None,
+                path=None,
                 run_id="run1",
                 tags=None,
                 groups=None,
@@ -183,7 +183,7 @@ class TestLoadPredictorFromRegistry:
         with patch.object(resolver_mod, "_wandb", mock_wandb):
             predictor = load_predictor(
                 verb,
-                model=None,
+                path=None,
                 run_id="run1",
                 tags=None,
                 groups=None,
@@ -201,13 +201,13 @@ class TestLoadPredictorFromRegistry:
 
 
 class TestLoadPredictorRaisesWhenNoSourceGiven:
-    def test_no_model_and_no_registry_selector_raises_value_error(self, tmp_path):
+    def test_no_path_and_no_registry_selector_raises_value_error(self, tmp_path):
         verb = get_verb("predict")
 
         with pytest.raises(ValueError) as exc_info:
             load_predictor(
                 verb,
-                model=None,
+                path=None,
                 run_id=None,
                 tags=None,
                 groups=None,
@@ -216,8 +216,48 @@ class TestLoadPredictorRaisesWhenNoSourceGiven:
             )
 
         message = str(exc_info.value)
-        assert "--model" in message
+        assert "--path" in message
         assert "--run-id" in message
         assert "--tags" in message
         assert "--groups" in message
         assert "--metric" in message
+
+
+class TestLoadPredictorGuardsAgainstBothSourcesGiven:
+    def test_path_and_run_id_together_raises_value_error(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        verb = get_verb("predict")
+
+        with pytest.raises(ValueError) as exc_info:
+            load_predictor(
+                verb,
+                path=det_path,
+                run_id="run1",
+                tags=None,
+                groups=None,
+                metric=None,
+                local_dir=str(tmp_path),
+            )
+
+        message = str(exc_info.value)
+        assert "--path" in message
+        assert "--run-id" in message
+
+    def test_path_and_tags_together_raises_value_error(self, tmp_path):
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        verb = get_verb("predict")
+
+        with pytest.raises(ValueError) as exc_info:
+            load_predictor(
+                verb,
+                path=det_path,
+                run_id=None,
+                tags=["a"],
+                groups=None,
+                metric=None,
+                local_dir=str(tmp_path),
+            )
+
+        message = str(exc_info.value)
+        assert "--path" in message
+        assert "--tags" in message

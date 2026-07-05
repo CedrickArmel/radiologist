@@ -127,13 +127,13 @@ Routes:
 
 ```bash
 # Classify a chest X-ray
-radiologist predict chest_xray.png --model model.onnx
+radiologist predict chest_xray.png --path model.onnx
 
 # Score-CAM explanation
-radiologist explain chest_xray.png --model model.onnx --out saliency.npy
+radiologist explain chest_xray.png --path model.onnx --out saliency.npy
 
 # MC-Dropout uncertainty
-radiologist uncertainty chest_xray.png --model model_mcd.onnx
+radiologist uncertainty chest_xray.png --path model_mcd.onnx
 ```
 
 `predict`, `explain`, and `uncertainty` all accept optional `--mean`,
@@ -142,15 +142,15 @@ radiologist uncertainty chest_xray.png --model model_mcd.onnx
 Omitting all three keeps today's default `/255.0`-only preprocessing:
 
 ```bash
-radiologist predict chest_xray.png --model model.onnx \
+radiologist predict chest_xray.png --path model.onnx \
     --mean 128 --std 65 --input-shape 1,3,224,224
 ```
 
 ```bash
 # Serve — picks the verb to serve via --predict/--explain/--uncertainty
 # (default: explain, preserving today's behavior)
-radiologist serve --model model.onnx
-radiologist serve --uncertainty --model model_mcd.onnx
+radiologist serve --path model.onnx
+radiologist serve --uncertainty --path model_mcd.onnx
 radiologist serve --predict --run-id abc123
 ```
 

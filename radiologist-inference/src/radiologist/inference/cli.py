@@ -22,9 +22,9 @@
 
 """Typer-based CLI for radiologist-inference.
 
-Entry points: predict <image> --model <det_path>
-              explain <image> --model <det_path>
-              uncertainty <image> --model <mcd_path>
+Entry points: predict <image> --path <det_path>
+              explain <image> --path <det_path>
+              uncertainty <image> --path <mcd_path>
 """
 
 import functools
@@ -70,14 +70,14 @@ if _typer is not None:
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
         ),
-        model: Optional[str] = typer.Option(
-            None, "--model", help="Path to the deterministic ONNX model."
+        path: Optional[str] = typer.Option(
+            None, "--path", help="Path to the deterministic ONNX model."
         ),
         run_id: Optional[str] = typer.Option(
             None,
             "--run-id",
             help="W&B run ID identifying the registry artifact to resolve. "
-            "Mutually exclusive with --model.",
+            "Mutually exclusive with --path.",
         ),
         tags: Optional[List[str]] = typer.Option(
             None,
@@ -101,7 +101,7 @@ if _typer is not None:
             ".",
             "--local-dir",
             help="Local directory the resolved registry artifact is downloaded "
-            "into. Ignored when --model is used.",
+            "into. Ignored when --path is used.",
         ),
         mean: Optional[float] = typer.Option(
             None, "--mean", help="Normalization mean (requires --std)."
@@ -123,13 +123,13 @@ if _typer is not None:
         The model to load is dispatched via ``verbs.load_predictor``: if any
         registry selector flag (``--run-id``/``--tags``/``--groups``/
         ``--metric``) is set, the artifact is resolved and pulled from the
-        W&B Registry into ``--local-dir``; otherwise ``--model`` is loaded
+        W&B Registry into ``--local-dir``; otherwise ``--path`` is loaded
         directly from a local ONNX path. Exactly one of the two loading
         strategies must be usable, or the command exits with an error.
 
         Args:
             image_path: Path to the input chest X-ray image.
-            model: Path to a local deterministic ONNX model file.
+            path: Path to a local deterministic ONNX model file.
             run_id: W&B run ID for registry-backed resolution.
             tags: Registry artifact tags used for selector-based resolution.
             groups: Registry artifact groups used for selector-based
@@ -142,7 +142,7 @@ if _typer is not None:
         """
         classifier = verbs.load_predictor(
             verbs.get_verb("predict"),
-            model,
+            path,
             run_id,
             tags,
             groups,
@@ -163,14 +163,14 @@ if _typer is not None:
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
         ),
-        model: Optional[str] = typer.Option(
-            None, "--model", help="Path to the deterministic ONNX model."
+        path: Optional[str] = typer.Option(
+            None, "--path", help="Path to the deterministic ONNX model."
         ),
         run_id: Optional[str] = typer.Option(
             None,
             "--run-id",
             help="W&B run ID identifying the registry artifact to resolve. "
-            "Mutually exclusive with --model.",
+            "Mutually exclusive with --path.",
         ),
         tags: Optional[List[str]] = typer.Option(
             None,
@@ -194,7 +194,7 @@ if _typer is not None:
             ".",
             "--local-dir",
             help="Local directory the resolved registry artifact is downloaded "
-            "into. Ignored when --model is used.",
+            "into. Ignored when --path is used.",
         ),
         out: Optional[str] = typer.Option(
             None, "--out", help="Path to save the saliency map as a .npy file."
@@ -220,12 +220,12 @@ if _typer is not None:
         Uses the same registry-selector-vs-local-path dispatch as
         ``predict``, via ``verbs.load_predictor``: registry selector flags
         (``--run-id``/``--tags``/``--groups``/``--metric``) resolve and pull
-        the artifact into ``--local-dir``; otherwise ``--model`` is loaded
+        the artifact into ``--local-dir``; otherwise ``--path`` is loaded
         directly.
 
         Args:
             image_path: Path to the input chest X-ray image.
-            model: Path to a local deterministic ONNX model file.
+            path: Path to a local deterministic ONNX model file.
             run_id: W&B run ID for registry-backed resolution.
             tags: Registry artifact tags used for selector-based resolution.
             groups: Registry artifact groups used for selector-based
@@ -240,7 +240,7 @@ if _typer is not None:
         """
         explainer = verbs.load_predictor(
             verbs.get_verb("explain"),
-            model,
+            path,
             run_id,
             tags,
             groups,
@@ -264,14 +264,14 @@ if _typer is not None:
         image_path: str = typer.Argument(
             ..., help="Path to the input chest X-ray image."
         ),
-        model: Optional[str] = typer.Option(
-            None, "--model", help="Path to the MC-Dropout ONNX model."
+        path: Optional[str] = typer.Option(
+            None, "--path", help="Path to the MC-Dropout ONNX model."
         ),
         run_id: Optional[str] = typer.Option(
             None,
             "--run-id",
             help="W&B run ID identifying the registry artifact to resolve. "
-            "Mutually exclusive with --model.",
+            "Mutually exclusive with --path.",
         ),
         tags: Optional[List[str]] = typer.Option(
             None,
@@ -295,7 +295,7 @@ if _typer is not None:
             ".",
             "--local-dir",
             help="Local directory the resolved registry artifact is downloaded "
-            "into. Ignored when --model is used.",
+            "into. Ignored when --path is used.",
         ),
         n_passes: int = typer.Option(
             30, "--n-passes", help="Number of stochastic forward passes."
@@ -324,11 +324,11 @@ if _typer is not None:
         ``predict``/``explain``, via ``verbs.load_predictor``: registry
         selector flags (``--run-id``/``--tags``/``--groups``/``--metric``)
         resolve and pull the artifact into ``--local-dir``; otherwise
-        ``--model`` is loaded directly.
+        ``--path`` is loaded directly.
 
         Args:
             image_path: Path to the input chest X-ray image.
-            model: Path to a local MC-Dropout ONNX model file.
+            path: Path to a local MC-Dropout ONNX model file.
             run_id: W&B run ID for registry-backed resolution.
             tags: Registry artifact tags used for selector-based resolution.
             groups: Registry artifact groups used for selector-based
@@ -342,7 +342,7 @@ if _typer is not None:
         """
         predictor = verbs.load_predictor(
             verbs.get_verb("uncertainty"),
-            model,
+            path,
             run_id,
             tags,
             groups,
@@ -362,14 +362,14 @@ if _typer is not None:
     @app.command()
     @_exit_on_error
     def serve(
-        model: Optional[str] = typer.Option(
-            None, "--model", help="Path to the deterministic ONNX model."
+        path: Optional[str] = typer.Option(
+            None, "--path", help="Path to the deterministic ONNX model."
         ),
         run_id: Optional[str] = typer.Option(
             None,
             "--run-id",
             help="W&B run ID identifying the registry artifact to resolve. "
-            "Mutually exclusive with --model.",
+            "Mutually exclusive with --path.",
         ),
         tags: Optional[List[str]] = typer.Option(
             None,
@@ -393,7 +393,7 @@ if _typer is not None:
             ".",
             "--local-dir",
             help="Local directory the resolved registry artifact is downloaded "
-            "into. Ignored when --model is used.",
+            "into. Ignored when --path is used.",
         ),
         host: str = typer.Option(
             "127.0.0.1", "--host", help="Host interface to bind the HTTP server to."
@@ -420,14 +420,14 @@ if _typer is not None:
         registry-selector-vs-local-path dispatch as the other commands: if a
         registry selector (``--run-id``/``--tags``/``--groups``/``--metric``)
         is set, the artifact is resolved and pulled into ``--local-dir``; if
-        ``--model`` is set, it is loaded directly; if neither is set, the
+        ``--path`` is set, it is loaded directly; if neither is set, the
         server starts with no predictor loaded and ``/predict``, ``/explain``,
         and ``/uncertainty`` respond with a 503 "no model loaded" error until
         a predictor becomes available. ``/healthz`` and ``/readyz`` are
         always available.
 
         Args:
-            model: Path to a local ONNX model file.
+            path: Path to a local ONNX model file.
             run_id: W&B run ID for registry-backed resolution.
             tags: Registry artifact tags used for selector-based resolution.
             groups: Registry artifact groups used for selector-based
@@ -454,11 +454,11 @@ if _typer is not None:
         verb_name = (
             "predict" if predict else "uncertainty" if uncertainty else "explain"
         )
-        has_source = model is not None or any([run_id, tags, groups, metric])
+        has_source = path is not None or any([run_id, tags, groups, metric])
         predictor = (
             verbs.load_predictor(
                 verbs.get_verb(verb_name),
-                model,
+                path,
                 run_id,
                 tags,
                 groups,
