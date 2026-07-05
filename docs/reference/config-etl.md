@@ -75,7 +75,7 @@ intermediate artifact instead of recomputing it:
 
 ```bash
 uv run --active python -m radiologist.etl.prefect_pipelines \
-    resume_from_manifest=true \
+    resume_from_manifest=gs://bucket/manifests/manifest-abc123.jsonl \
     destination=gs://bucket/manifests/ \
     build_shards=true
 ```

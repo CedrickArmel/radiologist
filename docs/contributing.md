@@ -2,8 +2,8 @@
 
 This project documents its public API using
 [Google-style docstrings](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings),
-enforced (once the docstring lint gate is enabled) via `flake8-docstrings` with
-`docstring-convention = google` in `.flake8`.
+enforced via `flake8-docstrings` with `docstring-convention = google` in
+`.flake8`.
 
 ## Example
 
