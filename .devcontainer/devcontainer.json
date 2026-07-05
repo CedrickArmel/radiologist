@@ -14,7 +14,8 @@
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/radiologist",
   "containerEnv": {
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "BASH_ENV": "/home/vscode/.bashrc"
   },
   "mounts": [
     "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
