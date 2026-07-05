@@ -32,8 +32,12 @@ from radiologist.inference.mc_dropout import MCDropoutPredictor
 from radiologist.registry import selector_from_flags
 
 _SELECTOR_REQUIRED_MSG = (
-    "Provide either --model or a registry selector "
+    "Provide either --path or a registry selector "
     "(--run-id/--tags/--groups/--metric)."
+)
+_MUTUALLY_EXCLUSIVE_MSG = (
+    "Provide either --path or a registry selector "
+    "(--run-id/--tags/--groups/--metric), not both."
 )
 
 
@@ -93,7 +97,7 @@ def apply_mcd_convention(run_id: Optional[str]) -> Optional[str]:
 
 def load_predictor(
     verb: PredictorVerb,
-    model: Optional[str],
+    path: Optional[str],
     run_id: Optional[str],
     tags: Optional[List[str]],
     groups: Optional[List[str]],
@@ -106,16 +110,18 @@ def load_predictor(
     """Single loading path for every verb.
 
     When the (verb-adjusted) flags are registry-backed, resolves via
-    ``verb.predictor_cls.from_selector(...)``; else when ``model`` is a local
-    path, ``verb.predictor_cls.from_path(model_path=model)``; else raises
-    ``ValueError`` naming ``--model`` and the registry selector flags. When
+    ``verb.predictor_cls.from_selector(...)``; else when ``path`` is a local
+    path, ``verb.predictor_cls.from_path(model_path=path)``; else raises
+    ``ValueError`` naming ``--path`` and the registry selector flags.
+    ``path`` and any registry selector flag are mutually exclusive: passing
+    both raises ``ValueError`` rather than silently favoring one. When
     ``verb.mcd_convention`` is ``True``, ``run_id`` is rewritten via
     ``apply_mcd_convention`` before building the selector.
 
     Args:
         verb: Registered verb descriptor naming the predictor class to
             construct and whether the ``{run_id}-mcd`` convention applies.
-        model: Local ONNX file path. Mutually exclusive with the registry
+        path: Local ONNX file path. Mutually exclusive with the registry
             selector flags (``run_id``/``tags``/``groups``/``metric``).
         run_id: Registry selector run id. Rewritten via
             ``apply_mcd_convention`` when ``verb.mcd_convention`` is ``True``.
@@ -135,17 +141,20 @@ def load_predictor(
         Loaded predictor instance of ``verb.predictor_cls``.
 
     Raises:
-        ValueError: If neither ``model`` nor a registry selector flag
-            (``run_id``/``tags``/``groups``/``metric``) is provided.
+        ValueError: If neither ``path`` nor a registry selector flag
+            (``run_id``/``tags``/``groups``/``metric``) is provided, or if
+            both ``path`` and a registry selector flag are provided.
     """
     effective_run_id = apply_mcd_convention(run_id) if verb.mcd_convention else run_id
     selector = selector_from_flags(
-        path=model or "",
+        path=path or "",
         run_id=effective_run_id,
         tags=tags,
         groups=groups,
         metric=metric,
     )
+    if path is not None and selector.is_registry_backed():
+        raise ValueError(_MUTUALLY_EXCLUSIVE_MSG)
     if selector.is_registry_backed():
         return verb.predictor_cls.from_selector(
             selector,
@@ -154,8 +163,8 @@ def load_predictor(
             std=std,
             input_shape=input_shape,
         )
-    if model is not None:
+    if path is not None:
         return verb.predictor_cls.from_path(
-            model_path=model, mean=mean, std=std, input_shape=input_shape
+            model_path=path, mean=mean, std=std, input_shape=input_shape
         )
     raise ValueError(_SELECTOR_REQUIRED_MSG)

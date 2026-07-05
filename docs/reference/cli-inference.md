@@ -11,15 +11,17 @@ requires the `serve` extra (fastapi, uvicorn).
 Every command that loads a model shares the same dispatch rule, implemented
 via `verbs.load_predictor`/`verbs.get_verb`:
 
-- **Local path** — pass `--model` to load an ONNX file directly from disk via
+- **Local path** — pass `--path` to load an ONNX file directly from disk via
   `BasePredictor.from_path`.
 - **Registry selector** — pass any of `--run-id`, `--tags`, `--groups`, or
-  `--metric` (without `--model`) to resolve and download an artifact from the
+  `--metric` (without `--path`) to resolve and download an artifact from the
   W&B Model Registry via `BasePredictor.from_selector`. The resolved file is
   saved into `--local-dir` (defaults to `.`).
-- Exactly one of the two strategies must be usable. Providing neither
-  `--model` nor any selector flag raises an error (except for `serve`, where
-  omitting both starts the server with no model loaded — see below).
+- Exactly one of the two strategies must be usable: providing neither
+  `--path` nor any selector flag raises an error (except for `serve`, where
+  omitting both starts the server with no model loaded — see below), and
+  providing both `--path` and a selector flag also raises an error rather
+  than silently favoring one.
 
 `uncertainty` loads a single-session `MCDropoutPredictor`: the same ONNX
 model serves both the deterministic and the stochastic MC-Dropout forward
@@ -41,25 +43,25 @@ predicted class label with per-class probabilities.
 
 ```bash
 # Local ONNX file
-radiologist predict chest_xray.png --model model.onnx
+radiologist predict chest_xray.png --path model.onnx
 
 # Registry-backed resolution
 radiologist predict chest_xray.png --run-id abc123 --local-dir ./models
 
 # With explicit normalization and input shape
-radiologist predict chest_xray.png --model model.onnx \
+radiologist predict chest_xray.png --path model.onnx \
     --mean 128 --std 65 --input-shape 1,3,224,224
 ```
 
 | Option | Description |
 |---|---|
 | `image_path` (argument) | Path to the input chest X-ray image. |
-| `--model` | Path to the deterministic ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--model`. |
+| `--path` | Path to the deterministic ONNX model. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--model` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
 | `--mean` | Normalization mean (requires `--std`). |
 | `--std` | Normalization std (requires `--mean`). |
 | `--input-shape` | Fallback `[N,C,H,W]` as comma-separated ints, e.g. `1,3,224,224`. |
@@ -71,21 +73,21 @@ predicted class and either saving the saliency map or printing its shape.
 
 ```bash
 # Save the saliency map to disk
-radiologist explain chest_xray.png --model model.onnx --out saliency.npy
+radiologist explain chest_xray.png --path model.onnx --out saliency.npy
 
 # Print the saliency map shape only
-radiologist explain chest_xray.png --model model.onnx
+radiologist explain chest_xray.png --path model.onnx
 ```
 
 | Option | Description |
 |---|---|
 | `image_path` (argument) | Path to the input chest X-ray image. |
-| `--model` | Path to the deterministic ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--model`. |
+| `--path` | Path to the deterministic ONNX model. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--model` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
 | `--out` | Path to save the saliency map as a `.npy` file. When omitted, only the shape is printed. |
 | `--mean` | Normalization mean (requires `--std`). |
 | `--std` | Normalization std (requires `--mean`). |
@@ -99,24 +101,24 @@ with standard deviation, plus the overall predictive entropy.
 
 ```bash
 # Local ONNX file
-radiologist uncertainty chest_xray.png --model model.onnx
+radiologist uncertainty chest_xray.png --path model.onnx
 
 # Registry-backed resolution
 radiologist uncertainty chest_xray.png --run-id abc123 --local-dir ./models
 
 # More stochastic passes for a tighter estimate
-radiologist uncertainty chest_xray.png --model model.onnx --n-passes 100
+radiologist uncertainty chest_xray.png --path model.onnx --n-passes 100
 ```
 
 | Option | Description |
 |---|---|
 | `image_path` (argument) | Path to the input chest X-ray image. |
-| `--model` | Path to the MC-Dropout ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--model`. |
+| `--path` | Path to the MC-Dropout ONNX model. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--model` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
 | `--n-passes` | Number of stochastic forward passes. Defaults to `30`. |
 | `--mean` | Normalization mean (requires `--std`). |
 | `--std` | Normalization std (requires `--mean`). |
@@ -131,7 +133,7 @@ registry-selector-vs-local-path dispatch as the other commands.
 
 ```bash
 # Serve a local model (default verb: explain)
-radiologist serve --model model.onnx --host 0.0.0.0 --port 8000
+radiologist serve --path model.onnx --host 0.0.0.0 --port 8000
 
 # Serve a registry-resolved model as a Classifier
 radiologist serve --run-id abc123 --local-dir ./models --predict
@@ -140,7 +142,7 @@ radiologist serve --run-id abc123 --local-dir ./models --predict
 radiologist serve
 ```
 
-If neither `--model` nor a registry selector is provided, the server starts
+If neither `--path` nor a registry selector is provided, the server starts
 with no predictor loaded: `/predict`, `/explain`, and `/uncertainty` each
 respond with a `503` "no model loaded" error until a predictor becomes
 available. `/healthz` (liveness) and `/readyz` (readiness) are always
@@ -148,12 +150,12 @@ available regardless of predictor state.
 
 | Option | Description |
 |---|---|
-| `--model` | Path to the deterministic ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--model`. |
+| `--path` | Path to the deterministic ONNX model. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--model` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
 | `--host` | Host interface to bind the HTTP server to. Defaults to `127.0.0.1`. |
 | `--port` | TCP port to bind the HTTP server to. Defaults to `8000`. |
 | `--predict` | Serve a `Classifier` (predict verb). |

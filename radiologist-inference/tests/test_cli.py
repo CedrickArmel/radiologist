@@ -108,7 +108,7 @@ class TestPredictCommand:
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
         image_path = _make_png_path(tmp_path)
 
-        result = runner.invoke(app, ["predict", image_path, "--model", det_path])
+        result = runner.invoke(app, ["predict", image_path, "--path", det_path])
 
         assert result.exit_code == 0
         assert "Predicted class:" in result.output
@@ -123,15 +123,13 @@ class TestPredictCommandNormalizationFlags:
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
         image_path = _make_png_path(tmp_path)
 
-        default_result = runner.invoke(
-            app, ["predict", image_path, "--model", det_path]
-        )
+        default_result = runner.invoke(app, ["predict", image_path, "--path", det_path])
         normalized_result = runner.invoke(
             app,
             [
                 "predict",
                 image_path,
-                "--model",
+                "--path",
                 det_path,
                 "--mean",
                 "128",
@@ -152,7 +150,7 @@ class TestExplainCommand:
         det_path = build_det_onnx(tmp_path, filename="det.onnx")
         image_path = _make_png_path(tmp_path)
 
-        result = runner.invoke(app, ["explain", image_path, "--model", det_path])
+        result = runner.invoke(app, ["explain", image_path, "--path", det_path])
 
         assert result.exit_code == 0
         assert "Predicted class:" in result.output
@@ -164,7 +162,7 @@ class TestExplainCommand:
 
         result = runner.invoke(
             app,
-            ["explain", image_path, "--model", det_path, "--out", str(out_path)],
+            ["explain", image_path, "--path", det_path, "--out", str(out_path)],
         )
 
         assert result.exit_code == 0
@@ -183,7 +181,7 @@ class TestExplainCommandNormalizationFlags:
             [
                 "explain",
                 image_path,
-                "--model",
+                "--path",
                 det_path,
                 "--mean",
                 "128",
@@ -206,7 +204,7 @@ class TestUncertaintyCommand:
             [
                 "uncertainty",
                 image_path,
-                "--model",
+                "--path",
                 mcd_path,
                 "--n-passes",
                 "5",
@@ -225,7 +223,7 @@ class TestUncertaintyCommand:
             [
                 "uncertainty",
                 image_path,
-                "--model",
+                "--path",
                 mcd_path,
                 "--mcd-model",
                 mcd_path,
@@ -248,7 +246,7 @@ class TestUncertaintyCommandNormalizationFlags:
             [
                 "uncertainty",
                 image_path,
-                "--model",
+                "--path",
                 mcd_path,
                 "--n-passes",
                 "5",
@@ -325,7 +323,7 @@ class TestRegistrySelectorDispatch:
     ):
         """--mean/--std/--input-shape must not be silently dropped when the
         predictor is loaded via a registry selector (--run-id) instead of
-        --model (bugfix #139)."""
+        --path (bugfix #139)."""
         build_det_onnx(tmp_path, filename="det.onnx")
         image_path = _make_png_path(tmp_path)
 
@@ -393,13 +391,13 @@ class TestRegistrySelectorDispatch:
         assert normalized_result.exit_code == 0, normalized_result.output
         assert default_result.output != normalized_result.output
 
-    def test_predict_without_model_or_selector_exits_nonzero(self, tmp_path):
+    def test_predict_without_path_or_selector_exits_nonzero(self, tmp_path):
         image_path = _make_png_path(tmp_path)
 
         result = runner.invoke(app, ["predict", image_path])
 
         assert result.exit_code != 0
-        assert "--model" in result.output
+        assert "--path" in result.output
         assert "--run-id" in result.output or "selector" in result.output.lower()
 
     def test_predict_with_run_id_and_tags_exits_nonzero(self, tmp_path):
@@ -411,6 +409,28 @@ class TestRegistrySelectorDispatch:
         )
 
         assert result.exit_code != 0
+
+    def test_predict_with_path_and_run_id_exits_nonzero(self, tmp_path):
+        """--path and a registry selector must be mutually exclusive: passing
+        both must error rather than silently favoring the registry load."""
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = _make_png_path(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "predict",
+                image_path,
+                "--path",
+                det_path,
+                "--run-id",
+                "run1",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "--path" in result.output
+        assert "--run-id" in result.output
 
     def test_uncertainty_with_run_id_resolves_mcd_model_via_convention(self, tmp_path):
         """uncertainty --run-id must resolve a single model via the
@@ -469,7 +489,7 @@ class TestServeCommand:
                 app,
                 [
                     "serve",
-                    "--model",
+                    "--path",
                     det_path,
                     "--host",
                     "0.0.0.0",
@@ -491,7 +511,7 @@ class TestServeCommand:
         import radiologist.inference.cli as cli_mod
 
         with patch.object(cli_mod, "_uvicorn", None):
-            result = runner.invoke(app, ["serve", "--model", det_path])
+            result = runner.invoke(app, ["serve", "--path", det_path])
 
         assert result.exit_code != 0
         assert "serve" in result.output
@@ -505,7 +525,7 @@ class TestServeCommand:
 
         mock_uvicorn = MagicMock()
         with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
-            result = runner.invoke(app, ["serve", "--predict", "--model", det_path])
+            result = runner.invoke(app, ["serve", "--predict", "--path", det_path])
 
         assert result.exit_code == 0, result.output
         mock_uvicorn.run.assert_called_once()
@@ -580,13 +600,13 @@ class TestServeCommand:
         mock_uvicorn = MagicMock()
         with patch.object(cli_mod, "_uvicorn", mock_uvicorn):
             result = runner.invoke(
-                app, ["serve", "--predict", "--explain", "--model", det_path]
+                app, ["serve", "--predict", "--explain", "--path", det_path]
             )
 
         assert result.exit_code != 0
 
     def test_serve_with_no_source_starts_with_no_predictor(self, tmp_path):
-        """No --model/registry selector must start the app with no predictor
+        """No --path/registry selector must start the app with no predictor
         injected: every predictor route 503s (mirrors test_app.py's
         TestNoPredictorInjected, driven end-to-end through the serve
         command)."""
