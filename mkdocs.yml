@@ -54,6 +54,7 @@ nav:
       - ETL (Hydra): reference/config-etl.md
       - Inference CLI: reference/cli-inference.md
       - Registry CLI: reference/cli-registry.md
+      - Environment Variables: reference/environment.md
   - API Reference:
       - utils: reference/api-utils.md
       - core: reference/api-core.md
