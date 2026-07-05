@@ -95,11 +95,3 @@ with e.g. `+debug=fast_dev_run`. All are `# @package _global_` overlays.
 | File | Purpose |
 |---|---|
 | `default.yaml` | Selected by default (`hydra: default`). Configures Hydra's own run/sweep output layout: single runs go to `outputs/<date>/<time>/`, multirun (sweep) jobs go to `multirun/<date>/<time>/<job-num>/`. Sets `hydra.job.chdir: true`, so `train()`/`main()` execute with the process CWD already inside that per-run output directory — this is what `paths.root_dir: ${hydra:runtime.cwd}` and `paths.output_dir: ${hydra:runtime.output_dir}` resolve against. |
-
-## Config groups reviewed but not flagged
-
-Every group above was resolvable from the YAML plus its consuming Python
-code, with one exception already called out inline: the `early_stopping` /
-`exception_checkpoint` callback keys nulled in `debug/limit.yaml` and
-`debug/overfit.yaml` have no corresponding `callbacks/*.yaml` definition or
-`default.yaml` entry in this tree as of this writing.

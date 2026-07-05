@@ -252,7 +252,7 @@ docs-serve:  ## live-reload docs at localhost:8000
 docs-build:  ## strict build — fails on broken refs / missing docstrings pages
 	@uv run --active mkdocs build --strict
 
-docstrings:  ## opt-in Google-style docstring check (before enforcement flip)
+docstrings:  ## Google-style docstring check (also enforced via pre-commit's flake8 hook)
 	@uv run --active flake8 --select=D radiologist-*/src
 
 # --------------------------------------------------------------------------- #
