@@ -153,9 +153,11 @@ def load_predictor(
         groups=groups,
         metric=metric,
     )
-    if path is not None and selector.is_registry_backed():
+    has_path = path is not None
+    registry_backed = selector.is_registry_backed()
+    if has_path and registry_backed:
         raise ValueError(_MUTUALLY_EXCLUSIVE_MSG)
-    if selector.is_registry_backed():
+    if registry_backed:
         return verb.predictor_cls.from_selector(
             selector,
             local_dir=local_dir,
@@ -163,7 +165,7 @@ def load_predictor(
             std=std,
             input_shape=input_shape,
         )
-    if path is not None:
+    if has_path:
         return verb.predictor_cls.from_path(
             model_path=path, mean=mean, std=std, input_shape=input_shape
         )
