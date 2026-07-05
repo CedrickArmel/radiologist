@@ -504,6 +504,27 @@ class TestServeCommand:
         assert kwargs["host"] == "0.0.0.0"
         assert kwargs["port"] == 9000
 
+    def test_serve_with_path_and_run_id_exits_nonzero(self, tmp_path):
+        """--path and a registry selector must be mutually exclusive for
+        serve too: passing both must error rather than silently favoring
+        one source over the other."""
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+
+        result = runner.invoke(
+            app,
+            [
+                "serve",
+                "--path",
+                det_path,
+                "--run-id",
+                "run1",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "--path" in result.output
+        assert "--run-id" in result.output
+
     def test_serve_raises_runtime_error_naming_serve_extra_when_uvicorn_absent(
         self, tmp_path
     ):
