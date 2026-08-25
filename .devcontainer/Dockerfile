@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         shellcheck \
         pipx \
         tcpdump \
+        socat \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y --no-install-recommends python3.13 python3.13-venv python3.13-dev \
