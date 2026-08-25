@@ -20,11 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 from PIL import Image  # type: ignore[import-untyped]
+
+os.environ.pop("PREFECT_API_URL", None)
+os.environ.pop("PREFECT_API_KEY", None)
 
 
 def _write_png(path: Path, arr: np.ndarray) -> None:

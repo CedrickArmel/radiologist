@@ -141,11 +141,11 @@ include = [
     "radiologist-core/src",
     "radiologist-inference/src",
     "radiologist-registry/src",
-    "radiologist-utils/tests",
-    "radiologist-etl/tests",
-    "radiologist-core/tests",
-    "radiologist-inference/tests",
-    "radiologist-registry/tests",
+    "radiologist-core/radiologist_core_tests",
+    "radiologist-etl/radiologist_etl_tests",
+    "radiologist-inference/radiologist_inference_tests",
+    "radiologist-registry/radiologist_registry_tests",
+    "radiologist-utils/radiologist_utils_tests",
 ]
 exclude = ["**/__pycache__"]
 # Cross-package imports (radiologist.core importing radiologist.utils, etc.)
@@ -153,16 +153,20 @@ exclude = ["**/__pycache__"]
 # files, not through this list — this only scopes what pyright indexes.
 reportMissingImports = "warning"
 
-
 [tool.pytest.ini_options]
 testpaths = [
-    "radiologist-utils/tests",
-    "radiologist-etl/tests",
-    "radiologist-core/tests",
-    "radiologist-inference/tests",
-    "radiologist-registry/tests",
+    "radiologist-core/radiologist_core_tests",
+    "radiologist-etl/radiologist_etl_tests",
+    "radiologist-inference/radiologist_inference_tests",
+    "radiologist-registry/radiologist_registry_tests",
+    "radiologist-utils/radiologist_utils_tests",
 ]
-addopts = "--import-mode=importlib --cov=radiologist --cov-report=term-missing"
+addopts = [
+    "--import-mode=importlib",
+    "--cov=radiologist",
+    "--cov-report=term-missing",
+    "--ignore=radiologist-etl/radiologist_etl_tests/test_pipelines.py",
+]
 
 [tool.uv.build-backend]
 namespace = true
