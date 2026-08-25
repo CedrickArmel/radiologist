@@ -115,6 +115,16 @@ export UVALIASES
 
 .DEFAULT_GOAL := help
 
+
+define confirm
+	printf "$(1) [y/N] "; \
+	read answer; \
+	case "$$answer" in \
+		y|Y|yes|YES) ;; \
+		*) echo "Skipped."; exit 0 ;; \
+	esac
+endef
+
 .PHONY: help \
         tpusetup gpusetup cpusetup \
         uv pyenv venv remove-tf tpuenvs gpuenvs reload \
@@ -122,7 +132,48 @@ export UVALIASES
         test test-core test-etl test-utils test-inference test-registry \
         lint format type-check \
         docs-install docs-serve docs-build docstrings \
-        clean
+        clean set-gpg-relay devcontainer-post-create \
+		devcontainer-post-start verify-forwarding \
+		debug-devcontainer summarize-egress debug-gpg-env
+
+# --------------------------------------------------------------------------- #
+#  Help                                                                        #
+# --------------------------------------------------------------------------- #
+
+debug-gpg-env:
+	@echo "USER=$$USER"
+	@echo "HOME=$$HOME"
+	@echo "GNUPGHOME=$${GNUPGHOME:-<unset>}"
+	@echo "uid=$$(id -u) gid=$$(id -g)"
+	@echo "whoami=$$(whoami)"
+	@gpgconf --list-dirs homedir
+	@gpgconf --list-dirs socketdir
+	@gpgconf --list-dirs agent-socket
+
+set-gpg-relay:
+	@$(call confirm, Create relay with docker ? will establish a TCP connexion for devcontainer to reuse your local key.)
+	@.scripts/host-gpg-relay-install.sh
+
+devcontainer-post-create:
+	@.scripts/post-create.sh
+	@echo "✅ post-create done."
+
+devcontainer-post-start:
+	@.scripts/post-start.sh
+	@echo "✅ post-start done."
+
+verify-forwarding:
+	@.scripts/verify-forwarding.sh
+
+debug-devcontainer: verify-forwarding
+	@.scripts/gpg-reimport-stub.sh
+
+set-remote-gpg-relay:
+	@.scripts/gpg-relay.sh
+
+summarize-egress:
+	@.scripts/report-egress.sh to summarize
+	@"✅ logs exported."
 
 # --------------------------------------------------------------------------- #
 #  Help                                                                        #

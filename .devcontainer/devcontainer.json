@@ -1,5 +1,5 @@
 {
-  "name": "radiologist",
+  "name": "Radiologist's devcontainer",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
@@ -12,21 +12,19 @@
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
   },
   "remoteUser": "vscode",
-  "workspaceFolder": "/workspaces/radiologist",
   "containerEnv": {
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "BASH_ENV": "/home/vscode/.bashrc"
   },
   "mounts": [
     "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
-    "source=gnupg-config-${devcontainerId},target=/home/vscode/.gnupg,type=volume",
-    "source=ssh-config-${devcontainerId},target=/home/vscode/.ssh,type=volume",
     "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.host-gitconfig,type=bind,consistency=cached,readonly",
     "source=${localEnv:HOME}/.claude/skills,target=/home/vscode/.claude/skills,type=bind,consistency=cached,readonly",
-    "source=${localEnv:HOME}/.claude/agents,target=/home/vscode/.claude/agents,type=bind,consistency=cached,readonly"
+    "source=${localEnv:HOME}/.claude/agents,target=/home/vscode/.claude/agents,type=bind,consistency=cached,readonly",
+    "source=${localEnv:HOME}/.gpg-stub,target=/home/vscode/.gpg-stub,type=bind,consistency=cached,readonly"
   ],
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
-  "postStartCommand": "bash .devcontainer/post-start.sh",
+  "postCreateCommand": "make devcontainer-post-create",
+  "postStartCommand": "make devcontainer-post-start",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -39,10 +37,7 @@
         "foxundermoon.shell-format",
         "ms-azuretools.vscode-docker",
         "mermaidchart.vscode-mermaid-chart"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/home/vscode/.pyenv/versions/radiologist/bin/python"
-      }
+      ]
     }
   }
 }
