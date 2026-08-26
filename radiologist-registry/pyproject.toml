@@ -2,18 +2,33 @@
 name = "radiologist-registry"
 version = "0.1.0"
 description = "W&B model registry — promote, resolve, and download ONNX artifacts"
-license = { file = "../LICENSE" }
-requires-python = ">=3.10"
-dependencies = [
-    "radiologist-utils>=0.1.0",
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Cédrick-Armel YEBOUET" }]
+keywords = ["chest-xray", "medical-imaging", "machine-learning", "pytorch"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+requires-python = ">=3.10"
+dependencies = []
 
 [project.optional-dependencies]
-wandb = ["wandb>=0.27.0"]
+all = ["typer>=0.9.0", "wandb>=0.27.0"]
 cli = ["typer>=0.9.0"]
+wandb = ["wandb>=0.27.0"]
 
 [project.scripts]
 radiologist-registry = "radiologist.registry.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/CedrickArmel/radiologist"
+Repository = "https://github.com/CedrickArmel/radiologist"
+Documentation = "https://cedrickarmel.github.io/radiologist/"
+Issues = "https://github.com/CedrickArmel/radiologist/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.28,<0.10.0"]
@@ -25,7 +40,9 @@ module-name = "radiologist.registry"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
+version_provider = "uv"
+version_scheme = "pep440"
 tag_format = "${version}-radiologist-registry"
 ignored_tag_formats = ["${version}-radiologist-*"]
 update_changelog_on_bump = true
+bump_message = "bump: radiologist-registry $current_version → $new_version"

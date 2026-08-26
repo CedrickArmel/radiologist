@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.10"
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync --group docs --all-extras
+      - run: uv sync --group docs --all-packages --all-extras
       - run: uv run mkdocs build --strict
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'

@@ -6,7 +6,17 @@ requires = ["uv_build>=0.9.28,<0.10.0"]
 name = "radiologist-etl"
 version = "0.1.0"
 description = "ETL pipeline: raw chest X-rays to WebDataset-consumable JSONL manifest"
-license = { file = "../LICENSE" }
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Cédrick-Armel YEBOUET" }]
+keywords = ["chest-xray", "medical-imaging", "machine-learning", "pytorch"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.10"
 dependencies = [
     "radiologist-utils>=0.1.0",
@@ -32,12 +42,20 @@ all = [
 [project.scripts]
 radiologist-etl = "radiologist.etl.prefect_pipelines:main"
 
+[project.urls]
+Homepage = "https://github.com/CedrickArmel/radiologist"
+Repository = "https://github.com/CedrickArmel/radiologist"
+Documentation = "https://cedrickarmel.github.io/radiologist/"
+Issues = "https://github.com/CedrickArmel/radiologist/issues"
+
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
+version_provider = "uv"
+version_scheme = "pep440"
 tag_format = "${version}-radiologist-etl" # the component name can be a prefix or suffix with or without a separator
 ignored_tag_formats = ["${version}-radiologist-*"] # Avoid noise from other tags
 update_changelog_on_bump = true
+bump_message = "bump: radiologist-etl $current_version → $new_version"
 
 [tool.uv.build-backend]
 namespace = true
