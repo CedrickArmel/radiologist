@@ -30,4 +30,8 @@
 - [Review-fix reverts epic seam scope creep](feedback_review_fix_reverts_epic_seam_scope_creep.md) — when a review says an internal seam leaked into `__all__`, revert both the export and the test's expected set atomically; don't just widen the test to match the leak
 - [Docstring lint cutover scope](feedback_docstring_lint_cutover_scope.md) — a "clean" claim measured under a still-suppressed rule isn't proof the flip is clean; re-verify after; scope src-only enforcement via per-file-ignores instead of writing test docstrings
 
+- [Epic slice readonly seam reuse](feedback_epic_slice_readonly_seam_reuse.md) — verify a "already implemented, check if it's a gap" hedge by reading the file before writing extra code
+- [Third-party version string in AC](feedback_third_party_version_string_in_ac.md) — an issue's literal example of a dependency's output string can drift from the pinned lockfile version; assert against the library's own constant, not the literal
+- [Worktree venv .pth corruption risk](feedback_worktree_venv_pth_corruption_risk.md) — `uv sync/run --active` needs both `VIRTUAL_ENV` and `PATH` exported in the same Bash call or it silently rewrites the shared venv's `.pth` files
+
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
