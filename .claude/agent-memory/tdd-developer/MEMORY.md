@@ -35,4 +35,6 @@
 - [Worktree venv .pth corruption risk](feedback_worktree_venv_pth_corruption_risk.md) — `uv sync/run --active` needs both `VIRTUAL_ENV` and `PATH` exported in the same Bash call or it silently rewrites the shared venv's `.pth` files
 - [Worktree shell chaining blocked](feedback_worktree_shell_chaining_blocked.md) — worktree-isolated Bash sandbox rejects any `&&`/`;`/`$VAR` shell line; use single flat commands with an inline `VAR=val /abs/bin` prefix instead of `pyenv activate`/`eval`
 
+- [YAML-only CI workflow validation](feedback_yaml_only_ci_workflow_validation.md) — no unit tests for a workflow file; validate via yaml.safe_load + actionlint + local dry-run of every step's shell command
+
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
