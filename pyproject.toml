@@ -157,6 +157,7 @@ testpaths = [
     "radiologist-inference/radiologist_inference_tests",
     "radiologist-registry/radiologist_registry_tests",
     "radiologist-utils/radiologist_utils_tests",
+    "scripts_tests",
 ]
 addopts = [
     "--import-mode=importlib",
