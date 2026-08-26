@@ -22,7 +22,7 @@
 
 """Callback that exports the best checkpoint to ONNX and logs it to W&B."""
 
-from typing import Any, List, Tuple
+from typing import Any, Sequence
 
 import lightning as L
 
@@ -43,8 +43,8 @@ class OnnxExportCallback(L.Callback):
 
     def __init__(
         self,
-        input_shape: Tuple[int, ...],
-        classes: List[str],
+        input_shape: Sequence[int],
+        classes: Sequence[str],
         cam_target_layer: str,
         opset: int = 18,
     ) -> None:
@@ -59,8 +59,8 @@ class OnnxExportCallback(L.Callback):
             opset: ONNX opset version to export with.
         """
         super().__init__()
-        self.input_shape = input_shape
-        self.classes = classes
+        self.input_shape = tuple(input_shape)
+        self.classes = list(classes)
         self.cam_target_layer = cam_target_layer
         self.opset = opset
         self._registry = WandbRegistry()
