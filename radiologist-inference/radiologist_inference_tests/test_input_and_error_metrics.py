@@ -23,13 +23,15 @@
 """Behavioural tests for the error taxonomy metric (4) and input-image
 metrics (5, 6a, 6b).
 
-Covers ``inference_errors_total``, driven exclusively through real HTTP
-traffic against a real ``TestClient``. Assertions compare scrape deltas
-(scrape -> act -> scrape -> compare), never absolute values.
+Covers ``inference_errors_total``, ``inference_input_image_size_bytes``,
+``inference_input_image_width_pixels`` and ``inference_input_image_height_pixels``,
+driven exclusively through real HTTP traffic against a real ``TestClient``.
+Assertions compare scrape deltas (scrape -> act -> scrape -> compare), never
+absolute values.
 """
 
 import io
-from typing import Any
+from typing import Any, Tuple
 
 import numpy as np
 import pytest
@@ -70,6 +72,12 @@ def _errors(client: TestClient, route: str, error_type: str) -> float:
     )
 
 
+def _hist(client: TestClient, name: str) -> Tuple[float, float]:
+    """Return (count, sum) for an unlabelled histogram at the current scrape."""
+    body = client.get("/metrics").text
+    return _sample(body, f"{name}_count"), _sample(body, f"{name}_sum")
+
+
 @pytest.fixture()
 def classifier(tmp_path: Any) -> Classifier:
     det_path = build_det_onnx(tmp_path, filename="det.onnx")
@@ -84,7 +92,7 @@ def explainer(tmp_path: Any) -> Explainer:
 
 @pytest.fixture()
 def mcd_predictor(tmp_path: Any) -> MCDropoutPredictor:
-    mcd_path = build_mcd_onnx(tmp_path)
+    mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
     return MCDropoutPredictor.from_path(model_path=mcd_path)
 
 
@@ -149,6 +157,64 @@ class TestErrorTaxonomyOnPredict:
             )
 
 
+class TestInputImageMetricsOnPredict:
+    def test_successful_upload_records_size_width_and_height(
+        self, client: TestClient
+    ) -> None:
+        png = _make_png_bytes(width=96, height=48)
+
+        c0, s0 = _hist(client, "inference_input_image_size_bytes")
+        w0, ws0 = _hist(client, "inference_input_image_width_pixels")
+        h0, hs0 = _hist(client, "inference_input_image_height_pixels")
+
+        client.post("/predict", files={"image": ("t.png", png, "image/png")})
+
+        c1, s1 = _hist(client, "inference_input_image_size_bytes")
+        w1, ws1 = _hist(client, "inference_input_image_width_pixels")
+        h1, hs1 = _hist(client, "inference_input_image_height_pixels")
+
+        assert c1 - c0 == 1.0
+        assert s1 - s0 == pytest.approx(float(len(png)))
+        assert w1 - w0 == 1.0
+        assert ws1 - ws0 == pytest.approx(96.0)  # not 48 -- width is not transposed
+        assert h1 - h0 == 1.0
+        assert hs1 - hs0 == pytest.approx(48.0)
+
+    def test_undecodable_upload_records_no_input_observation(
+        self, client: TestClient
+    ) -> None:
+        c0, _ = _hist(client, "inference_input_image_size_bytes")
+        w0, _ = _hist(client, "inference_input_image_width_pixels")
+        h0, _ = _hist(client, "inference_input_image_height_pixels")
+        client.post(
+            "/predict", files={"image": ("bad.png", b"not an image", "image/png")}
+        )
+        c1, _ = _hist(client, "inference_input_image_size_bytes")
+        w1, _ = _hist(client, "inference_input_image_width_pixels")
+        h1, _ = _hist(client, "inference_input_image_height_pixels")
+        assert c1 == c0
+        assert w1 == w0
+        assert h1 == h0
+
+    def test_empty_upload_records_no_input_observation(
+        self, client: TestClient
+    ) -> None:
+        c0, _ = _hist(client, "inference_input_image_size_bytes")
+        client.post("/predict", files={"image": ("e.png", b"", "image/png")})
+        c1, _ = _hist(client, "inference_input_image_size_bytes")
+        assert c1 == c0
+
+    def test_missing_model_still_records_the_input(self) -> None:
+        client = TestClient(create_app(predictor=None))
+        png = _make_png_bytes(width=96, height=48)
+        c0, s0 = _hist(client, "inference_input_image_size_bytes")
+        response = client.post("/predict", files={"image": ("t.png", png, "image/png")})
+        assert response.status_code == 503
+        c1, s1 = _hist(client, "inference_input_image_size_bytes")
+        assert c1 - c0 == 1.0
+        assert s1 - s0 == pytest.approx(float(len(png)))
+
+
 class TestErrorTaxonomyOnExplain:
     @pytest.fixture()
     def client(self, explainer: Explainer) -> TestClient:
@@ -174,6 +240,34 @@ class TestErrorTaxonomyOnExplain:
         before = _errors(client, "/explain", "validation_error")
         assert client.post("/explain").status_code == 400
         assert _errors(client, "/explain", "validation_error") - before == 1.0
+
+
+class TestInputImageMetricsOnExplain:
+    @pytest.fixture()
+    def client(self, explainer: Explainer) -> TestClient:
+        return TestClient(create_app(predictor=explainer))
+
+    def test_successful_upload_records_size_width_and_height(
+        self, client: TestClient
+    ) -> None:
+        png = _make_png_bytes(width=96, height=48)
+
+        c0, s0 = _hist(client, "inference_input_image_size_bytes")
+        w0, ws0 = _hist(client, "inference_input_image_width_pixels")
+        h0, hs0 = _hist(client, "inference_input_image_height_pixels")
+
+        client.post("/explain", files={"image": ("t.png", png, "image/png")})
+
+        c1, s1 = _hist(client, "inference_input_image_size_bytes")
+        w1, ws1 = _hist(client, "inference_input_image_width_pixels")
+        h1, hs1 = _hist(client, "inference_input_image_height_pixels")
+
+        assert c1 - c0 == 1.0
+        assert s1 - s0 == pytest.approx(float(len(png)))
+        assert w1 - w0 == 1.0
+        assert ws1 - ws0 == pytest.approx(96.0)
+        assert h1 - h0 == 1.0
+        assert hs1 - hs0 == pytest.approx(48.0)
 
 
 class TestErrorTaxonomyOnUncertainty:
@@ -209,6 +303,34 @@ class TestErrorTaxonomyOnUncertainty:
             "/uncertainty", files={"image": ("t.png", _make_png_bytes(), "image/png")}
         )
         assert _errors(client, "/uncertainty", "no_model_loaded") - before == 1.0
+
+
+class TestInputImageMetricsOnUncertainty:
+    @pytest.fixture()
+    def client(self, mcd_predictor: MCDropoutPredictor) -> TestClient:
+        return TestClient(create_app(predictor=mcd_predictor))
+
+    def test_successful_upload_records_size_width_and_height(
+        self, client: TestClient
+    ) -> None:
+        png = _make_png_bytes(width=96, height=48)
+
+        c0, s0 = _hist(client, "inference_input_image_size_bytes")
+        w0, ws0 = _hist(client, "inference_input_image_width_pixels")
+        h0, hs0 = _hist(client, "inference_input_image_height_pixels")
+
+        client.post("/uncertainty", files={"image": ("t.png", png, "image/png")})
+
+        c1, s1 = _hist(client, "inference_input_image_size_bytes")
+        w1, ws1 = _hist(client, "inference_input_image_width_pixels")
+        h1, hs1 = _hist(client, "inference_input_image_height_pixels")
+
+        assert c1 - c0 == 1.0
+        assert s1 - s0 == pytest.approx(float(len(png)))
+        assert w1 - w0 == 1.0
+        assert ws1 - ws0 == pytest.approx(96.0)
+        assert h1 - h0 == 1.0
+        assert hs1 - hs0 == pytest.approx(48.0)
 
 
 class TestReadinessProbeDoesNotInflateErrorBudget:
