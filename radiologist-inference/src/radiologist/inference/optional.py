@@ -41,3 +41,8 @@ try:
     import uvicorn as _uvicorn  # type: ignore[import-untyped]
 except ImportError:
     _uvicorn = None  # type: ignore[assignment]
+
+try:
+    import prometheus_client as _prometheus_client  # type: ignore[import-untyped]
+except ImportError:
+    _prometheus_client = None  # type: ignore[assignment]

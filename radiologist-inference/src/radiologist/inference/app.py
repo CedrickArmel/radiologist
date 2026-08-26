@@ -99,7 +99,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": exc.errors()})
 
-    def _get_predictor() -> Any:
+    def _get_predictor(route: Optional[str] = None) -> Any:
         p = state_holder["predictor"]
         if p is None:
             raise HTTPException(
@@ -108,7 +108,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
             )
         return p
 
-    def _load_pil(data: bytes) -> PILImage.Image:
+    def _load_pil(data: bytes, route: Optional[str] = None) -> PILImage.Image:
         try:
             return PILImage.open(io.BytesIO(data)).convert("RGB")
         except UnidentifiedImageError as exc:
@@ -116,12 +116,12 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
                 status_code=400, detail=f"Invalid image: {exc}"
             ) from exc
 
-    async def _handle(image: Any, method_name: str) -> Any:
+    async def _handle(image: Any, method_name: str, route: str) -> Any:
         raw = await image.read()
         if not raw:
             raise HTTPException(status_code=400, detail="Empty image file.")
-        pil_img = _load_pil(raw)
-        p = _get_predictor()
+        pil_img = _load_pil(raw, route)
+        p = _get_predictor(route)
         return getattr(p, method_name)(pil_img)
 
     if wire_predict:
@@ -130,7 +130,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         async def predict(
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
-            result = await _handle(image, "predict")
+            result = await _handle(image, "predict", "/predict")
             return {
                 "probabilities": result.probabilities,
                 "predicted_class": result.predicted_class,
@@ -142,7 +142,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         async def explain(
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
-            result = await _handle(image, "explain")
+            result = await _handle(image, "explain", "/explain")
             saliency: List[List[float]] = result.saliency_map.tolist()
             return {
                 "saliency_map": saliency,
@@ -155,7 +155,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         async def uncertainty(
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
-            result = await _handle(image, "predict_with_uncertainty")
+            result = await _handle(image, "predict_with_uncertainty", "/uncertainty")
             return {
                 "mean_probabilities": result.mean_probabilities,
                 "std_per_class": result.std_per_class,
