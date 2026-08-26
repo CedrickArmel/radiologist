@@ -17,7 +17,7 @@ Installs: `numpy`, `Pillow`, `onnxruntime`.
 | Extra | Installs | Enables |
 |---|---|---|
 | `registry` | `wandb` | `BasePredictor.from_registry` |
-| `serve` | `fastapi`, `uvicorn`, `python-multipart` | `create_app`, HTTP server |
+| `serve` | `fastapi`, `uvicorn`, `python-multipart`, `prometheus-client` | `create_app`, HTTP server, `GET /metrics` |
 | `cli` | `typer` | `radiologist` CLI entry point |
 | `all` | all of the above | everything |
 
@@ -119,9 +119,60 @@ Routes:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/healthz` | Liveness check |
+| `GET` | `/readyz` | Readiness check; 503 until a predictor is loaded |
 | `POST` | `/predict` | Classify a chest X-ray image (multipart upload) |
 | `POST` | `/explain` | Return Score-CAM saliency map |
 | `POST` | `/uncertainty` | MC-Dropout uncertainty estimation |
+| `GET` | `/metrics` | Prometheus exposition of the metric catalogue below |
+
+### Metrics (`GET /metrics`, requires `serve` extra)
+
+Instrumentation is always-on whenever `prometheus-client` is importable — no
+CLI flag, no configuration. `GET /metrics` returns a
+`text/plain; version=0.0.4; charset=utf-8` Prometheus exposition payload of
+this application's own `CollectorRegistry`. When `prometheus-client` is not
+installed, `GET /metrics` is not wired at all and the route 404s cleanly;
+every `Metrics` recording method silently no-ops instead of raising, so
+request handling is unaffected either way.
+
+The registry is **per-application and per-process**: each call to
+`create_app` builds a fresh `CollectorRegistry`, so only these ten families
+are exposed — there are no `process_*` / `python_gc_*` collectors. The
+deployment model is assumed **single-worker**;
+`prometheus_client.multiprocess` (multi-process/multi-worker aggregation) is
+not supported. Scrape traffic against `/metrics` itself is excluded from all
+counters, histograms and gauges below — it is not counted, timed, or tracked
+in flight.
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `inference_requests_total` | Counter | `route`, `status` | Total inference API requests |
+| `inference_request_duration_seconds` | Histogram | `route` | Wall-clock request duration, in seconds |
+| `inference_requests_in_progress` | Gauge | `route` | Requests currently being served |
+| `inference_errors_total` | Counter | `route`, `error_type` | Request-level errors |
+| `inference_input_image_size_bytes` | Histogram | — | Uploaded input image size, in bytes |
+| `inference_input_image_width_pixels` | Histogram | — | Pre-resize input image width, in pixels |
+| `inference_input_image_height_pixels` | Histogram | — | Pre-resize input image height, in pixels |
+| `inference_predicted_class_total` | Counter | `class` | Predictions per predicted class |
+| `inference_confidence` | Histogram | — | Maximum predicted class probability |
+| `inference_predictive_entropy` | Histogram | — | Predictive entropy of the mean MC-Dropout prediction |
+| `inference_uncertainty_std_max` | Histogram | — | Maximum per-class std across MC-Dropout passes |
+
+`route` and `error_type` are closed, bounded-cardinality label sets — never
+caller-controlled text:
+
+- `route` is one of `/predict`, `/explain`, `/uncertainty`, `/healthz`,
+  `/readyz`, `/metrics`, or the fallback value `unmatched` for any other
+  path.
+- `error_type` is one of `invalid_image`, `empty_file`, `no_model_loaded`,
+  `validation_error`.
+
+Two scope reconciliations, recorded here so they are not re-litigated:
+
+- `/explain` does not observe `inference_confidence` — `Explanation` carries
+  no probability vector to derive a confidence value from.
+- `/uncertainty` does not increment `inference_predicted_class_total` —
+  `UncertaintyResult` has no `predicted_class` field.
 
 ### CLI (requires `cli` extra)
 
