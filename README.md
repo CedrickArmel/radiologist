@@ -1,5 +1,10 @@
 # Radiologist
 
+[![ci](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml/badge.svg)](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/CedrickArmel/radiologist/branch/main/graph/badge.svg)](https://codecov.io/gh/CedrickArmel/radiologist)
+[![PyPI](https://img.shields.io/pypi/v/radiologist)](https://pypi.org/project/radiologist/)
+![tested on](https://img.shields.io/badge/tested%20on-ubuntu--latest%20%7C%20python%203.10-blue)
+
 A fully reproducible machine-learning pipeline for chest X-ray classification. Takes a raw archive of labelled radiographs and produces a production-ready classifier distinguishing healthy lungs from viral pneumonia / COVID-19 and other opacities — complete with visual explanations and uncertainty estimates.
 
 ## Business value

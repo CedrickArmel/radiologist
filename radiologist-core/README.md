@@ -1,5 +1,10 @@
 # radiologist-core
 
+[![ci](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml/badge.svg)](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/CedrickArmel/radiologist/branch/main/graph/badge.svg)](https://codecov.io/gh/CedrickArmel/radiologist)
+[![PyPI](https://img.shields.io/pypi/v/radiologist-core)](https://pypi.org/project/radiologist-core/)
+![tested on](https://img.shields.io/badge/tested%20on-ubuntu--latest%20%7C%20python%203.10-blue)
+
 The ML engine. Provides the Lightning training loop, streaming data module, focal loss, GradCAM attribution, and W&B model registry integration for chest X-ray classification.
 
 ## Business context
