@@ -1,0 +1,206 @@
+name: publish
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Distribution to publish
+        required: true
+        type: choice
+        options:
+          - radiologist
+          - radiologist-utils
+          - radiologist-etl
+          - radiologist-core
+          - radiologist-inference
+          - radiologist-registry
+      version:
+        description: Version to publish (X.Y.Z) — must already be on main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.event.pull_request.head.ref || format('{0}-{1}', inputs.package, inputs.version) }}
+  cancel-in-progress: false # never abort a half-finished upload
+
+env:
+  UV_PYTHON: "3.10" # .python-version holds a pyenv venv name, not a version
+
+jobs:
+  resolve:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'release/'))
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.resolve.outputs.package }}
+      version: ${{ steps.resolve.outputs.version }}
+      environment: ${{ steps.resolve.outputs.environment }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      # Checked out explicitly at the resolved sha up front — the default
+      # `pull_request: closed` checkout ref (the PR's merge ref) no longer
+      # exists once the pull request is merged, and `merge_commit_sha` /
+      # `github.sha` are already known from the event context without
+      # needing a prior job.
+      - name: Checkout at the resolved commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install commitizen (only needed for its tomli dependency)
+        run: uv sync --group release
+
+      - name: Resolve package, version, environment and sha
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          # Untrusted input (a fork could open a same-named branch) — passed
+          # through an env var rather than interpolated into the script, per
+          # GitHub's script-injection hardening guidance.
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          DISPATCH_PACKAGE: ${{ inputs.package }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            PACKAGE="$DISPATCH_PACKAGE"
+            VERSION="$DISPATCH_VERSION"
+          else
+            PARSED="$(uv run python scripts/release_bump.py parse-branch "$HEAD_REF")"
+            PACKAGE="$(echo "$PARSED" | jq -r .package)"
+            VERSION="$(echo "$PARSED" | jq -r .version)"
+          fi
+
+          # `parse-branch` already restricts PACKAGE to the six known
+          # distributions and VERSION to X.Y.Z on the pull_request path;
+          # workflow_dispatch's `version` input is free text, so validate it
+          # explicitly here too.
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version '$VERSION' is not of the form X.Y.Z"
+            exit 1
+          fi
+
+          # The repository is already checked out at $SHA (see the checkout
+          # step above), so reading the manifest from the working tree reads
+          # it exactly as it stood at the merged commit.
+          MANIFEST_VERSION="$(uv run python scripts/release_bump.py manifest-version \
+            --repo-root . --package "$PACKAGE")"
+
+          if [ "$MANIFEST_VERSION" != "$VERSION" ]; then
+            echo "::error::Release states version $VERSION but $PACKAGE's manifest at $SHA is $MANIFEST_VERSION"
+            exit 1
+          fi
+
+          ENVIRONMENT="$(uv run python scripts/release_bump.py environment-name "$PACKAGE")"
+
+          {
+            echo "package=$PACKAGE"
+            echo "version=$VERSION"
+            echo "environment=$ENVIRONMENT"
+            echo "sha=$SHA"
+          } >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: resolve
+    runs-on: ubuntu-latest
+    env:
+      VIRTUAL_ENV: ${{ github.workspace }}/.venv
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --active --all-groups --all-packages --all-extras
+      - run: make test
+
+  build:
+    needs: [resolve, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv build --package ${{ needs.resolve.outputs.package }} --out-dir dist
+      - run: uv run --with twine twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
+          path: dist/
+
+  publish:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+      url: https://pypi.org/project/${{ needs.resolve.outputs.package }}/
+    permissions:
+      id-token: write # the OIDC identity PyPI trusts — this job only
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
+          path: dist/
+      - uses: astral-sh/setup-uv@v3
+      - name: Publish to PyPI over OIDC trusted publishing
+        # `always` (rather than the default `automatic`) fails loudly if the
+        # OIDC token cannot be minted, instead of silently falling back to a
+        # stored credential lookup.
+        run: uv publish --trusted-publishing always dist/*
+
+  tag:
+    needs: [resolve, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag ref — this job only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: astral-sh/setup-uv@v3
+      - name: Install commitizen (only needed for its tomli dependency)
+        run: uv sync --group release
+      - name: Compute the release tag
+        id: tag
+        run: |
+          set -euo pipefail
+          NAME="$(uv run python scripts/release_bump.py release-tag \
+            '${{ needs.resolve.outputs.package }}' '${{ needs.resolve.outputs.version }}')"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+      - name: Create the release tag ref (idempotent — a retry after success is a no-op)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.name }}"
+          SHA="${{ needs.resolve.outputs.sha }}"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists — nothing to do."
+            exit 0
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${TAG}" \
+            -f sha="${SHA}"

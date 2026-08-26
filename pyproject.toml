@@ -22,7 +22,7 @@ docs = [
     "mkdocstrings[python]>=0.26",
     "mkdocs-include-markdown-plugin>=6.2",
 ]
-release = ["commitizen>=4.16.4"]
+release = ["commitizen>=4.16.4", "tomli>=2.0.1; python_version < '3.11'"]
 [project]
 name = "radiologist"
 version = "0.1.0"

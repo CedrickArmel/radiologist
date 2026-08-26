@@ -41,9 +41,15 @@ boundary this module does not own.
 import argparse
 import base64
 import json
+import re
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
+
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:  # pragma: no cover - this repo pins Python 3.10
+    import tomli as tomllib  # type: ignore[import-untyped,no-redef]
 
 PACKAGES = (
     "radiologist",
@@ -78,6 +84,75 @@ def release_branch_name(package: str, version: str) -> str:
     distribution and version a merged release pull request published.
     """
     return f"release/{package}-v{version}"
+
+
+def parse_release_branch_name(branch: str) -> Tuple[str, str]:
+    """Parse a ``release/<package>-v<version>`` head branch name.
+
+    Inverts :func:`release_branch_name` for ``publish.yml``'s ``resolve``
+    job, which must recover the distribution and version from the merged
+    pull request's head branch. Splits on the *last* ``-v`` so hyphenated
+    distribution names (e.g. ``radiologist-core``) parse correctly.
+
+    Raises ``ValueError`` if the branch lacks the ``release/`` prefix, does
+    not contain a ``-v`` marker, names a distribution outside the six known
+    ones, or carries a version that is not ``X.Y.Z``.
+    """
+    prefix = "release/"
+    if not branch.startswith(prefix):
+        raise ValueError(f"Not a release branch: {branch!r}")
+    rest = branch[len(prefix) :]
+    package, marker, version = rest.rpartition("-v")
+    if not marker:
+        raise ValueError(f"Malformed release branch name: {branch!r}")
+    if package not in PACKAGES:
+        raise ValueError(f"Unknown distribution {package!r} in branch {branch!r}")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError(f"Invalid version {version!r} in branch {branch!r}")
+    return package, version
+
+
+def environment_name(package: str) -> str:
+    """Return the GitHub Environment name holding ``package``'s OIDC identity.
+
+    Every distribution publishes through the same workflow file, so this
+    name — not the workflow — is the security boundary PyPI's trusted
+    publisher configuration relies on to tell distributions apart.
+    """
+    if package not in PACKAGES:
+        raise ValueError(
+            f"Unknown distribution {package!r}; expected one of {PACKAGES}"
+        )
+    return f"pypi-{package}"
+
+
+def release_tag(package: str, version: str) -> str:
+    """Return the release tag for ``package``, matching its ``tag_format``.
+
+    The root meta-package's ``tag_format`` is the bare version. Every
+    workspace member's ``tag_format`` suffixes the version with its own
+    distribution name to keep six independent tag namespaces on one repo.
+    """
+    if package not in PACKAGES:
+        raise ValueError(
+            f"Unknown distribution {package!r}; expected one of {PACKAGES}"
+        )
+    if package == _ROOT_PACKAGE:
+        return version
+    return f"{version}-{package}"
+
+
+def manifest_version(repo_root: Path, package: str) -> str:
+    """Read ``[project].version`` from ``package``'s manifest under ``repo_root``.
+
+    Used by ``publish.yml``'s ``resolve`` job to cross-check that a release
+    pull request's stated version actually matches what is on disk at the
+    merged commit, before anything is built or uploaded.
+    """
+    pyproject_path = Path(repo_root) / package_dir(package) / "pyproject.toml"
+    with pyproject_path.open("rb") as handle:
+        data = tomllib.load(handle)
+    return str(data["project"]["version"])
 
 
 def changed_relative_paths(package: str) -> List[str]:
@@ -172,6 +247,20 @@ def _main(argv: List[str]) -> int:
     mutation_parser.add_argument("--expected-head-oid", required=True)
     mutation_parser.add_argument("--headline", required=True)
 
+    parse_branch_parser = subparsers.add_parser("parse-branch")
+    parse_branch_parser.add_argument("branch")
+
+    environment_parser = subparsers.add_parser("environment-name")
+    environment_parser.add_argument("package")
+
+    tag_parser = subparsers.add_parser("release-tag")
+    tag_parser.add_argument("package")
+    tag_parser.add_argument("version")
+
+    manifest_parser = subparsers.add_parser("manifest-version")
+    manifest_parser.add_argument("--repo-root", required=True)
+    manifest_parser.add_argument("--package", required=True)
+
     args = parser.parse_args(argv)
 
     if args.command == "package-dir":
@@ -190,6 +279,15 @@ def _main(argv: List[str]) -> int:
             additions=additions,
         )
         print(json.dumps(variables))
+    elif args.command == "parse-branch":
+        package, version = parse_release_branch_name(args.branch)
+        print(json.dumps({"package": package, "version": version}))
+    elif args.command == "environment-name":
+        print(environment_name(args.package))
+    elif args.command == "release-tag":
+        print(release_tag(args.package, args.version))
+    elif args.command == "manifest-version":
+        print(manifest_version(Path(args.repo_root), args.package))
     return 0
 
 

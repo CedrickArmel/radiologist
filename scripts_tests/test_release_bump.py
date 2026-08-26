@@ -156,6 +156,128 @@ class TestCommitHeadline:
         )
 
 
+class TestParseReleaseBranchName:
+    """`parse_release_branch_name` inverts `release_branch_name` for publish.yml."""
+
+    def test_parses_member_distribution_branch_name(self):
+        from release_bump import parse_release_branch_name
+
+        assert parse_release_branch_name("release/radiologist-core-v0.2.0") == (
+            "radiologist-core",
+            "0.2.0",
+        )
+
+    def test_parses_root_distribution_branch_name(self):
+        from release_bump import parse_release_branch_name
+
+        assert parse_release_branch_name("release/radiologist-v0.3.1") == (
+            "radiologist",
+            "0.3.1",
+        )
+
+    def test_splits_on_the_last_dash_v_for_hyphenated_names(self):
+        from release_bump import parse_release_branch_name
+
+        assert parse_release_branch_name("release/radiologist-inference-v1.10.2") == (
+            "radiologist-inference",
+            "1.10.2",
+        )
+
+    def test_missing_release_prefix_raises_value_error(self):
+        from release_bump import parse_release_branch_name
+
+        with pytest.raises(ValueError):
+            parse_release_branch_name("radiologist-core-v0.2.0")
+
+    def test_unknown_distribution_raises_value_error(self):
+        from release_bump import parse_release_branch_name
+
+        with pytest.raises(ValueError):
+            parse_release_branch_name("release/not-a-real-package-v0.2.0")
+
+    def test_malformed_version_raises_value_error(self):
+        from release_bump import parse_release_branch_name
+
+        with pytest.raises(ValueError):
+            parse_release_branch_name("release/radiologist-core-v0.2")
+
+    def test_branch_without_v_marker_raises_value_error(self):
+        from release_bump import parse_release_branch_name
+
+        with pytest.raises(ValueError):
+            parse_release_branch_name("release/radiologist-core")
+
+
+class TestEnvironmentName:
+    """`environment_name` maps a distribution to its GitHub Environment."""
+
+    def test_member_distribution_environment_name(self):
+        from release_bump import environment_name
+
+        assert environment_name("radiologist-core") == "pypi-radiologist-core"
+
+    def test_root_distribution_environment_name(self):
+        from release_bump import environment_name
+
+        assert environment_name("radiologist") == "pypi-radiologist"
+
+    def test_unknown_distribution_raises_value_error(self):
+        from release_bump import environment_name
+
+        with pytest.raises(ValueError):
+            environment_name("not-a-real-package")
+
+
+class TestReleaseTag:
+    """`release_tag` matches each distribution's configured commitizen tag_format."""
+
+    def test_root_distribution_tag_has_no_suffix(self):
+        from release_bump import release_tag
+
+        assert release_tag("radiologist", "0.3.1") == "0.3.1"
+
+    def test_member_distribution_tag_is_suffixed_with_its_name(self):
+        from release_bump import release_tag
+
+        assert release_tag("radiologist-core", "0.2.0") == "0.2.0-radiologist-core"
+
+    def test_unknown_distribution_raises_value_error(self):
+        from release_bump import release_tag
+
+        with pytest.raises(ValueError):
+            release_tag("not-a-real-package", "0.2.0")
+
+
+class TestManifestVersion:
+    """`manifest_version` reads `[project].version` at a given checkout."""
+
+    def test_reads_member_distribution_version(self, tmp_path):
+        from release_bump import manifest_version
+
+        pkg_dir = tmp_path / "radiologist-core"
+        pkg_dir.mkdir()
+        (pkg_dir / "pyproject.toml").write_text(
+            '[project]\nname = "radiologist-core"\nversion = "0.2.0"\n'
+        )
+
+        assert manifest_version(tmp_path, "radiologist-core") == "0.2.0"
+
+    def test_reads_root_distribution_version_without_double_prefixing(self, tmp_path):
+        from release_bump import manifest_version
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "radiologist"\nversion = "0.3.1"\n'
+        )
+
+        assert manifest_version(tmp_path, "radiologist") == "0.3.1"
+
+    def test_missing_manifest_raises_file_not_found_error(self, tmp_path):
+        from release_bump import manifest_version
+
+        with pytest.raises(FileNotFoundError):
+            manifest_version(tmp_path, "radiologist-core")
+
+
 class TestBuildCommitMutationVariables:
     """`build_commit_mutation_variables` assembles the createCommitOnBranch input."""
 

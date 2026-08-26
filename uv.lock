@@ -5130,6 +5130,7 @@ lint = [
 ]
 release = [
     { name = "commitizen" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 test = [
     { name = "pytest" },
@@ -5169,7 +5170,10 @@ lint = [
     { name = "isort", specifier = ">=7.0.0" },
     { name = "pre-commit", specifier = ">=4.5.1" },
 ]
-release = [{ name = "commitizen", specifier = ">=4.16.4" }]
+release = [
+    { name = "commitizen", specifier = ">=4.16.4" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.1" },
+]
 test = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
