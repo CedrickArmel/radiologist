@@ -172,6 +172,8 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
             result = await _handle(image, "predict", "/predict")
+            state_holder["metrics"].observe_predicted_class(result.predicted_class)
+            state_holder["metrics"].observe_confidence(result.probabilities)
             return {
                 "probabilities": result.probabilities,
                 "predicted_class": result.predicted_class,
@@ -184,6 +186,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
             result = await _handle(image, "explain", "/explain")
+            state_holder["metrics"].observe_predicted_class(result.predicted_class)
             saliency: List[List[float]] = result.saliency_map.tolist()
             return {
                 "saliency_map": saliency,
@@ -197,6 +200,9 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
             image: fastapi.UploadFile = fastapi.File(...),
         ) -> Dict[str, Any]:
             result = await _handle(image, "predict_with_uncertainty", "/uncertainty")
+            state_holder["metrics"].observe_uncertainty(
+                result.predictive_entropy, result.std_per_class
+            )
             return {
                 "mean_probabilities": result.mean_probabilities,
                 "std_per_class": result.std_per_class,
