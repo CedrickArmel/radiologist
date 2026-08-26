@@ -158,7 +158,81 @@ class Metrics:
         Args:
             client: The imported ``prometheus_client`` module, or ``None``.
         """
-        raise NotImplementedError
+        if client is None:
+            self._enabled = False
+            return
+        self._enabled = True
+
+        self._registry = client.CollectorRegistry()
+
+        self._requests_total = client.Counter(
+            "inference_requests_total",
+            "Total number of inference API requests.",
+            ("route", "status"),
+            registry=self._registry,
+        )
+        self._request_duration_seconds = client.Histogram(
+            "inference_request_duration_seconds",
+            "Wall-clock duration of inference API requests, in seconds.",
+            ("route",),
+            buckets=DURATION_BUCKETS,
+            registry=self._registry,
+        )
+        self._requests_in_progress = client.Gauge(
+            "inference_requests_in_progress",
+            "Number of inference API requests currently being served.",
+            ("route",),
+            registry=self._registry,
+        )
+        self._errors_total = client.Counter(
+            "inference_errors_total",
+            "Total number of request-level inference errors.",
+            ("route", "error_type"),
+            registry=self._registry,
+        )
+        self._input_image_size_bytes = client.Histogram(
+            "inference_input_image_size_bytes",
+            "Size of uploaded input images, in bytes.",
+            buckets=IMAGE_SIZE_BUCKETS,
+            registry=self._registry,
+        )
+        self._input_image_width_pixels = client.Histogram(
+            "inference_input_image_width_pixels",
+            "Pre-resize width of uploaded input images, in pixels.",
+            buckets=IMAGE_DIM_BUCKETS,
+            registry=self._registry,
+        )
+        self._input_image_height_pixels = client.Histogram(
+            "inference_input_image_height_pixels",
+            "Pre-resize height of uploaded input images, in pixels.",
+            buckets=IMAGE_DIM_BUCKETS,
+            registry=self._registry,
+        )
+        self._predicted_class_total = client.Counter(
+            "inference_predicted_class_total",
+            "Total number of predictions per predicted class.",
+            ("class",),
+            registry=self._registry,
+        )
+        self._confidence = client.Histogram(
+            "inference_confidence",
+            "Maximum predicted class probability of a prediction.",
+            buckets=CONFIDENCE_BUCKETS,
+            registry=self._registry,
+        )
+        self._predictive_entropy = client.Histogram(
+            "inference_predictive_entropy",
+            "Predictive entropy of the mean MC-Dropout prediction.",
+            buckets=ENTROPY_BUCKETS,
+            registry=self._registry,
+        )
+        self._uncertainty_std_max = client.Histogram(
+            "inference_uncertainty_std_max",
+            "Maximum per-class standard deviation across MC-Dropout passes.",
+            buckets=STD_BUCKETS,
+            registry=self._registry,
+        )
+        self._client = client
 
     @property
     def enabled(self) -> bool:
@@ -170,7 +244,7 @@ class Metrics:
             whether to register the HTTP middleware and the ``GET /metrics``
             route.
         """
-        raise NotImplementedError
+        return self._enabled
 
     def route_label(self, path: str) -> str:
         """Normalize a request path to a bounded-cardinality label.
@@ -184,7 +258,7 @@ class Metrics:
             label cardinality stays bounded. Pure: returns a value even when
             disabled.
         """
-        raise NotImplementedError
+        return path if path in ROUTE_LABELS else UNMATCHED_ROUTE
 
     def track_request_start(self, route: str) -> None:
         """Record that a request has started.
@@ -195,7 +269,9 @@ class Metrics:
         Args:
             route: The bounded route label, from :meth:`route_label`.
         """
-        raise NotImplementedError
+        if not self._enabled:
+            return
+        self._requests_in_progress.labels(route=route).inc()
 
     def track_request_end(
         self, route: str, status: int, duration_seconds: float
@@ -214,7 +290,11 @@ class Metrics:
             status: The HTTP status code of the completed response.
             duration_seconds: Wall-clock duration of the request.
         """
-        raise NotImplementedError
+        if not self._enabled:
+            return
+        self._requests_in_progress.labels(route=route).dec()
+        self._requests_total.labels(route=route, status=str(status)).inc()
+        self._request_duration_seconds.labels(route=route).observe(duration_seconds)
 
     def observe_error(self, route: str, error_type: str) -> None:
         """Record a request-level error.
@@ -228,7 +308,9 @@ class Metrics:
             route: The bounded route label, from :meth:`route_label`.
             error_type: One of the closed ``ERROR_TYPES`` values.
         """
-        raise NotImplementedError
+        if not self._enabled or error_type not in ERROR_TYPES:
+            return
+        self._errors_total.labels(route=route, error_type=error_type).inc()
 
     def observe_input_image(self, size_bytes: int, width: int, height: int) -> None:
         """Record size and dimensions of an uploaded input image.
@@ -244,7 +326,11 @@ class Metrics:
             width: Pre-resize width, in pixels.
             height: Pre-resize height, in pixels.
         """
-        raise NotImplementedError
+        if not self._enabled:
+            return
+        self._input_image_size_bytes.observe(size_bytes)
+        self._input_image_width_pixels.observe(width)
+        self._input_image_height_pixels.observe(height)
 
     def observe_predicted_class(self, predicted_class: str) -> None:
         """Record the predicted class of a request.
@@ -255,7 +341,9 @@ class Metrics:
         Args:
             predicted_class: The predicted class label.
         """
-        raise NotImplementedError
+        if not self._enabled:
+            return
+        self._predicted_class_total.labels(**{"class": predicted_class}).inc()
 
     def observe_confidence(self, probabilities: Dict[str, float]) -> None:
         """Record the confidence of a prediction.
@@ -267,7 +355,9 @@ class Metrics:
         Args:
             probabilities: Per-class predicted probabilities.
         """
-        raise NotImplementedError
+        if not self._enabled or not probabilities:
+            return
+        self._confidence.observe(max(probabilities.values()))
 
     def observe_uncertainty(
         self, predictive_entropy: float, std_per_class: Dict[str, float]
@@ -285,7 +375,11 @@ class Metrics:
             predictive_entropy: Predictive entropy of the mean prediction.
             std_per_class: Per-class standard deviation across MC passes.
         """
-        raise NotImplementedError
+        if not self._enabled:
+            return
+        self._predictive_entropy.observe(predictive_entropy)
+        if std_per_class:
+            self._uncertainty_std_max.observe(max(std_per_class.values()))
 
     def render_latest(self) -> Tuple[bytes, str]:
         """Render the current scrape payload for this instance's registry.
@@ -295,7 +389,12 @@ class Metrics:
             ``(client.generate_latest(registry), client.CONTENT_TYPE_LATEST)``.
             Returns ``(b"", _PLAIN_TEXT)`` when disabled.
         """
-        raise NotImplementedError
+        if not self._enabled:
+            return b"", _PLAIN_TEXT
+        return (
+            self._client.generate_latest(self._registry),
+            self._client.CONTENT_TYPE_LATEST,
+        )
 
 
 def build_metrics() -> Metrics:
@@ -310,4 +409,4 @@ def build_metrics() -> Metrics:
         ``prometheus_client`` is importable, otherwise a no-op
         :class:`Metrics`.
     """
-    raise NotImplementedError
+    return Metrics(_prometheus_client)

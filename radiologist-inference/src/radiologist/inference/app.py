@@ -23,11 +23,13 @@
 """FastAPI application factory for the radiologist inference serving layer."""
 
 import io
+import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 
+from radiologist.inference.metrics import build_metrics
 from radiologist.inference.optional import _fastapi
 
 if TYPE_CHECKING:
@@ -78,14 +80,20 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         RequestValidationError,  # type: ignore[import-untyped]
     )
     from starlette.requests import Request  # type: ignore[import-untyped]
-    from starlette.responses import JSONResponse  # type: ignore[import-untyped]
+    from starlette.responses import (  # type: ignore[import-untyped]
+        JSONResponse,
+        Response,
+    )
 
     from radiologist.inference.classifier import Classifier
     from radiologist.inference.explainer import Explainer
     from radiologist.inference.mc_dropout import MCDropoutPredictor
 
     app = fastapi_mod.FastAPI(title="Radiologist Inference API")
-    state_holder: Dict[str, Any] = {"predictor": predictor}
+    state_holder: Dict[str, Any] = {
+        "predictor": predictor,
+        "metrics": build_metrics(),
+    }
 
     HTTPException = fastapi_mod.HTTPException
 
@@ -98,6 +106,29 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": exc.errors()})
+
+    if state_holder["metrics"].enabled:
+
+        @app.middleware("http")
+        async def _metrics_middleware(request: Request, call_next: Any) -> Any:
+            metrics = state_holder["metrics"]
+            route = metrics.route_label(request.url.path)
+            if route == "/metrics":
+                return await call_next(request)
+            metrics.track_request_start(route)
+            t0 = time.perf_counter()
+            status = 500
+            try:
+                response = await call_next(request)
+                status = response.status_code
+                return response
+            finally:
+                metrics.track_request_end(route, status, time.perf_counter() - t0)
+
+        @app.get("/metrics")
+        def metrics_endpoint() -> Any:
+            payload, content_type = state_holder["metrics"].render_latest()
+            return Response(content=payload, media_type=content_type)
 
     def _get_predictor(route: Optional[str] = None) -> Any:
         p = state_holder["predictor"]
