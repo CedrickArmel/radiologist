@@ -253,8 +253,8 @@ def _parse_model_metadata(
     return ModelMetadata(
         classes=json.loads(metadata["classes"]),
         input_shape=input_shape,
-        cam_target_layer=metadata["cam_target_layer"],
-        output_names=json.loads(metadata["output_names"]),
+        cam_target_layer=metadata.get("cam_target_layer", "null"),
+        output_names=json.loads(metadata.get("output_names", "[null]")),
     )
 
 
