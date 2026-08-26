@@ -260,7 +260,7 @@ class Metrics:
         """
         return path if path in ROUTE_LABELS else UNMATCHED_ROUTE
 
-    def track_request_start(self, route: str) -> None:
+    def observe_request_start(self, route: str) -> None:
         """Record that a request has started.
 
         Increments ``inference_requests_in_progress{route}``. No-op when
@@ -273,7 +273,7 @@ class Metrics:
             return
         self._requests_in_progress.labels(route=route).inc()
 
-    def track_request_end(
+    def observe_request_end(
         self, route: str, status: int, duration_seconds: float
     ) -> None:
         """Record that a request has finished.

@@ -117,7 +117,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
             route = metrics.route_label(request.url.path)
             if route == "/metrics":
                 return await call_next(request)
-            metrics.track_request_start(route)
+            metrics.observe_request_start(route)
             t0 = time.perf_counter()
             status = 500
             try:
@@ -125,7 +125,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
                 status = response.status_code
                 return response
             finally:
-                metrics.track_request_end(route, status, time.perf_counter() - t0)
+                metrics.observe_request_end(route, status, time.perf_counter() - t0)
 
         @app.get("/metrics")
         def metrics_endpoint() -> Any:

@@ -22,24 +22,13 @@
 
 """Behavioural tests for the isinstance-driven create_app() factory."""
 
-import io
 from typing import Any
 
-import numpy as np
 import pytest
-from _helpers import build_det_onnx, build_mcd_onnx
+from _helpers import _make_png_bytes, build_det_onnx, build_mcd_onnx
 from fastapi.testclient import TestClient
-from PIL import Image as PILImage
 
 from radiologist.inference import Classifier, Explainer, MCDropoutPredictor, create_app
-
-
-def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
-    arr = np.zeros((height, width, 3), dtype=np.uint8)
-    img = PILImage.fromarray(arr, mode="RGB")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
 
 
 @pytest.fixture()
