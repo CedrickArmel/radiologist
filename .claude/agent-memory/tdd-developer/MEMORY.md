@@ -33,5 +33,6 @@
 - [Epic slice readonly seam reuse](feedback_epic_slice_readonly_seam_reuse.md) — verify a "already implemented, check if it's a gap" hedge by reading the file before writing extra code
 - [Third-party version string in AC](feedback_third_party_version_string_in_ac.md) — an issue's literal example of a dependency's output string can drift from the pinned lockfile version; assert against the library's own constant, not the literal
 - [Worktree venv .pth corruption risk](feedback_worktree_venv_pth_corruption_risk.md) — `uv sync/run --active` needs both `VIRTUAL_ENV` and `PATH` exported in the same Bash call or it silently rewrites the shared venv's `.pth` files
+- [Worktree shell chaining blocked](feedback_worktree_shell_chaining_blocked.md) — worktree-isolated Bash sandbox rejects any `&&`/`;`/`$VAR` shell line; use single flat commands with an inline `VAR=val /abs/bin` prefix instead of `pyenv activate`/`eval`
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
