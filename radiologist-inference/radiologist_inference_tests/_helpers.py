@@ -20,13 +20,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import io
 import json
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 import onnx
 import onnx.helper as oh
 import onnx.numpy_helper as onh
+from fastapi.testclient import TestClient
+from PIL import Image as PILImage
 
 CLASSES = ["NORMAL", "ABNORMAL"]
 INPUT_SHAPE = [1, 3, 224, 224]
@@ -121,6 +124,33 @@ def build_det_onnx(
     path = str(tmp_path / filename)
     onnx.save(model, path)
     return path
+
+
+def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
+    arr = np.zeros((height, width, 3), dtype=np.uint8)
+    img = PILImage.fromarray(arr, mode="RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _sample(body: str, name: str, **labels: str) -> float:
+    """Value of one sample line in a Prometheus exposition body, or 0.0."""
+    if labels:
+        rendered = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
+        prefix = f"{name}{{{rendered}}} "
+    else:
+        prefix = f"{name} "
+    for line in body.splitlines():
+        if line.startswith(prefix):
+            return float(line[len(prefix) :])
+    return 0.0
+
+
+def _hist(client: TestClient, name: str) -> Tuple[float, float]:
+    """Return (count, sum) for an unlabelled histogram at the current scrape."""
+    body = client.get("/metrics").text
+    return _sample(body, f"{name}_count"), _sample(body, f"{name}_sum")
 
 
 def build_mcd_onnx(tmp_path, filename: str = "model_mcd.onnx") -> str:

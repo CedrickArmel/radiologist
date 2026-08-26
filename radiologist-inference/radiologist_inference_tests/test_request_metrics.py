@@ -28,37 +28,13 @@ traffic against a real ``TestClient``. Assertions compare scrape deltas
 (scrape -> act -> scrape -> compare), never absolute values.
 """
 
-import io
 from typing import Any
 
-import numpy as np
 import pytest
-from _helpers import build_det_onnx
+from _helpers import _make_png_bytes, _sample, build_det_onnx
 from fastapi.testclient import TestClient
-from PIL import Image as PILImage
 
 from radiologist.inference import Classifier, create_app
-
-
-def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
-    arr = np.zeros((height, width, 3), dtype=np.uint8)
-    img = PILImage.fromarray(arr, mode="RGB")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
-
-
-def _sample(body: str, name: str, **labels: str) -> float:
-    """Value of one sample line in a Prometheus exposition body, or 0.0."""
-    if labels:
-        rendered = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
-        prefix = f"{name}{{{rendered}}} "
-    else:
-        prefix = f"{name} "
-    for line in body.splitlines():
-        if line.startswith(prefix):
-            return float(line[len(prefix) :])
-    return 0.0
 
 
 @pytest.fixture()

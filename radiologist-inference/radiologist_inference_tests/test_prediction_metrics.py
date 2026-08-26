@@ -31,42 +31,13 @@ request rather than hard-coded, since the tiny ONNX fixtures (and MC-Dropout
 in particular) do not produce deterministic outputs.
 """
 
-import io
 from typing import Any
 
-import numpy as np
 import pytest
-from _helpers import build_det_onnx, build_mcd_onnx
+from _helpers import _hist, _make_png_bytes, _sample, build_det_onnx, build_mcd_onnx
 from fastapi.testclient import TestClient
-from PIL import Image as PILImage
 
 from radiologist.inference import Classifier, Explainer, MCDropoutPredictor, create_app
-
-
-def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
-    arr = np.zeros((height, width, 3), dtype=np.uint8)
-    img = PILImage.fromarray(arr, mode="RGB")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
-
-
-def _sample(body: str, name: str, **labels: str) -> float:
-    """Value of one sample line in a Prometheus exposition body, or 0.0."""
-    if labels:
-        rendered = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
-        prefix = f"{name}{{{rendered}}} "
-    else:
-        prefix = f"{name} "
-    for line in body.splitlines():
-        if line.startswith(prefix):
-            return float(line[len(prefix) :])
-    return 0.0
-
-
-def _hist(client: TestClient, name: str) -> Any:
-    body = client.get("/metrics").text
-    return _sample(body, f"{name}_count"), _sample(body, f"{name}_sum")
 
 
 @pytest.fixture()
