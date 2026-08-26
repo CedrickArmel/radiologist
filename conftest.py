@@ -34,3 +34,5 @@ for _pkg in (
     "radiologist-registry",
 ):
     sys.path.insert(0, str(_ROOT / _pkg / "src"))
+
+sys.path.insert(0, str(_ROOT / "scripts"))

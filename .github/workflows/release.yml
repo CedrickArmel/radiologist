@@ -1,0 +1,181 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Distribution to bump
+        required: true
+        type: choice
+        options:
+          - radiologist
+          - radiologist-utils
+          - radiologist-etl
+          - radiologist-core
+          - radiologist-inference
+          - radiologist-registry
+      increment:
+        description: Force an increment (leave as `auto` to let commitizen decide)
+        required: false
+        type: choice
+        default: auto
+        options: [auto, PATCH, MINOR, MAJOR]
+
+permissions:
+  contents: write # create the release/* branch ref and the signed commit on it
+  pull-requests: write # open the pull request
+
+concurrency:
+  group: release-${{ inputs.package }}
+  cancel-in-progress: false
+
+env:
+  UV_PYTHON: "3.10" # .python-version holds a pyenv venv name, not a version
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # cz needs tags to compute the increment
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install commitizen
+        run: uv sync --group release # commitizen only, no torch here
+
+      - name: Resolve package directory
+        id: dir
+        run: |
+          DIR="$(uv run python scripts/release_bump.py package-dir '${{ inputs.package }}')"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Reject a duplicate open release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PACKAGE="${{ inputs.package }}"
+          EXISTING="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base main \
+            --json headRefName \
+            --jq ".[] | select(.headRefName | startswith(\"release/${PACKAGE}-v\")) | .headRefName")"
+          if [ -n "$EXISTING" ]; then
+            echo "::error::An open release pull request already exists for ${PACKAGE}: ${EXISTING}"
+            exit 1
+          fi
+
+      - name: Record current version
+        id: old_version
+        run: |
+          VERSION="$(cd "${{ steps.dir.outputs.dir }}" && uv run cz version --project)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Link the workspace lockfile into the package directory
+        # The `uv` commitizen version provider resolves both `pyproject.toml`
+        # and `uv.lock` relative to the process cwd, with no override. `cz`
+        # must run with cwd == the package directory so it edits *that*
+        # package's pyproject.toml (not the root's) — but `uv.lock` only
+        # exists at the repository root. A symlink makes both resolve
+        # correctly: cz writes through it straight to the real root lockfile.
+        # No-op for the root `radiologist` package, whose cwd already has
+        # both files directly.
+        if: steps.dir.outputs.dir != '.'
+        run: ln -s "$GITHUB_WORKSPACE/uv.lock" "${{ steps.dir.outputs.dir }}/uv.lock"
+
+      - name: Bump version (files only — no commit, no tag)
+        # Non-zero exit (e.g. NO_COMMITS_FOUND) must propagate: that is the
+        # mechanism behind "no releasable commits creates nothing" — the
+        # release branch is only created after this step succeeds.
+        run: |
+          cd "${{ steps.dir.outputs.dir }}"
+          if [ "${{ inputs.increment }}" = "auto" ]; then
+            uv run cz bump --yes --files-only
+          else
+            uv run cz bump --yes --files-only --increment "${{ inputs.increment }}"
+          fi
+
+      - name: Unlink the workspace lockfile from the package directory
+        if: steps.dir.outputs.dir != '.'
+        run: rm -f "${{ steps.dir.outputs.dir }}/uv.lock"
+
+      - name: Record new version
+        id: new_version
+        run: |
+          VERSION="$(cd "${{ steps.dir.outputs.dir }}" && uv run cz version --project)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Compute release branch name
+        id: branch
+        run: |
+          NAME="$(uv run python scripts/release_bump.py branch-name \
+            '${{ inputs.package }}' '${{ steps.new_version.outputs.version }}')"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Compute commit headline
+        id: headline
+        run: |
+          TEXT="$(uv run python scripts/release_bump.py commit-headline \
+            '${{ inputs.package }}' \
+            '${{ steps.old_version.outputs.version }}' \
+            '${{ steps.new_version.outputs.version }}')"
+          echo "text=$TEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Create the release branch ref
+        id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BASE_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" --jq .object.sha)"
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/heads/${{ steps.branch.outputs.name }}" \
+            -f sha="$BASE_SHA"
+          echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Land one GitHub-signed commit
+        # GraphQL createCommitOnBranch, not the REST Contents API: the bump
+        # touches three files and the Contents API would need three commits.
+        # expectedHeadOid pins the mutation to the branch head just created,
+        # so a concurrent write fails loudly instead of silently overwriting.
+        # No signing key is used anywhere — GitHub signs commits it creates
+        # through its own API.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VARIABLES="$(uv run python scripts/release_bump.py mutation-variables \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --package '${{ inputs.package }}' \
+            --repository-name-with-owner '${{ github.repository }}' \
+            --branch-name '${{ steps.branch.outputs.name }}' \
+            --expected-head-oid '${{ steps.ref.outputs.sha }}' \
+            --headline '${{ steps.headline.outputs.text }}')"
+          QUERY='mutation ($input: CreateCommitOnBranchInput!) {
+            createCommitOnBranch(input: $input) {
+              commit { oid }
+            }
+          }'
+          jq -n --arg query "$QUERY" --argjson variables "$VARIABLES" \
+            '{query: $query, variables: $variables}' | gh api graphql --input -
+
+      - name: Ensure the release label exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create release --color 0E8A16 \
+            --description "Version-bump release pull request" --force
+
+      - name: Open the release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "${{ steps.branch.outputs.name }}" \
+            --label release \
+            --title "${{ steps.headline.outputs.text }}" \
+            --body "Automated version bump for \`${{ inputs.package }}\`: ${{ steps.old_version.outputs.version }} → ${{ steps.new_version.outputs.version }}."
