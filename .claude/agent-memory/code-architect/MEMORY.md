@@ -6,3 +6,4 @@
 - [No Protocol/Null-Object ceremony](feedback_no_protocol_null_object_ceremony.md) — internal single-impl features get one concrete class in one module, not an interface + null pair + extra file
 - [Per-application resource lifetime](feedback_per_application_resource_lifetime.md) — build stateful registries inside create_app(), never module-level; the suite builds one app per fixture
 - [Pytest layout](project_pytest_layout.md) — importlib mode, repo-root rootdir, conftest discovery, src-shim pattern; root conftest must insert all 5 src/ dirs
+- [PyPI publishing constraints](project_pypi_publishing_constraints.md) — uv_build rejects `../LICENSE`; metapackage needs src/radiologist/; trusted publishing breaks in reusable workflows; GITHUB_TOKEN refs fire no triggers
