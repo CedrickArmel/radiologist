@@ -1,13 +1,8 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV CLOUDSDK_PYTHON=/usr/bin/python3.11
 
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
-    | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
-    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-    | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && apt-get update -y \
-    && apt-get install google-cloud-cli -y
+ENV CLOUDSDK_PYTHON=/usr/bin/python3.12
 
 # pyenv build deps (https://github.com/pyenv/pyenv/wiki#suggested-build-environment)
 # plus the subset of the maintainer's brew leaves that make sense system-wide in Linux.
@@ -43,3 +38,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update \
     && apt-get install -y --no-install-recommends python3.11 python3.11-venv python3.11-dev \
     && rm -rf /var/lib/apt/lists/*
+
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+    | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+    | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && apt-get update -y \
+    && apt-get install google-cloud-cli -y
