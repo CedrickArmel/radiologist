@@ -1,5 +1,10 @@
 # radiologist-registry
 
+[![ci](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml/badge.svg)](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/CedrickArmel/radiologist/branch/main/graph/badge.svg)](https://codecov.io/gh/CedrickArmel/radiologist)
+[![PyPI](https://img.shields.io/pypi/v/radiologist-registry)](https://pypi.org/project/radiologist-registry/)
+![tested on](https://img.shields.io/badge/tested%20on-ubuntu--latest%20%7C%20python%203.10-blue)
+
 W&B model registry facade — resolve, download, push, and promote ONNX/checkpoint
 artifacts for the radiologist pipeline. Ships a `WandbRegistry` library and a
 Typer CLI (`radiologist-registry`) built on top of it.

@@ -1,5 +1,10 @@
 # radiologist-utils
 
+[![ci](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml/badge.svg)](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/CedrickArmel/radiologist/branch/main/graph/badge.svg)](https://codecov.io/gh/CedrickArmel/radiologist)
+[![PyPI](https://img.shields.io/pypi/v/radiologist-utils)](https://pypi.org/project/radiologist-utils/)
+![tested on](https://img.shields.io/badge/tested%20on-ubuntu--latest%20%7C%20python%203.10-blue)
+
 Shared foundation library for the Radiologist mono-repo. Every other package depends on it; it has no internal workspace dependencies.
 
 ## What it solves

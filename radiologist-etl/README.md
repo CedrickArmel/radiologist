@@ -1,5 +1,10 @@
 # radiologist-etl
 
+[![ci](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml/badge.svg)](https://github.com/CedrickArmel/radiologist/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/CedrickArmel/radiologist/branch/main/graph/badge.svg)](https://codecov.io/gh/CedrickArmel/radiologist)
+[![PyPI](https://img.shields.io/pypi/v/radiologist-etl)](https://pypi.org/project/radiologist-etl/)
+![tested on](https://img.shields.io/badge/tested%20on-ubuntu--latest%20%7C%20python%203.10-blue)
+
 Data preparation pipeline. Transforms a raw folder of labelled chest X-ray images (local or GCS) into streaming-ready WebDataset tar shards, producing a deterministic manifest and quality-filtered dataset.
 
 ## Business context
