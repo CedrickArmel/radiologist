@@ -105,6 +105,8 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        metrics = state_holder["metrics"]
+        metrics.observe_error(metrics.route_label(request.url.path), "validation_error")
         return JSONResponse(status_code=400, content={"detail": exc.errors()})
 
     if state_holder["metrics"].enabled:
@@ -133,6 +135,8 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
     def _get_predictor(route: Optional[str] = None) -> Any:
         p = state_holder["predictor"]
         if p is None:
+            if route is not None:
+                state_holder["metrics"].observe_error(route, "no_model_loaded")
             raise HTTPException(
                 status_code=503,
                 detail="No model loaded. Supply a predictor instance at startup.",
@@ -143,6 +147,8 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
         try:
             return PILImage.open(io.BytesIO(data)).convert("RGB")
         except UnidentifiedImageError as exc:
+            if route is not None:
+                state_holder["metrics"].observe_error(route, "invalid_image")
             raise HTTPException(
                 status_code=400, detail=f"Invalid image: {exc}"
             ) from exc
@@ -150,6 +156,7 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
     async def _handle(image: Any, method_name: str, route: str) -> Any:
         raw = await image.read()
         if not raw:
+            state_holder["metrics"].observe_error(route, "empty_file")
             raise HTTPException(status_code=400, detail="Empty image file.")
         pil_img = _load_pil(raw, route)
         p = _get_predictor(route)
