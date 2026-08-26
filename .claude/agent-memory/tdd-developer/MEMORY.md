@@ -34,7 +34,7 @@
 - [Third-party version string in AC](feedback_third_party_version_string_in_ac.md) — an issue's literal example of a dependency's output string can drift from the pinned lockfile version; assert against the library's own constant, not the literal
 - [Worktree venv .pth corruption risk](feedback_worktree_venv_pth_corruption_risk.md) — `uv sync/run --active` needs both `VIRTUAL_ENV` and `PATH` exported in the same Bash call or it silently rewrites the shared venv's `.pth` files
 - [Worktree shell chaining blocked](feedback_worktree_shell_chaining_blocked.md) — worktree-isolated Bash sandbox rejects any `&&`/`;`/`$VAR` shell line; use single flat commands with an inline `VAR=val /abs/bin` prefix instead of `pyenv activate`/`eval`
-
-- [YAML-only CI workflow validation](feedback_yaml_only_ci_workflow_validation.md) — no unit tests for a workflow file; validate via yaml.safe_load + actionlint + local dry-run of every step's shell command
+- [cz uv provider cwd-relative lockfile](feedback_cz_uv_provider_cwd_relative_lockfile.md) — commitizen's `uv` version provider resolves `uv.lock`/`pyproject.toml` against cwd only; bumping a workspace member from its own dir needs a symlinked `uv.lock`
+- [Worktree scratch-clone shares gitdir](feedback_worktree_scratch_clone_shares_gitdir.md) — never `cp -r` a git worktree for a git sandbox; its `.git` is a pointer file to the shared repo, so commits/tags there pollute the real repo's refs
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
