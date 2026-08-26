@@ -43,6 +43,7 @@ validation:
 nav:
   - Home: index.md
   - Contributing: contributing.md
+  - Releasing: releasing.md
   - Packages:
       - utils: pkg/utils.md
       - core: pkg/core.md
