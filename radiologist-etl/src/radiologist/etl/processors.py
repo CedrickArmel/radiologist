@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -191,7 +192,9 @@ class StatsProcessor:
 
         records: list[ManifestRecord] = []
 
-        with ProcessPoolExecutor(max_workers=self._workers) as pool:
+        with ProcessPoolExecutor(
+            max_workers=self._workers, mp_context=mp.get_context("spawn")
+        ) as pool:
             futures = {
                 pool.submit(
                     _process_one,

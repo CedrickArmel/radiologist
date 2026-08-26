@@ -5,3 +5,4 @@ defaults:
   - attribution
   - model_checkpoint
   - lr_monitor
+  - onnx_export
