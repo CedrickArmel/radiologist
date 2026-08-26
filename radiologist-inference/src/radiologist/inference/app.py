@@ -159,6 +159,9 @@ def _build_app(fastapi_mod: Any, predictor: Optional[Any]) -> Any:  # noqa: C901
             state_holder["metrics"].observe_error(route, "empty_file")
             raise HTTPException(status_code=400, detail="Empty image file.")
         pil_img = _load_pil(raw, route)
+        state_holder["metrics"].observe_input_image(
+            len(raw), pil_img.width, pil_img.height
+        )
         p = _get_predictor(route)
         return getattr(p, method_name)(pil_img)
 
