@@ -315,6 +315,3 @@ clean:  ## remove __pycache__, .pytest_cache, .mypy_cache, .coverage
 		-not -path './.git/*' -exec rm -rf {} + 2>/dev/null || true
 	@rm -f .coverage coverage.xml
 	@echo "✅ Clean!"
-
-gcloud:
-	@curl https://sdk.cloud.google.com | bash

@@ -4,6 +4,10 @@
 .claude/local
 .claude/worktrees
 
+# wandb
+artifacts/
+wandb/
+
 # Hydra
 outputs/
 
