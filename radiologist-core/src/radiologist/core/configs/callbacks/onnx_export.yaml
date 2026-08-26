@@ -2,6 +2,6 @@
 onnx_export:
   _target_: radiologist.core.OnnxExportCallback
   input_shape: [1, 3, 224, 224]
-  classes: ["normal", "abnormal"]
+  classes: ["normal", "viral", "opacity"]
   cam_target_layer: layer4
   opset: 18
