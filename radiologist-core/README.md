@@ -198,10 +198,10 @@ The Hydra config tree lives at `src/radiologist/core/configs/`. Key files:
 
 ## Optional extras
 
-Install the `registry` extra for ONNX export and W&B registry features:
+Install the `onnx-export` extra for ONNX export and W&B registry features:
 
 ```bash
-uv add --active "radiologist-core[registry]"
+uv add --active "radiologist-core[onnx-export]"
 ```
 
 Adds: `onnx`, `onnxruntime`, `onnxscript`.
@@ -210,6 +210,6 @@ Adds: `onnx`, `onnxruntime`, `onnxscript`.
 
 Core: `radiologist-utils`, `torch`, `torchvision`, `lightning`, `webdataset`, `torchmetrics`, `wandb`, `hydra-core`.
 
-Optional (`registry`): `onnx`, `onnxruntime`, `onnxscript`.
+Optional (`onnx-export`): `onnx`, `onnxruntime`, `onnxscript`.
 
 Optional (`attribution`): `captum`.

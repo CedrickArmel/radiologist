@@ -22,44 +22,40 @@ docs = [
     "mkdocstrings[python]>=0.26",
     "mkdocs-include-markdown-plugin>=6.2",
 ]
+release = ["commitizen>=4.16.4"]
 [project]
 name = "radiologist"
 version = "0.1.0"
 description = "Fully reproducible machine-learning pipeline for Chest X-ray classification"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
-dependencies = [
-    "python-multipart>=0.0.32",
-    "radiologist-core",
-    "radiologist-utils[ml]",
-]
+dependencies = []
 
 [project.optional-dependencies]
 all = [
     "radiologist-core[all]",
     "radiologist-etl[all]",
     "radiologist-inference[all]",
+    "radiologist-registry[all]",
     "radiologist-utils[all]",
 ]
-etl = ["radiologist-etl"]
-prefect = ["radiologist-etl[prefect]"]
-registry = ["radiologist-core[registry]"]
+core = ["radiologist-core[all]"]
+etl = ["radiologist-etl[all]"]
+inference = ["radiologist-inference[all]"]
+registry = ["radiologist-registry[all]"]
+utils = ["radiologist-utils[all]"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
 version_provider = "uv"
 version_scheme = "pep440"
-version_files = [
-    "src/__version__.py",
-    "pyproject.toml:version",
-]
 tag_format = "$version"
 update_changelog_on_bump = true
 changelog_file = "CHANGELOG.md"
 changelog_incremental = false
-bump_message = "bump: version $current_version → $new_version"
+bump_message = "bump: radiologist $current_version → $new_version"
 gpg_sign = true
 annotated_tag = false
 major_version_zero = true
@@ -71,6 +67,7 @@ allowed_prefixes = [
     "Merge",
     "Revert",
     "Pull request",
+    "bump:",
     "fixup!",
     "squash!",
     "amend!",

@@ -278,5 +278,5 @@ above). Requires the `serve` extra.
 ```bash
 pyenv activate radiologist
 uv sync --active --extra all --all-groups
-uv run --active pytest radiologist-inference/tests -q
+uv run --active pytest radiologist-inference/radiologist_inference_tests -q
 ```

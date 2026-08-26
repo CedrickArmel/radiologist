@@ -20,7 +20,17 @@ dependencies = [
 name = "radiologist-core"
 version = "0.1.0"
 description = "Modeling library for the radiologist pipeline"
-license = { file = "../LICENSE" }
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Cédrick-Armel YEBOUET" }]
+keywords = ["chest-xray", "medical-imaging", "machine-learning", "pytorch"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.10"
 
 [project.scripts]
@@ -36,7 +46,7 @@ all = [
     "wandb>=0.27.0",
 ]
 gcs = ["gcsfs>=2026.4.0"]
-registry = [
+onnx-export = [
     "onnx>=1.21.0",
     "onnxruntime~=1.23.2",
     "onnxscript>=0.7.0",
@@ -44,12 +54,20 @@ registry = [
 wandb = ["wandb>=0.27.0"]
 xai = ["captum>=0.9.0"]
 
+[project.urls]
+Homepage = "https://github.com/CedrickArmel/radiologist"
+Repository = "https://github.com/CedrickArmel/radiologist"
+Documentation = "https://cedrickarmel.github.io/radiologist/"
+Issues = "https://github.com/CedrickArmel/radiologist/issues"
+
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.0"
+version_provider = "uv"
+version_scheme = "pep440"
 tag_format = "${version}-radiologist-core"
 ignored_tag_formats = ["${version}-radiologist-*"]
 update_changelog_on_bump = true
+bump_message = "bump: radiologist-core $current_version → $new_version"
 
 [tool.uv.build-backend]
 namespace = true

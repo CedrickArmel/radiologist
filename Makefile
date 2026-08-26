@@ -128,7 +128,8 @@ endef
 .PHONY: help \
         tpusetup gpusetup cpusetup \
         uv pyenv venv remove-tf tpuenvs gpuenvs reload \
-        sync sync-all sync-registry dev-install \
+        sync sync-all dev-install \
+        build build-all \
         test test-core test-etl test-utils test-inference test-registry \
         lint format type-check \
         docs-install docs-serve docs-build docstrings \
@@ -240,19 +241,32 @@ reload:  ## remind to reload shell
 #  Day-to-day dev                                                              #
 # --------------------------------------------------------------------------- #
 
-sync:  ## sync all dep-groups — core deps + test/lint/typing (no optional extras)
-	@uv sync --active --all-groups
+sync:  ## sync all dep-groups + all workspace packages (no optional extras)
+	@uv sync --active --all-groups --all-packages
 
-sync-all:  ## sync all dep-groups + all optional extras (wandb, onnx, captum, gcsfs, prefect)
-	@uv sync --active --all-groups --extra all
-
-sync-registry:  ## sync with ONNX registry extra only (onnx, onnxruntime, onnxscript)
-	@uv sync --active --all-groups --extra registry
+sync-all:  ## sync all dep-groups + all workspace packages + all optional extras
+	@uv sync --active --all-groups --all-packages --all-extras
 
 dev-install: sync-all  ## sync deps + install pre-commit hooks (run once after clone)
 	@uv run --active pre-commit install
 	@uv run --active pre-commit install --install-hooks -t commit-msg
 	@echo "✅ Dev environment ready!"
+
+# --------------------------------------------------------------------------- #
+#  Build                                                                       #
+# --------------------------------------------------------------------------- #
+
+build:  ## build a single distribution — usage: make build PKG=radiologist-core
+	@test -n "$(PKG)" || (echo "PKG is required, e.g. make build PKG=radiologist-core" && exit 1)
+	@uv build --package $(PKG) --out-dir dist
+
+build-all:  ## build all six distributions
+	@uv build --package radiologist --out-dir dist
+	@uv build --package radiologist-core --out-dir dist
+	@uv build --package radiologist-etl --out-dir dist
+	@uv build --package radiologist-inference --out-dir dist
+	@uv build --package radiologist-registry --out-dir dist
+	@uv build --package radiologist-utils --out-dir dist
 
 # --------------------------------------------------------------------------- #
 #  Tests                                                                       #
@@ -262,19 +276,19 @@ test:  ## run all package tests
 	@uv run --active pytest $(PYTEST_FLAGS)
 
 test-core:  ## run radiologist-core tests only
-	@uv run --active pytest $(PKG_CORE)/tests $(PYTEST_FLAGS)
+	@uv run --active pytest $(PKG_CORE)/radiologist_core_tests $(PYTEST_FLAGS)
 
 test-etl:  ## run radiologist-etl tests only
-	@uv run --active pytest $(PKG_ETL)/tests $(PYTEST_FLAGS)
+	@uv run --active pytest $(PKG_ETL)/radiologist_etl_tests $(PYTEST_FLAGS)
 
 test-utils:  ## run radiologist-utils tests only
-	@uv run --active pytest $(PKG_UTILS)/tests $(PYTEST_FLAGS)
+	@uv run --active pytest $(PKG_UTILS)/radiologist_utils_tests $(PYTEST_FLAGS)
 
 test-inference:  ## run radiologist-inference tests only
-	@uv run --active pytest $(PKG_INFERENCE)/tests $(PYTEST_FLAGS)
+	@uv run --active pytest $(PKG_INFERENCE)/radiologist_inference_tests $(PYTEST_FLAGS)
 
 test-registry:  ## run radiologist-registry tests only
-	@uv run --active pytest $(PKG_REGISTRY)/tests $(PYTEST_FLAGS)
+	@uv run --active pytest $(PKG_REGISTRY)/radiologist_registry_tests $(PYTEST_FLAGS)
 
 # --------------------------------------------------------------------------- #
 #  Code quality                                                                #
@@ -295,7 +309,7 @@ type-check:  ## run mypy across all packages
 # --------------------------------------------------------------------------- #
 
 docs-install:  ## sync docs deps + all extras (mkdocstrings must import CLI modules)
-	@uv sync --active --group docs --all-extras
+	@uv sync --active --group docs --all-packages --all-extras
 
 docs-serve:  ## live-reload docs at localhost:8000
 	@uv run --active mkdocs serve
@@ -310,8 +324,9 @@ docstrings:  ## Google-style docstring check (also enforced via pre-commit's fla
 #  Maintenance                                                                 #
 # --------------------------------------------------------------------------- #
 
-clean:  ## remove __pycache__, .pytest_cache, .mypy_cache, .coverage
+clean:  ## remove __pycache__, .pytest_cache, .mypy_cache, .coverage, dist
 	@find . -type d \( -name '__pycache__' -o -name '.pytest_cache' -o -name '.mypy_cache' \) \
 		-not -path './.git/*' -exec rm -rf {} + 2>/dev/null || true
 	@rm -f .coverage coverage.xml
+	@rm -rf dist
 	@echo "✅ Clean!"
