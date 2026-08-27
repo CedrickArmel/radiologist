@@ -197,7 +197,11 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.tag.outputs.name }}"
           SHA="${{ needs.resolve.outputs.sha }}"
-          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" >/dev/null 2>&1; then
+          # `git/refs/tags/{TAG}` (plural) does prefix matching: a query for
+          # "0.1.0" also matches "0.1.0-radiologist-core" and silently
+          # short-circuits tag creation. `git/ref/tags/{TAG}` (singular) only
+          # matches the exact ref.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists — nothing to do."
             exit 0
           fi
