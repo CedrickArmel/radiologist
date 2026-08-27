@@ -63,6 +63,14 @@ PACKAGES = (
 _ROOT_PACKAGE = "radiologist"
 
 
+def _validate_package(package: str) -> None:
+    """Raise ``ValueError`` unless ``package`` is one of the six distributions."""
+    if package not in PACKAGES:
+        raise ValueError(
+            f"Unknown distribution {package!r}; expected one of {PACKAGES}"
+        )
+
+
 def package_dir(package: str) -> str:
     """Return the ``cz`` working directory for ``package``.
 
@@ -70,10 +78,7 @@ def package_dir(package: str) -> str:
     the five workspace members versions inside its own directory, which
     shares its name.
     """
-    if package not in PACKAGES:
-        raise ValueError(
-            f"Unknown distribution {package!r}; expected one of {PACKAGES}"
-        )
+    _validate_package(package)
     return "." if package == _ROOT_PACKAGE else package
 
 
@@ -119,10 +124,7 @@ def environment_name(package: str) -> str:
     name — not the workflow — is the security boundary PyPI's trusted
     publisher configuration relies on to tell distributions apart.
     """
-    if package not in PACKAGES:
-        raise ValueError(
-            f"Unknown distribution {package!r}; expected one of {PACKAGES}"
-        )
+    _validate_package(package)
     return f"pypi-{package}"
 
 
@@ -133,10 +135,7 @@ def release_tag(package: str, version: str) -> str:
     workspace member's ``tag_format`` suffixes the version with its own
     distribution name to keep six independent tag namespaces on one repo.
     """
-    if package not in PACKAGES:
-        raise ValueError(
-            f"Unknown distribution {package!r}; expected one of {PACKAGES}"
-        )
+    _validate_package(package)
     if package == _ROOT_PACKAGE:
         return version
     return f"{version}-{package}"
