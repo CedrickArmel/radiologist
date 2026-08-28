@@ -39,5 +39,9 @@
         "mermaidchart.vscode-mermaid-chart"
       ]
     }
-  }
+  },
+  "runArgs": [
+    "--env-file",
+    ".env"
+  ]
 }
