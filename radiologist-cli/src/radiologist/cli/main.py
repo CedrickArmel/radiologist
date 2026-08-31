@@ -27,11 +27,35 @@ Parses the leading ``--output``/``-o`` flag and the command group name off
 ``run(argv)`` entry point.
 """
 
+import importlib
+import os
+import sys
 from typing import List, Optional, Tuple
+
+from radiologist.utils.cli import EXIT_ERROR, EXIT_OK, OUTPUT_ENV_VAR
 
 GROUPS: Tuple[str, ...] = ("etl", "core", "registry", "infer")
 
+_MODULE_BY_GROUP = {
+    "etl": "radiologist.cli.groups.etl",
+    "core": "radiologist.cli.groups.core",
+    "registry": "radiologist.cli.groups.registry",
+    "infer": "radiologist.cli.groups.inference",
+}
+
+# Group -> radiologist-cli extra name. Groups absent from this mapping (only
+# "core") back onto a hard dependency and need no availability guard.
+_EXTRA_BY_GROUP = {
+    "etl": "etl",
+    "registry": "registry",
+    "infer": "inference",
+}
+
 __all__ = ["GROUPS", "extract_output_flag", "split_group", "run_group", "main"]
+
+
+def _usage() -> str:
+    return "usage: radiologist {" + ",".join(GROUPS) + "} ..."
 
 
 def extract_output_flag(argv: List[str]) -> Tuple[List[str], Optional[str]]:
@@ -44,7 +68,17 @@ def extract_output_flag(argv: List[str]) -> Tuple[List[str], Optional[str]]:
         A tuple of (remaining argv with the flag removed, the flag's value or
         ``None`` when not present).
     """
-    raise NotImplementedError
+    result = list(argv)
+    for index, token in enumerate(result):
+        if token == "--output" and index + 1 < len(result):
+            fmt = result[index + 1]
+            del result[index : index + 2]
+            return result, fmt
+        if token.startswith("--output="):
+            fmt = token.split("=", 1)[1]
+            del result[index]
+            return result, fmt
+    return result, None
 
 
 def split_group(argv: List[str]) -> Tuple[Optional[str], List[str]]:
@@ -57,7 +91,9 @@ def split_group(argv: List[str]) -> Tuple[Optional[str], List[str]]:
         A tuple of (group name or ``None`` when absent/unrecognized, the
         remaining argv to forward to that group's ``run``).
     """
-    raise NotImplementedError
+    if argv and argv[0] in GROUPS:
+        return argv[0], argv[1:]
+    return None, argv
 
 
 def run_group(group: str, argv: List[str]) -> int:
@@ -70,9 +106,42 @@ def run_group(group: str, argv: List[str]) -> int:
     Returns:
         The process exit code returned by the group.
     """
-    raise NotImplementedError
+    extra = _EXTRA_BY_GROUP.get(group)
+    if extra is not None:
+        from radiologist.cli.optional import require
+
+        require(extra)
+
+    module = importlib.import_module(_MODULE_BY_GROUP[group])
+    return module.run(argv)  # type: ignore[no-any-return]
 
 
 def main() -> None:
     """Entry point for the ``radiologist`` console script."""
-    raise NotImplementedError
+    argv, output_format = extract_output_flag(sys.argv[1:])
+
+    if "--help" in argv or "-h" in argv:
+        print(_usage())
+        raise SystemExit(EXIT_OK)
+
+    group, rest = split_group(argv)
+    if group is None:
+        print(_usage(), file=sys.stderr)
+        raise SystemExit(EXIT_ERROR)
+
+    previous = os.environ.get(OUTPUT_ENV_VAR)
+    if output_format is not None:
+        os.environ[OUTPUT_ENV_VAR] = output_format
+
+    try:
+        code = run_group(group, rest)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_ERROR) from exc
+    finally:
+        if previous is None:
+            os.environ.pop(OUTPUT_ENV_VAR, None)
+        else:
+            os.environ[OUTPUT_ENV_VAR] = previous
+
+    raise SystemExit(code)
