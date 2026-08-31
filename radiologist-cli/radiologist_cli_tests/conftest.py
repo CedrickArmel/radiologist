@@ -19,3 +19,192 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
+"""Shared fixtures for radiologist-cli tests.
+
+``build_det_onnx``/``build_mcd_onnx`` are copied from
+``radiologist-inference/radiologist_inference_tests/_helpers.py`` — that
+module is not importable across package test directories in this repo's
+layout, so the builders needed by the inference-group CLI tests are
+duplicated here rather than shared.
+"""
+
+import io
+import json
+from typing import List, Optional
+
+import numpy as np
+import onnx
+import onnx.helper as oh
+import onnx.numpy_helper as onh
+import pytest
+from PIL import Image as PILImage
+
+CLASSES = ["NORMAL", "ABNORMAL"]
+INPUT_SHAPE = [1, 3, 224, 224]
+N_CLASSES = len(CLASSES)
+N_FEATURES = 3 * 224 * 224
+
+
+def _add_metadata(
+    model: onnx.ModelProto,
+    extra: Optional[dict] = None,
+    omit_keys: Optional[List[str]] = None,
+) -> onnx.ModelProto:
+    base = {
+        "classes": json.dumps(CLASSES),
+        "input_shape": json.dumps(INPUT_SHAPE),
+        "cam_target_layer": "features.28",
+        "output_names": json.dumps(["logits", "feature_maps"]),
+    }
+    if extra:
+        base.update(extra)
+    if omit_keys:
+        for key in omit_keys:
+            base.pop(key, None)
+    del model.metadata_props[:]
+    for k, v in base.items():
+        e = model.metadata_props.add()
+        e.key = k
+        e.value = v
+    return model
+
+
+def _build_det_onnx(
+    tmp_path,
+    priors: Optional[dict] = None,
+    filename: str = "model_det.onnx",
+    feat_nonzero: bool = False,
+    omit_keys: Optional[List[str]] = None,
+) -> str:
+    """Build a minimal deterministic 2-class ONNX classifier for tests.
+
+    Outputs: logits (1, N_CLASSES) via Softmax, feature_maps (1, 64, 7, 7)
+    constant. Embeds required metadata keys. Optional training_prior
+    embedded when priors given. When feat_nonzero=True, feature_maps filled
+    with a deterministic non-zero constant.
+    """
+    np.random.seed(42)
+    W = np.random.randn(N_CLASSES, N_FEATURES).astype(np.float32)
+    b = np.zeros(N_CLASSES, dtype=np.float32)
+
+    W_init = onh.from_array(W, name="W")
+    b_init = onh.from_array(b, name="b")
+    feat_value = (
+        np.ones((1, 64, 7, 7), dtype=np.float32) * 0.5
+        if feat_nonzero
+        else np.zeros((1, 64, 7, 7), dtype=np.float32)
+    )
+    feat_const = onh.from_array(feat_value, name="feat_const")
+    shape_data = onh.from_array(
+        np.array([1, N_FEATURES], dtype=np.int64), name="reshape_shape"
+    )
+
+    FLOAT = onnx.TensorProto.FLOAT
+    logits_vi = oh.make_tensor_value_info("logits", FLOAT, [1, N_CLASSES])
+    feature_maps_vi = oh.make_tensor_value_info("feature_maps", FLOAT, [1, 64, 7, 7])
+
+    graph = oh.make_graph(
+        nodes=[
+            oh.make_node(
+                "Reshape", inputs=["input", "reshape_shape"], outputs=["reshape_out"]
+            ),
+            oh.make_node(
+                "Gemm",
+                inputs=["reshape_out", "W", "b"],
+                outputs=["gemm_out"],
+                transB=1,
+            ),
+            oh.make_node("Softmax", inputs=["gemm_out"], outputs=["logits"], axis=1),
+            oh.make_node("Identity", inputs=["feat_const"], outputs=["feature_maps"]),
+        ],
+        name="det_classifier",
+        inputs=[oh.make_tensor_value_info("input", FLOAT, INPUT_SHAPE)],
+        outputs=[logits_vi, feature_maps_vi],
+        initializer=[W_init, b_init, shape_data, feat_const],
+    )
+    model = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 17)])
+    model.ir_version = 8
+
+    extra = {}
+    if priors is not None:
+        extra["training_prior"] = json.dumps(priors)
+    _add_metadata(model, extra, omit_keys=omit_keys)
+
+    path = str(tmp_path / filename)
+    onnx.save(model, path)
+    return path
+
+
+def _build_mcd_onnx(tmp_path, filename: str = "model_mcd.onnx") -> str:
+    """Build a stochastic MCD ONNX model whose logits vary each forward pass.
+
+    Uses RandomUniform so each session.run() produces different logits.
+    """
+    FLOAT = onnx.TensorProto.FLOAT
+    logits_vi = oh.make_tensor_value_info("logits", FLOAT, [1, N_CLASSES])
+
+    graph = oh.make_graph(
+        nodes=[
+            oh.make_node(
+                "RandomUniform",
+                inputs=[],
+                outputs=["rand_out"],
+                dtype=1,
+                shape=[1, N_CLASSES],
+            ),
+            oh.make_node("Softmax", inputs=["rand_out"], outputs=["logits"], axis=1),
+        ],
+        name="mcd_classifier",
+        inputs=[oh.make_tensor_value_info("input", FLOAT, INPUT_SHAPE)],
+        outputs=[logits_vi],
+        initializer=[],
+    )
+    model = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 17)])
+    model.ir_version = 8
+    _add_metadata(model)
+
+    path = str(tmp_path / filename)
+    onnx.save(model, path)
+    return path
+
+
+def _make_png_path(tmp_path, width: int = 64, height: int = 64) -> str:
+    """Write a minimal RGB PNG to tmp_path and return its path as a string."""
+    arr = np.zeros((height, width, 3), dtype=np.uint8)
+    img = PILImage.fromarray(arr, mode="RGB")
+    path = tmp_path / "input.png"
+    img.save(path, format="PNG")
+    return str(path)
+
+
+def _make_png_bytes(width: int = 64, height: int = 64) -> bytes:
+    arr = np.zeros((height, width, 3), dtype=np.uint8)
+    img = PILImage.fromarray(arr, mode="RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@pytest.fixture
+def build_det_onnx():
+    """Factory fixture building a minimal deterministic 2-class ONNX model."""
+    return _build_det_onnx
+
+
+@pytest.fixture
+def build_mcd_onnx():
+    """Factory fixture building a stochastic MC-Dropout ONNX model."""
+    return _build_mcd_onnx
+
+
+@pytest.fixture
+def make_png_path():
+    """Factory fixture writing a minimal RGB PNG and returning its path."""
+    return _make_png_path
+
+
+@pytest.fixture
+def make_png_bytes():
+    """Factory fixture returning minimal RGB PNG bytes."""
+    return _make_png_bytes
