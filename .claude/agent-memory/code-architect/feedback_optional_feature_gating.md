@@ -24,3 +24,9 @@ Keep call sites free of availability checks — but do it with an internal `enab
 one concrete class, **not** a Protocol + Null Object pair (see
 [[no-protocol-null-object-ceremony]]). Only the route/middleware *registration* is
 conditional, so the endpoint 404s cleanly when the extra is absent.
+
+**Scope boundary (2026-08-29):** this rule is about *runtime capabilities inside a
+package*, not about *which sibling workspace packages a distribution pulls in*. When the
+optional thing is a whole workspace member, the user does want new extras — see
+[[unified-cli-centralization]], where he asked for `etl`/`registry`/`inference` extras on
+`radiologist-cli`. Don't quote this rule to argue against those.
