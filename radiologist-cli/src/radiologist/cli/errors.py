@@ -30,7 +30,7 @@ issue that introduced this package.
 
 import functools
 import sys
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, List, TypeVar
 
 import typer
 
@@ -38,7 +38,7 @@ from radiologist.utils.cli import exit_code_for
 
 F = TypeVar("F", bound=Callable[..., None])
 
-__all__ = ["exit_on_error"]
+__all__ = ["exit_on_error", "run_typer_app"]
 
 
 def exit_on_error(func: F) -> F:
@@ -60,3 +60,39 @@ def exit_on_error(func: F) -> F:
             raise typer.Exit(code=exit_code_for(exc)) from exc
 
     return wrapper  # type: ignore[return-value]
+
+
+def run_typer_app(app: typer.Typer, argv: List[str], prog_name: str) -> int:
+    """Run a Typer app's command dispatch, translating the outcome into an exit code.
+
+    Individual command bodies are expected to already be wrapped with
+    :func:`exit_on_error`, so this only needs to handle what happens
+    *outside* a command body: no/unknown subcommand, ``--help``, and a
+    user-declined confirmation (``typer.Abort``).
+
+    Args:
+        app: The Typer application to run.
+        argv: Arguments to dispatch, excluding the program name.
+        prog_name: Program name shown in the app's own usage/help output.
+
+    Returns:
+        The process exit code.
+    """
+    from typer.main import get_command
+
+    command = get_command(app)
+    try:
+        exit_code = command.main(args=argv, prog_name=prog_name, standalone_mode=False)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 1
+    except Exception as exc:
+        # Click/Typer's UsageError/Abort/ClickException family — matched
+        # structurally rather than by type since typer vendors its own
+        # click fork (``typer._click``) distinct from the ``click`` package.
+        show = getattr(exc, "show", None)
+        if callable(show):
+            show()
+            return getattr(exc, "exit_code", 1)
+        print(f"Error: {exc}", file=sys.stderr)
+        return exit_code_for(exc)
+    return exit_code if isinstance(exit_code, int) else 0
