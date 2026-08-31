@@ -30,23 +30,19 @@ Bodies call straight into ``radiologist.registry``'s existing library
 functions and render their result through :func:`radiologist.utils.cli.emit`
 instead of ad-hoc ``typer.echo`` prose.
 
-Error handling uses a module-local ``_exit_on_error`` decorator that mirrors
-the intended contract of the still-stubbed
-``radiologist.cli.errors.exit_on_error`` (owned by a sibling issue), built on
-top of the already-implemented :func:`radiologist.utils.cli.exit_code_for`
-taxonomy so exit codes are correct now and the decorator can be swapped for
-the shared one later without changing behavior.
+Error handling uses the repo-wide :func:`radiologist.cli.errors.exit_on_error`
+decorator.
 """
 
-import functools
-from typing import Any, Callable, List, Optional, TypeVar
+from typing import List, Optional
 
 import typer
 
+from radiologist.cli.errors import exit_on_error
 from radiologist.registry import ExportResult, WandbRegistry
 from radiologist.registry import optional as _registry_optional
 from radiologist.registry.selector import resolve_selector, selector_from_flags
-from radiologist.utils.cli import emit, exit_code_for
+from radiologist.utils.cli import emit
 
 app = typer.Typer(name="registry", add_completion=False)
 alias_app = typer.Typer(name="alias", add_completion=False)
@@ -54,34 +50,9 @@ app.add_typer(alias_app, name="alias")
 
 __all__ = ["app", "run"]
 
-F = TypeVar("F", bound=Callable[..., None])
-
-
-def _exit_on_error(func: F) -> F:
-    """Wrap a command so an unhandled exception becomes a clean exit.
-
-    Args:
-        func: The command function to wrap.
-
-    Returns:
-        The wrapped function.
-    """
-
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> None:
-        try:
-            func(*args, **kwargs)
-        except (typer.Abort, typer.Exit):
-            raise
-        except Exception as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=exit_code_for(exc))
-
-    return wrapper  # type: ignore[return-value]
-
 
 @app.command()
-@_exit_on_error
+@exit_on_error
 def push(
     det_path: str = typer.Option(
         ..., "--det-path", help="Path to the deterministic ONNX export."
@@ -140,7 +111,7 @@ def push(
 
 
 @app.command()
-@_exit_on_error
+@exit_on_error
 def pull(
     path: str = typer.Argument(
         ...,
@@ -193,7 +164,7 @@ def pull(
 
 
 @app.command()
-@_exit_on_error
+@exit_on_error
 def resolve(
     path: str = typer.Argument(..., help="Base artifact path to resolve."),
     run_id: Optional[str] = typer.Option(
@@ -234,7 +205,7 @@ def resolve(
 
 
 @app.command()
-@_exit_on_error
+@exit_on_error
 def promote(
     path: str = typer.Argument(
         ..., help="Base artifact path shared by both artifacts."
@@ -273,7 +244,7 @@ def promote(
 
 
 @app.command(name="transition-to-production")
-@_exit_on_error
+@exit_on_error
 def transition_to_production(
     det_collection: str = typer.Option(
         ...,
@@ -303,7 +274,7 @@ def transition_to_production(
 
 
 @app.command(name="list")
-@_exit_on_error
+@exit_on_error
 def list_(
     type_name: str = typer.Option(
         ..., "--type", help="Artifact type of the collection (e.g. 'model')."
@@ -319,7 +290,7 @@ def list_(
 
 
 @alias_app.command("get")
-@_exit_on_error
+@exit_on_error
 def alias_get(
     artifact_path: str = typer.Argument(..., help="Fully qualified artifact path."),
 ) -> None:
@@ -329,7 +300,7 @@ def alias_get(
 
 
 @alias_app.command("set")
-@_exit_on_error
+@exit_on_error
 def alias_set(
     artifact_path: str = typer.Argument(..., help="Fully qualified artifact path."),
     alias: str = typer.Argument(..., help="Alias to add."),
@@ -340,7 +311,7 @@ def alias_set(
 
 
 @alias_app.command("remove")
-@_exit_on_error
+@exit_on_error
 def alias_remove(
     artifact_path: str = typer.Argument(..., help="Fully qualified artifact path."),
     alias: str = typer.Argument(..., help="Alias to remove."),
