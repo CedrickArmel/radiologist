@@ -183,6 +183,36 @@ class TestMain:
         assert observed["group"] == "registry"
         assert observed["argv"] == ["resolve", "p"]
 
+    def test_short_output_flag_is_visible_to_the_dispatched_group(
+        self, monkeypatch
+    ) -> None:
+        import importlib
+        import sys
+
+        main_module = importlib.import_module("radiologist.cli.main")
+
+        monkeypatch.setattr(
+            sys, "argv", ["radiologist", "-o", "json", "registry", "resolve", "p"]
+        )
+        monkeypatch.delenv("RADIOLOGIST_OUTPUT", raising=False)
+
+        observed = {}
+
+        def fake_run_group(group, argv):
+            observed["value"] = os.environ.get("RADIOLOGIST_OUTPUT")
+            observed["group"] = group
+            observed["argv"] = argv
+            return 0
+
+        monkeypatch.setattr(main_module, "run_group", fake_run_group)
+
+        with pytest.raises(SystemExit):
+            main_module.main()
+
+        assert observed["value"] == "json"
+        assert observed["group"] == "registry"
+        assert observed["argv"] == ["resolve", "p"]
+
     def test_prior_output_env_var_is_restored_after_dispatch(self, monkeypatch) -> None:
         import importlib
         import sys

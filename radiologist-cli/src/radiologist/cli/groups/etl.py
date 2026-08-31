@@ -24,46 +24,17 @@
 
 import os
 import sys
-from typing import List, Optional, Tuple
+from typing import List
 
 import fsspec  # type: ignore[import-untyped]
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
+from radiologist.cli.main import extract_output_flag
 from radiologist.etl import etl_flow
 from radiologist.utils.cli import OUTPUT_ENV_VAR, emit, exit_code_for
 
 __all__ = ["etl_main", "run"]
-
-
-def _extract_output_flag(argv: List[str]) -> Tuple[List[str], Optional[str]]:
-    """Pull the leading ``--output``/``-o`` flag out of ``argv``.
-
-    Supports ``--output json``, ``-o json`` and ``--output=json`` forms.
-
-    Args:
-        argv: Raw arguments forwarded to the ``etl`` group.
-
-    Returns:
-        A tuple of (remaining argv with the flag removed, the flag's value
-        or ``None`` when not present).
-    """
-    remaining: List[str] = []
-    fmt: Optional[str] = None
-    i = 0
-    while i < len(argv):
-        token = argv[i]
-        if token in ("--output", "-o") and i + 1 < len(argv):
-            fmt = argv[i + 1]
-            i += 2
-            continue
-        if token.startswith("--output="):
-            fmt = token.split("=", 1)[1]
-            i += 1
-            continue
-        remaining.append(token)
-        i += 1
-    return remaining, fmt
 
 
 def _ensure_source_exists(cfg: DictConfig) -> None:
@@ -116,7 +87,7 @@ def run(argv: List[str]) -> int:
     Returns:
         The process exit code.
     """
-    remaining, fmt = _extract_output_flag(argv)
+    remaining, fmt = extract_output_flag(argv)
     sys.argv = ["radiologist etl"] + remaining
     previous_fmt = os.environ.get(OUTPUT_ENV_VAR)
     if fmt is not None:
