@@ -53,8 +53,9 @@ This is a UV workspace mono-repo. Each package is independently installable and 
 | [`radiologist-etl`](radiologist-etl/README.md) | Data preparation — Haralick GLCM, IQR filtering, sharding |
 | [`radiologist-core`](radiologist-core/README.md) | Model training, evaluation, attribution, registry promotion |
 | `radiologist-app` | Streamlit / FastAPI serving UI *(planned)* |
-| [`radiologist-inference`](radiologist-inference/README.md) | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server, Typer CLI |
+| [`radiologist-inference`](radiologist-inference/README.md) | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server |
 | [`radiologist-registry`](radiologist-registry/README.md) | W&B model registry — promote, resolve, download ONNX artifacts |
+| [`radiologist-cli`](radiologist-cli/README.md) | Unified `radiologist` CLI — single dispatcher fronting the `etl`/`core`/`registry`/`infer` command groups |
 
 ## Tech stack
 

@@ -31,8 +31,26 @@ pip install radiologist-cli
 pip install "radiologist-cli[all]"
 ```
 
-## Status
+## Usage
 
-This package currently ships the epic's skeleton: every command is declared
-with its full signature and help text, but raises `NotImplementedError`.
-Behavior lands in follow-up issues.
+```bash
+radiologist <group> [command] [options]
+```
+
+| Group | Fronts | Reference |
+|---|---|---|
+| `etl` | `radiologist-etl` (Hydra-composed pipeline) | `radiologist etl --help` |
+| `core` | `radiologist-core` (Hydra-composed training run) | `radiologist core --help` |
+| `registry` | `radiologist-registry` (W&B model registry) | [docs/reference/cli-registry.md](../docs/reference/cli-registry.md) |
+| `infer` | `radiologist-inference` (ONNX inference/serving) | [docs/reference/cli-inference.md](../docs/reference/cli-inference.md) |
+
+Every command's final result is a single machine-readable record on stdout —
+`key=value` lines by default, or `--output json`/`--output yaml` (`-o` short
+form also accepted; global flag, goes before the group name). Errors print
+`Error: {message}` on stderr with a non-zero exit code from a shared,
+minimal taxonomy (`radiologist.utils.cli.exit_code_for`): `2` when the
+referenced artifact/file does not exist, `1` for any other failure.
+
+`etl`/`core` compose their config with Hydra — `radiologist etl --help` and
+`radiologist core --help` print the full composed config tree, and both
+accept `key=value` overrides and `--multirun` sweeps.
