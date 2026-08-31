@@ -119,13 +119,12 @@ def run_group(group: str, argv: List[str]) -> int:
 def main() -> None:
     """Entry point for the ``radiologist`` console script."""
     argv, output_format = extract_output_flag(sys.argv[1:])
-
-    if "--help" in argv or "-h" in argv:
-        print(_usage())
-        raise SystemExit(EXIT_OK)
-
     group, rest = split_group(argv)
+
     if group is None:
+        if "--help" in argv or "-h" in argv:
+            print(_usage())
+            raise SystemExit(EXIT_OK)
         print(_usage(), file=sys.stderr)
         raise SystemExit(EXIT_ERROR)
 

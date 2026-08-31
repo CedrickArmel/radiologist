@@ -130,6 +130,29 @@ class TestMain:
         for group in GROUPS:
             assert group in out
 
+    def test_help_flag_after_a_group_dispatches_to_that_group_instead_of_usage(
+        self, monkeypatch
+    ) -> None:
+        import sys
+
+        import radiologist.cli.groups.registry as registry_group
+        from radiologist.cli.main import main
+
+        captured = {}
+
+        def fake_run(argv):
+            captured["argv"] = argv
+            return 0
+
+        monkeypatch.setattr(registry_group, "run", fake_run)
+        monkeypatch.setattr(sys, "argv", ["radiologist", "registry", "--help"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+
+        assert excinfo.value.code == 0
+        assert captured["argv"] == ["--help"]
+
     def test_output_env_var_is_visible_to_the_dispatched_group(
         self, monkeypatch
     ) -> None:

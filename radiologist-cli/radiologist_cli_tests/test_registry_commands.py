@@ -421,3 +421,14 @@ class TestRunEntryPoint:
         code = run(["resolve", "entity/project", "--run-id", "R", "--tags", "a"])
 
         assert code != 0
+
+    def test_run_with_no_subcommand_exits_cleanly_instead_of_raising(self):
+        code = run([])
+
+        assert isinstance(code, int)
+        assert code != 0
+
+    def test_run_help_exits_zero_without_raising(self):
+        code = run(["--help"])
+
+        assert code == 0
