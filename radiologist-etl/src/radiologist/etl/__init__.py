@@ -31,6 +31,7 @@ from radiologist.etl.manifest import (
     ParquetWriter,
     records_reader,
 )
+from radiologist.etl.models import EtlResult
 from radiologist.etl.ops import compute_run_id
 from radiologist.etl.prefect_pipelines import (
     apply_filters_task,
@@ -54,6 +55,7 @@ __all__: list[str] = [
     "compute_run_id",
     "compute_stats_task",
     "etl_flow",
+    "EtlResult",
     "filter_iqr",
     "filter_lung_out_of_frame",
     "JsonlWriter",

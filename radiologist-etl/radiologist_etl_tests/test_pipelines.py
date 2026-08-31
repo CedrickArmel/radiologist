@@ -108,7 +108,7 @@ def test_pipeline_produces_exactly_one_manifest_record_per_input_image(
 ) -> None:
     images = _build_image_tree(tmp_path, n_per_class=2)
     cfg = _minimal_cfg(images, tmp_path / "out", tmp_path / "artifacts", run_label="s1")
-    manifest_path = etl_flow(cfg)
+    manifest_path = etl_flow(cfg).manifest_path
     records = _read_manifest(manifest_path)
     assert len(records) == 4
 
@@ -124,7 +124,7 @@ def test_images_processed_without_masks_have_null_lung_out_of_frame_in_manifest(
         masks_root=None,
         run_label="s2",
     )
-    manifest_path = etl_flow(cfg)
+    manifest_path = etl_flow(cfg).manifest_path
     records = _read_manifest(manifest_path)
     assert all(r["lung_out_of_frame"] is None for r in records)
 
@@ -141,7 +141,7 @@ def test_images_with_border_touching_masks_are_flagged_excluded_in_manifest(
         masks_root=masks,
         run_label="s3",
     )
-    manifest_path = etl_flow(cfg)
+    manifest_path = etl_flow(cfg).manifest_path
     records = _read_manifest(manifest_path)
     assert len(records) == 4
     assert any(r["excluded"] for r in records)
@@ -153,7 +153,7 @@ def test_every_manifest_record_has_a_valid_non_empty_split_assignment(
 ) -> None:
     images = _build_image_tree(tmp_path, n_per_class=2)
     cfg = _minimal_cfg(images, tmp_path / "out", tmp_path / "artifacts", run_label="s4")
-    manifest_path = etl_flow(cfg)
+    manifest_path = etl_flow(cfg).manifest_path
     records = _read_manifest(manifest_path)
     valid_splits = {"train", "val", "test"}
     for rec in records:
@@ -165,7 +165,7 @@ def test_all_records_in_the_same_run_share_the_same_manifest_id(
 ) -> None:
     images = _build_image_tree(tmp_path, n_per_class=2)
     cfg = _minimal_cfg(images, tmp_path / "out", tmp_path / "artifacts", run_label="s5")
-    manifest_path = etl_flow(cfg)
+    manifest_path = etl_flow(cfg).manifest_path
     records = _read_manifest(manifest_path)
     ids = {r["manifest_id"] for r in records}
     assert len(ids) == 1
@@ -176,8 +176,8 @@ def test_running_pipeline_twice_with_identical_config_is_idempotent(
 ) -> None:
     images = _build_image_tree(tmp_path, n_per_class=2)
     cfg = _minimal_cfg(images, tmp_path / "out", tmp_path / "artifacts", run_label="s6")
-    path1 = etl_flow(cfg)
-    path2 = etl_flow(cfg)
+    path1 = etl_flow(cfg).manifest_path
+    path2 = etl_flow(cfg).manifest_path
     assert path1 == path2
     assert len(_read_manifest(path1)) == len(_read_manifest(path2))
 
@@ -204,7 +204,7 @@ def test_passing_resume_manifest_path_skips_re_processing_and_returns_consistent
     cfg_first = _minimal_cfg(
         images, tmp_path / "out", tmp_path / "artifacts", run_label="s8"
     )
-    first_manifest = etl_flow(cfg_first)
+    first_manifest = etl_flow(cfg_first).manifest_path
     first_records = _read_manifest(first_manifest)
 
     cfg_resume = _minimal_cfg(
@@ -214,7 +214,7 @@ def test_passing_resume_manifest_path_skips_re_processing_and_returns_consistent
         run_label="s8",
         resume_from_manifest=first_manifest,
     )
-    resumed_manifest = etl_flow(cfg_resume)
+    resumed_manifest = etl_flow(cfg_resume).manifest_path
     resumed_records = _read_manifest(resumed_manifest)
 
     assert len(resumed_records) == len(first_records)
@@ -229,7 +229,7 @@ def test_build_shards_task_accepts_storage_options(tmp_path: Path) -> None:
 
     images = _build_image_tree(tmp_path, n_per_class=2)
     cfg = _minimal_cfg(images, tmp_path / "out", tmp_path / "artifacts", run_label="c2")
-    manifest_path = etl_flow(cfg)
+    manifest_path = etl_flow(cfg).manifest_path
 
     result = build_shards_task(
         manifest_path,
