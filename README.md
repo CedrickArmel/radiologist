@@ -105,11 +105,13 @@ uv run --active python -m radiologist.core.train \
 Training already logged both ONNX exports (deterministic + MC-Dropout) as W&B artifacts. Link them into a registry collection:
 
 ```bash
-radiologist-registry promote entity/project/model-artifact \
+radiologist registry promote entity/project/model-artifact \
     --run-id wandb-run-id \
     --det-collection chest-xray-classifier \
     --mcd-collection chest-xray-classifier-mcd
 ```
+
+This emits a keyed record (`det_qualified_name=... mcd_qualified_name=... alias=...`) on stdout — pass `--output json` for a single parseable JSON object.
 
 This resolves the deterministic artifact by `run_id` and the MC-Dropout artifact by the `{run_id}-mcd` convention, then links both into their collections under the same alias — `production` if neither collection has one yet, `staging` otherwise.
 
@@ -126,7 +128,7 @@ result = WandbRegistry().promote(
 )
 ```
 
-See [`radiologist-registry/README.md`](radiologist-registry/README.md) for the full CLI reference (`push`, `pull`, `resolve`, `list`, `alias`, `transition-to-production`).
+See [`docs/reference/cli-registry.md`](docs/reference/cli-registry.md) for the full `radiologist registry` CLI reference (`push`, `pull`, `resolve`, `list`, `alias`, `transition-to-production`).
 
 ### 5 — Run the test suite
 
