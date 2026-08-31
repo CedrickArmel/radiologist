@@ -37,5 +37,7 @@
 - [Worktree shell chaining blocked](feedback_worktree_shell_chaining_blocked.md) — worktree-isolated Bash sandbox rejects any `&&`/`;`/`$VAR` shell line; use single flat commands with an inline `VAR=val /abs/bin` prefix instead of `pyenv activate`/`eval`
 - [cz uv provider cwd-relative lockfile](feedback_cz_uv_provider_cwd_relative_lockfile.md) — commitizen's `uv` version provider resolves `uv.lock`/`pyproject.toml` against cwd only; bumping a workspace member from its own dir needs a symlinked `uv.lock`
 - [Worktree scratch-clone shares gitdir](feedback_worktree_scratch_clone_shares_gitdir.md) — never `cp -r` a git worktree for a git sandbox; its `.git` is a pointer file to the shared repo, so commits/tags there pollute the real repo's refs
+- [Prefect broken local server, use .fn bypass](feedback_prefect_broken_local_server_use_fn_bypass.md) — local ephemeral Prefect API is broken (Starlette mismatch), real Cloud creds present in env; use `.fn` + stub artifact calls to test real business logic
+- [CLI run() env var must restore](feedback_cli_run_env_var_must_restore.md) — a group's `run(argv)` setting `RADIOLOGIST_OUTPUT` for a `@hydra.main` entry point must save/restore it in `finally`, or it leaks across the whole pytest session
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
