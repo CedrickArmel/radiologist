@@ -68,6 +68,7 @@ except ImportError as ex:  # pragma: no cover
     _PREFECT_IMPORT_ERROR: str = str(ex)
     INPUTS = None  # type: ignore[assignment]
 
+from radiologist.etl.models import EtlResult  # noqa: E402
 from radiologist.etl.ops import (  # noqa: E402
     _apply_filters,
     _assign_splits,
@@ -285,14 +286,16 @@ def _haralick_list(cfg_node: object, key: str) -> list | None:
 
 
 @flow
-def etl_flow(cfg: DictConfig) -> str:
+def etl_flow(cfg: DictConfig) -> EtlResult:
     """Run the full ETL pipeline: stats → filter → split → manifest → (shards).
 
     Args:
         cfg: Hydra DictConfig with all pipeline parameters.
 
     Returns:
-        Path to the final JSONL manifest file.
+        An :class:`~radiologist.etl.models.EtlResult` carrying the run id
+        used to name every artifact and the path to the final JSONL
+        manifest file.
     """
     if not _PREFECT_AVAILABLE:
         logger.warning(
@@ -362,4 +365,4 @@ def etl_flow(cfg: DictConfig) -> str:
             storage_options=storage_options,
         )
 
-    return manifest_path
+    return EtlResult(run_id=run_id, manifest_path=manifest_path)
