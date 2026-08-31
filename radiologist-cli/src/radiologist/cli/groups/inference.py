@@ -25,17 +25,17 @@
 Commands: predict, explain, uncertainty, serve. Grammar carried over
 verbatim from the deleted
 ``radiologist-inference/src/radiologist/inference/cli.py``. Bodies route
-their keyed records through :func:`radiologist.utils.cli.emit` and map
-raised exceptions to process exit codes via
-:func:`radiologist.utils.cli.exit_code_for`.
+their keyed records through :func:`radiologist.utils.cli.emit`, map raised
+exceptions to process exit codes via :func:`radiologist.utils.cli.exit_code_for`,
+and use the repo-wide :func:`radiologist.cli.errors.exit_on_error` decorator.
 """
 
-import functools
-from typing import Any, Callable, List, Optional, TypeVar
+from typing import List, Optional
 
 import numpy as np
 import typer
 
+from radiologist.cli.errors import exit_on_error
 from radiologist.inference import optional as _inference_optional
 from radiologist.inference import verbs
 from radiologist.inference.app import create_app
@@ -44,8 +44,6 @@ from radiologist.utils.cli import emit, exit_code_for
 app = typer.Typer(name="infer", add_completion=False)
 
 __all__ = ["app", "run"]
-
-F = TypeVar("F", bound=Callable[..., None])
 
 _SERVE_EXTRA_MISSING_MSG = (
     "The 'serve' extra is required to use the serve command. "
@@ -61,28 +59,8 @@ def _parse_int_list(value: Optional[str]) -> Optional[List[int]]:
     return [int(part) for part in value.split(",")]
 
 
-def _exit_on_error(func: F) -> F:
-    """Wrap a command so an unhandled exception becomes a clean typer.Exit.
-
-    Local to this group — the repo-wide ``exit_on_error`` decorator in
-    ``radiologist.cli.errors`` is owned by a sibling issue and still a stub.
-    """
-
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> None:
-        try:
-            func(*args, **kwargs)
-        except typer.Exit:
-            raise
-        except Exception as exc:
-            typer.echo(f"Error: {exc}", err=True)
-            raise typer.Exit(code=exit_code_for(exc))
-
-    return wrapper  # type: ignore[return-value]
-
-
 @app.command()
-@_exit_on_error
+@exit_on_error
 def predict(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
@@ -153,7 +131,7 @@ def predict(
 
 
 @app.command()
-@_exit_on_error
+@exit_on_error
 def explain(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
@@ -232,7 +210,7 @@ def explain(
 
 
 @app.command()
-@_exit_on_error
+@exit_on_error
 def uncertainty(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
@@ -311,7 +289,7 @@ def uncertainty(
 
 
 @app.command()
-@_exit_on_error
+@exit_on_error
 def serve(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to the deterministic ONNX model."
