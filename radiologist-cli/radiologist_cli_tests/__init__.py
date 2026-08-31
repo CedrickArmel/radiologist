@@ -19,33 +19,3 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-from __future__ import annotations
-
-import re
-import subprocess
-import sys
-from pathlib import Path
-
-ETL_ROOT = Path(__file__).resolve().parents[1]
-PYPROJECT_PATH = ETL_ROOT / "pyproject.toml"
-
-
-def test_console_script_entry_point_targets_hydra_main():
-    content = PYPROJECT_PATH.read_text()
-    match = re.search(r'^radiologist-etl\s*=\s*"([^"]+)"', content, flags=re.MULTILINE)
-
-    assert match is not None
-    assert match.group(1) == "radiologist.etl.prefect_pipelines:main"
-
-
-def test_console_script_help_composes_and_exits_zero():
-    result = subprocess.run(
-        [sys.executable, "-m", "radiologist.etl.prefect_pipelines", "--help"],
-        cwd=ETL_ROOT,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert "Powered by Hydra" in result.stdout

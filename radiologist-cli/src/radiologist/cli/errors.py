@@ -20,31 +20,28 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Optional third-party import guards shared across the registry package.
+"""Repo-wide command error handling.
 
-Wraps the `wandb` import in `try/except ImportError` so the package imports
-cleanly without the extra installed; callers that need the real SDK invoke
-`_guard_wandb()` first to fail with a clear message.
+Single definition replacing the two private ``_exit_on_error`` copies deleted
+from ``radiologist-registry/src/radiologist/registry/cli.py`` and
+``radiologist-inference/src/radiologist/inference/cli.py`` by the skeleton
+issue that introduced this package.
 """
 
-try:
-    import wandb as _wandb  # type: ignore[import-untyped]
-except ImportError:
-    _wandb = None  # type: ignore[assignment]
+from typing import Callable, TypeVar
 
-_WANDB_MISSING_MSG = (
-    "wandb is required for registry operations. "
-    "Install with: pip install 'radiologist-registry[wandb]'"
-)
+F = TypeVar("F", bound=Callable[..., None])
 
-_MODEL_ARTIFACT_TYPE = "model"
+__all__ = ["exit_on_error"]
 
 
-def _guard_wandb() -> None:
-    """Raise a clear error if the `wandb` extra is not installed.
+def exit_on_error(func: F) -> F:
+    """Wrap a CLI command so an unhandled exception becomes a clean exit.
 
-    Raises:
-        RuntimeError: If `wandb` could not be imported.
+    Args:
+        func: The command function to wrap.
+
+    Returns:
+        The wrapped function.
     """
-    if _wandb is None:
-        raise RuntimeError(_WANDB_MISSING_MSG)
+    raise NotImplementedError

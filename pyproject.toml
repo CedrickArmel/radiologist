@@ -34,20 +34,14 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["radiologist-core[all]", "radiologist-cli"]
 
 [project.optional-dependencies]
-all = [
-    "radiologist-core[all]",
-    "radiologist-etl[all]",
-    "radiologist-inference[all]",
-    "radiologist-registry[all]",
-    "radiologist-utils[all]",
-]
+all = ["radiologist-cli[all]", "radiologist-utils[all]"]
 core = ["radiologist-core[all]"]
-etl = ["radiologist-etl[all]"]
-inference = ["radiologist-inference[all]"]
-registry = ["radiologist-registry[all]"]
+etl = ["radiologist-cli[etl]"]
+inference = ["radiologist-cli[inference]"]
+registry = ["radiologist-cli[registry]"]
 utils = ["radiologist-utils[all]"]
 
 [tool.commitizen]
@@ -141,11 +135,13 @@ include = [
     "radiologist-core/src",
     "radiologist-inference/src",
     "radiologist-registry/src",
+    "radiologist-cli/src",
     "radiologist-core/radiologist_core_tests",
     "radiologist-etl/radiologist_etl_tests",
     "radiologist-inference/radiologist_inference_tests",
     "radiologist-registry/radiologist_registry_tests",
     "radiologist-utils/radiologist_utils_tests",
+    "radiologist-cli/radiologist_cli_tests",
 ]
 exclude = ["**/__pycache__"]
 # Cross-package imports (radiologist.core importing radiologist.utils, etc.)
@@ -160,6 +156,7 @@ testpaths = [
     "radiologist-inference/radiologist_inference_tests",
     "radiologist-registry/radiologist_registry_tests",
     "radiologist-utils/radiologist_utils_tests",
+    "radiologist-cli/radiologist_cli_tests",
     "scripts_tests",
 ]
 addopts = [
@@ -181,6 +178,7 @@ members = [
     "radiologist-core",
     "radiologist-inference",
     "radiologist-registry",
+    "radiologist-cli",
 ]
 
 [tool.uv.sources]
@@ -189,3 +187,4 @@ radiologist-etl = { workspace = true }
 radiologist-core = { workspace = true }
 radiologist-inference = { workspace = true }
 radiologist-registry = { workspace = true }
+radiologist-cli = { workspace = true }

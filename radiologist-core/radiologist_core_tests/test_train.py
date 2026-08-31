@@ -98,15 +98,15 @@ def test_train_public_api_symbols_importable() -> None:
         LModule,
         WandbDefineSummaryCallback,
         WebDatasetDataModule,
+        train,
     )
 
 
 def test_train_module_importable() -> None:
-    """train and main are importable from radiologist.core.train."""
-    from radiologist.core.train import main, train  # noqa: F401
+    """train is importable from radiologist.core.train."""
+    from radiologist.core.train import train  # noqa: F401
 
     assert callable(train)
-    assert callable(main)
 
 
 # ---------------------------------------------------------------------------

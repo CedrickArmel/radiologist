@@ -20,31 +20,39 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Optional third-party import guards shared across the registry package.
+"""``radiologist etl`` command group — Hydra-composed ETL pipeline entry point."""
 
-Wraps the `wandb` import in `try/except ImportError` so the package imports
-cleanly without the extra installed; callers that need the real SDK invoke
-`_guard_wandb()` first to fail with a clear message.
-"""
+from typing import List
 
-try:
-    import wandb as _wandb  # type: ignore[import-untyped]
-except ImportError:
-    _wandb = None  # type: ignore[assignment]
+import hydra
+from omegaconf import DictConfig
 
-_WANDB_MISSING_MSG = (
-    "wandb is required for registry operations. "
-    "Install with: pip install 'radiologist-registry[wandb]'"
+__all__ = ["etl_main", "run"]
+
+
+@hydra.main(
+    config_path="pkg://radiologist.etl.conf",
+    config_name="etl",
+    version_base=None,
 )
+def etl_main(cfg: DictConfig) -> None:
+    """Hydra-composed entry point for the ``radiologist etl`` command group.
 
-_MODEL_ARTIFACT_TYPE = "model"
-
-
-def _guard_wandb() -> None:
-    """Raise a clear error if the `wandb` extra is not installed.
-
-    Raises:
-        RuntimeError: If `wandb` could not be imported.
+    Args:
+        cfg: fully composed Hydra ``DictConfig``, injected by the
+            ``@hydra.main`` decorator — never passed explicitly by callers.
     """
-    if _wandb is None:
-        raise RuntimeError(_WANDB_MISSING_MSG)
+    raise NotImplementedError
+
+
+def run(argv: List[str]) -> int:
+    """Run the ``etl`` group with ``argv`` as the effective ``sys.argv[1:]``.
+
+    Args:
+        argv: Arguments forwarded from the dispatcher, after the ``etl``
+            group token has been stripped.
+
+    Returns:
+        The process exit code.
+    """
+    raise NotImplementedError

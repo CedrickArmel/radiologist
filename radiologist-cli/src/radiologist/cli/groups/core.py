@@ -20,31 +20,42 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Optional third-party import guards shared across the registry package.
+"""``radiologist core`` command group — Hydra-composed training entry point."""
 
-Wraps the `wandb` import in `try/except ImportError` so the package imports
-cleanly without the extra installed; callers that need the real SDK invoke
-`_guard_wandb()` first to fail with a clear message.
-"""
+from typing import List, Optional
 
-try:
-    import wandb as _wandb  # type: ignore[import-untyped]
-except ImportError:
-    _wandb = None  # type: ignore[assignment]
+import hydra
+from omegaconf import DictConfig
 
-_WANDB_MISSING_MSG = (
-    "wandb is required for registry operations. "
-    "Install with: pip install 'radiologist-registry[wandb]'"
+__all__ = ["train_main", "run"]
+
+
+@hydra.main(
+    config_path="pkg://radiologist.core.configs",
+    config_name="train",
+    version_base="1.3",
 )
+def train_main(cfg: DictConfig) -> Optional[float]:
+    """Hydra-composed entry point for the ``radiologist core`` command group.
 
-_MODEL_ARTIFACT_TYPE = "model"
+    Args:
+        cfg: fully composed Hydra ``DictConfig``, injected by the
+            ``@hydra.main`` decorator — never passed explicitly by callers.
 
-
-def _guard_wandb() -> None:
-    """Raise a clear error if the `wandb` extra is not installed.
-
-    Raises:
-        RuntimeError: If `wandb` could not be imported.
+    Returns:
+        The scalar value of ``cfg.optimized_metric``, or ``None`` when unset.
     """
-    if _wandb is None:
-        raise RuntimeError(_WANDB_MISSING_MSG)
+    raise NotImplementedError
+
+
+def run(argv: List[str]) -> int:
+    """Run the ``core`` group with ``argv`` as the effective ``sys.argv[1:]``.
+
+    Args:
+        argv: Arguments forwarded from the dispatcher, after the ``core``
+            group token has been stripped.
+
+    Returns:
+        The process exit code.
+    """
+    raise NotImplementedError
