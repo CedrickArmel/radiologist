@@ -28,7 +28,13 @@ from ``radiologist-registry/src/radiologist/registry/cli.py`` and
 issue that introduced this package.
 """
 
-from typing import Callable, TypeVar
+import functools
+import sys
+from typing import Any, Callable, TypeVar
+
+import typer
+
+from radiologist.utils.cli import exit_code_for
 
 F = TypeVar("F", bound=Callable[..., None])
 
@@ -44,4 +50,13 @@ def exit_on_error(func: F) -> F:
     Returns:
         The wrapped function.
     """
-    raise NotImplementedError
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - intentional catch-all boundary
+            print(f"Error: {exc}", file=sys.stderr)
+            raise typer.Exit(code=exit_code_for(exc)) from exc
+
+    return wrapper  # type: ignore[return-value]

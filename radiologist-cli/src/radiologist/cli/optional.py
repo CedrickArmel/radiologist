@@ -70,4 +70,20 @@ def require(extra: str) -> ModuleType:
             ``inference`` -> module importability only), naming
             ``pip install 'radiologist-cli[<extra>]'``.
     """
-    raise NotImplementedError
+    hint = f"pip install 'radiologist-cli[{extra}]'"
+    module = {"etl": _etl, "registry": _registry, "inference": _inference}.get(extra)
+    if module is None:
+        raise RuntimeError(hint)
+
+    if extra == "etl":
+        from radiologist.etl import prefect_pipelines
+
+        if not prefect_pipelines._PREFECT_AVAILABLE:
+            raise RuntimeError(hint)
+    elif extra == "registry":
+        from radiologist.registry import optional as registry_optional
+
+        if registry_optional._wandb is None:
+            raise RuntimeError(hint)
+
+    return module
