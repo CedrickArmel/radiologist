@@ -201,6 +201,7 @@ def test_completed_run_emits_full_record_with_onnx_and_registry_fields(
     base_cfg, capsys
 ):
     import wandb
+
     from radiologist.cli.groups.core import train_main
 
     fake_run = MagicMock()
