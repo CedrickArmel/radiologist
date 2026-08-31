@@ -1,14 +1,18 @@
 # Registry CLI Reference
 
-`radiologist-registry` is a Typer-based CLI wrapping `WandbRegistry`. Every
-command constructs a `WandbRegistry()` internally — no separate wiring is
-required. Errors surface as `Error: {message}` on stderr with a non-zero
-exit code.
+`radiologist registry` is the registry command group of the unified
+`radiologist` Typer CLI, wrapping `WandbRegistry`. Every command constructs a
+`WandbRegistry()` internally — no separate wiring is required. Each command
+emits a single machine-readable record on stdout (`key=value` lines by
+default, or `--output json`/`--output yaml`); `list` emits one record per
+collection member. Errors surface as `Error: {message}` on stderr with a
+non-zero exit code (`2` when the referenced artifact does not exist, `1`
+otherwise).
 
-Install the CLI and W&B extras first:
+Install the CLI and registry extras first:
 
 ```bash
-pip install "radiologist-registry[cli,wandb]"
+pip install "radiologist-cli[registry]"
 ```
 
 ## Commands
@@ -16,7 +20,8 @@ pip install "radiologist-registry[cli,wandb]"
 ### `push`
 
 Open an ephemeral W&B run and log the deterministic and MC-Dropout ONNX
-artifacts produced by a training run.
+artifacts produced by a training run. Emits `det_qualified_name`,
+`mcd_qualified_name`, `run_id`.
 
 | Flag | Description |
 |---|---|
@@ -29,7 +34,7 @@ artifacts produced by a training run.
 | `--classes` | Ordered class labels the model predicts, repeatable. |
 
 ```bash
-radiologist-registry push \
+radiologist registry push \
   --det-path model.onnx --mcd-path model_mcd.onnx --run-id abc123 \
   --det-collection det-models --mcd-collection mcd-models \
   --input-shape 1 --input-shape 3 --input-shape 224 --input-shape 224 \
@@ -39,7 +44,7 @@ radiologist-registry push \
 ### `pull`
 
 Resolve (if any selector flag is given) then download an artifact, or treat
-`path` as a raw qualified artifact path.
+`path` as a raw qualified artifact path. Emits `local_path`.
 
 | Argument / Flag | Description |
 |---|---|
@@ -53,13 +58,13 @@ Resolve (if any selector flag is given) then download an artifact, or treat
 | `--include-sweeps` | Include sweep runs as eligible candidates. |
 
 ```bash
-radiologist-registry pull entity/project --local-dir ./models --run-id abc123
+radiologist registry pull entity/project --local-dir ./models --run-id abc123
 ```
 
 ### `resolve`
 
 Resolve a selector to a qualified artifact name and version, without
-downloading anything.
+downloading anything. Emits `qualified_name`, `version`.
 
 | Argument / Flag | Description |
 |---|---|
@@ -72,7 +77,7 @@ downloading anything.
 | `--include-sweeps` | Include sweep runs as eligible candidates. |
 
 ```bash
-radiologist-registry resolve entity/project --run-id abc123
+radiologist registry resolve entity/project --run-id abc123
 ```
 
 ### `promote`
@@ -80,7 +85,8 @@ radiologist-registry resolve entity/project --run-id abc123
 Link a run's deterministic and MC-Dropout artifacts to their collections.
 The shared alias is `production` unless either collection already has a
 `production` member, in which case it becomes `staging`. Prompts for
-confirmation unless `--force` is given.
+confirmation unless `--force` is given. Emits `det_qualified_name`,
+`mcd_qualified_name`, `alias`.
 
 | Argument / Flag | Description |
 |---|---|
@@ -91,7 +97,7 @@ confirmation unless `--force` is given.
 | `--force` | Skip the confirmation prompt. |
 
 ```bash
-radiologist-registry promote entity/project --run-id abc123 \
+radiologist registry promote entity/project --run-id abc123 \
   --det-collection det-models --mcd-collection mcd-models --force
 ```
 
@@ -99,7 +105,7 @@ radiologist-registry promote entity/project --run-id abc123 \
 
 Flip the `staging` member of each collection to `production`. Prompts for
 confirmation unless `--force` is given. Raises if either collection has no
-`staging` member.
+`staging` member. Emits `det_qualified_name`, `mcd_qualified_name`, `alias`.
 
 | Flag | Description |
 |---|---|
@@ -108,13 +114,14 @@ confirmation unless `--force` is given. Raises if either collection has no
 | `--force` | Skip the confirmation prompt. |
 
 ```bash
-radiologist-registry transition-to-production \
+radiologist registry transition-to-production \
   --det-collection det-models --mcd-collection mcd-models --force
 ```
 
 ### `list`
 
-List every member of a collection with its current aliases.
+List every member of a collection with its current aliases. Emits one
+record per member: `qualified_name`, `aliases`.
 
 | Flag | Description |
 |---|---|
@@ -122,23 +129,23 @@ List every member of a collection with its current aliases.
 | `--collection` | Name of the collection to list. |
 
 ```bash
-radiologist-registry list --type model --collection det-models
+radiologist registry list --type model --collection det-models
 ```
 
 ### `alias`
 
 Manage the alias list of a single artifact directly.
 
-| Subcommand | Arguments | Description |
-|---|---|---|
-| `alias get <artifact_path>` | `artifact_path` — fully qualified artifact path | Print the artifact's current aliases. |
-| `alias set <artifact_path> <alias>` | `artifact_path`, `alias` | Add an alias to the artifact. |
-| `alias remove <artifact_path> <alias>` | `artifact_path`, `alias` | Remove an alias from the artifact. |
+| Subcommand | Arguments | Emits | Description |
+|---|---|---|---|
+| `alias get <artifact_path>` | `artifact_path` — fully qualified artifact path | `artifact_path`, `aliases` | Print the artifact's current aliases. |
+| `alias set <artifact_path> <alias>` | `artifact_path`, `alias` | `artifact_path`, `alias` | Add an alias to the artifact. |
+| `alias remove <artifact_path> <alias>` | `artifact_path`, `alias` | `artifact_path`, `alias` | Remove an alias from the artifact. |
 
 ```bash
-radiologist-registry alias set entity/project/model-abc123:best staging
-radiologist-registry alias get entity/project/model-abc123:best
-radiologist-registry alias remove entity/project/model-abc123:best staging
+radiologist registry alias set entity/project/model-abc123:best staging
+radiologist registry alias get entity/project/model-abc123:best
+radiologist registry alias remove entity/project/model-abc123:best staging
 ```
 
 ## Python API equivalent
