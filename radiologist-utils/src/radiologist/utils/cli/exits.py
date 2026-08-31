@@ -20,38 +20,35 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Machine-readable output and exit-code taxonomy for ``radiologist`` CLIs.
+"""Process exit-code taxonomy shared by every ``radiologist`` CLI command.
 
-``emit()`` is the single primitive every CLI command calls to produce its
-final stdout record — supports ``kv`` (default), ``json``, and ``yaml``
-formats. ``exit_code_for()`` maps an already-raised exception to a process
-exit code. Implementation lives in :mod:`radiologist.utils.cli.output` and
-:mod:`radiologist.utils.cli.exits`; this module only re-exports the public
-surface.
+The mapping is deliberately driven by the exception type callers already
+raise (e.g. ``FileNotFoundError`` for a missing artifact/model/image) —
+no new exception class is introduced and no existing ``raise`` site changes.
 """
 
-from radiologist.utils.cli.exits import (
-    EXIT_ERROR,
-    EXIT_NOT_FOUND,
-    EXIT_OK,
-    exit_code_for,
-)
-from radiologist.utils.cli.output import (
-    DEFAULT_OUTPUT_FORMAT,
-    OUTPUT_ENV_VAR,
-    OUTPUT_FORMATS,
-    emit,
-    resolve_format,
-)
+EXIT_OK: int = 0
+EXIT_ERROR: int = 1
+EXIT_NOT_FOUND: int = 2
 
 __all__ = [
-    "OUTPUT_FORMATS",
-    "DEFAULT_OUTPUT_FORMAT",
-    "OUTPUT_ENV_VAR",
     "EXIT_OK",
     "EXIT_ERROR",
     "EXIT_NOT_FOUND",
-    "resolve_format",
-    "emit",
     "exit_code_for",
 ]
+
+
+def exit_code_for(exc: BaseException) -> int:
+    """Map an exception to a process exit code.
+
+    Args:
+        exc: The exception raised by a command.
+
+    Returns:
+        :data:`EXIT_NOT_FOUND` for ``FileNotFoundError``, :data:`EXIT_ERROR`
+        for any other exception.
+    """
+    if isinstance(exc, FileNotFoundError):
+        return EXIT_NOT_FOUND
+    return EXIT_ERROR
