@@ -9,7 +9,7 @@ repos:
           - --license-filepath
           - LICENSE
   - repo: https://github.com/pycqa/isort
-    rev: "9.0.0a3"
+    rev: "9.0.1"
     hooks:
       - id: isort
         name: isort (python)
@@ -43,13 +43,13 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v2.1.0"
+    rev: "v2.3.1"
     hooks:
       - id: mypy
         args: [--config-file, pyproject.toml]
         exclude: ".*/tests/(conftest|__init__)\\.py$"
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.16.4
+    rev: v4.18.0
     hooks:
       - id: commitizen
         stages: [commit-msg]
