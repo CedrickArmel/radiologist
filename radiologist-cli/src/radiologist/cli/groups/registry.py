@@ -38,7 +38,7 @@ from typing import List, Optional
 
 import typer
 
-from radiologist.cli.errors import exit_on_error
+from radiologist.cli.errors import exit_on_error, run_typer_app
 from radiologist.registry import ExportResult, WandbRegistry
 from radiologist.registry import optional as _registry_optional
 from radiologist.registry.selector import resolve_selector, selector_from_flags
@@ -331,17 +331,4 @@ def run(argv: List[str]) -> int:
     Returns:
         The process exit code.
     """
-    try:
-        result = app(args=argv, standalone_mode=False)
-    except typer.Abort:
-        return 1
-    except Exception as exc:
-        # Click/Typer's UsageError/ClickException family — matched
-        # structurally rather than by type since typer vendors its own
-        # click fork (``typer._click``) distinct from the ``click`` package.
-        show = getattr(exc, "show", None)
-        if callable(show):
-            show()
-            return getattr(exc, "exit_code", 1)
-        raise
-    return result if isinstance(result, int) else 0
+    return run_typer_app(app, argv, prog_name="radiologist registry")

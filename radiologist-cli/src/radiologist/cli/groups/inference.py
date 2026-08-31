@@ -25,9 +25,9 @@
 Commands: predict, explain, uncertainty, serve. Grammar carried over
 verbatim from the deleted
 ``radiologist-inference/src/radiologist/inference/cli.py``. Bodies route
-their keyed records through :func:`radiologist.utils.cli.emit`, map raised
-exceptions to process exit codes via :func:`radiologist.utils.cli.exit_code_for`,
-and use the repo-wide :func:`radiologist.cli.errors.exit_on_error` decorator.
+their keyed records through :func:`radiologist.utils.cli.emit`, and use the
+repo-wide :func:`radiologist.cli.errors.exit_on_error` decorator and
+:func:`radiologist.cli.errors.run_typer_app` runner.
 """
 
 from typing import List, Optional
@@ -35,11 +35,11 @@ from typing import List, Optional
 import numpy as np
 import typer
 
-from radiologist.cli.errors import exit_on_error
+from radiologist.cli.errors import exit_on_error, run_typer_app
 from radiologist.inference import optional as _inference_optional
 from radiologist.inference import verbs
 from radiologist.inference.app import create_app
-from radiologist.utils.cli import emit, exit_code_for
+from radiologist.utils.cli import emit
 
 app = typer.Typer(name="infer", add_completion=False)
 
@@ -385,23 +385,4 @@ def run(argv: List[str]) -> int:
     Returns:
         The process exit code.
     """
-    from typer.main import get_command
-
-    command = get_command(app)
-    try:
-        exit_code = command.main(
-            args=argv, prog_name="radiologist infer", standalone_mode=False
-        )
-    except SystemExit as exc:
-        return exc.code if isinstance(exc.code, int) else 1
-    except Exception as exc:
-        # Click/Typer's UsageError/Abort/ClickException family — matched
-        # structurally rather than by type since typer vendors its own
-        # click fork (``typer._click``) distinct from the ``click`` package.
-        show = getattr(exc, "show", None)
-        if callable(show):
-            show()
-            return getattr(exc, "exit_code", 1)
-        typer.echo(f"Error: {exc}", err=True)
-        return exit_code_for(exc)
-    return exit_code if isinstance(exit_code, int) else 0
+    return run_typer_app(app, argv, prog_name="radiologist infer")
