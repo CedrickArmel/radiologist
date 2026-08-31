@@ -335,4 +335,13 @@ def run(argv: List[str]) -> int:
         result = app(args=argv, standalone_mode=False)
     except typer.Abort:
         return 1
+    except Exception as exc:
+        # Click/Typer's UsageError/ClickException family — matched
+        # structurally rather than by type since typer vendors its own
+        # click fork (``typer._click``) distinct from the ``click`` package.
+        show = getattr(exc, "show", None)
+        if callable(show):
+            show()
+            return getattr(exc, "exit_code", 1)
+        raise
     return result if isinstance(result, int) else 0
