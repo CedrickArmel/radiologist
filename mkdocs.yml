@@ -14,7 +14,8 @@ plugins:
       handlers:
         python:
           paths: [radiologist-utils/src, radiologist-core/src, radiologist-etl/src,
-                  radiologist-inference/src, radiologist-registry/src]
+                  radiologist-inference/src, radiologist-registry/src,
+                  radiologist-cli/src]
           options:
             docstring_style: google
             show_source: true

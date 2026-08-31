@@ -39,9 +39,6 @@ all = [
     "prefect>=3.7.0"
 ]
 
-[project.scripts]
-radiologist-etl = "radiologist.etl.prefect_pipelines:main"
-
 [project.urls]
 Homepage = "https://github.com/CedrickArmel/radiologist"
 Repository = "https://github.com/CedrickArmel/radiologist"

@@ -10,6 +10,7 @@ PKG_ETL       := radiologist-etl
 PKG_UTILS     := radiologist-utils
 PKG_INFERENCE := radiologist-inference
 PKG_REGISTRY  := radiologist-registry
+PKG_CLI       := radiologist-cli
 
 PYTEST_FLAGS ?= -q
 
@@ -130,7 +131,7 @@ endef
         uv pyenv venv remove-tf tpuenvs gpuenvs reload \
         sync sync-all dev-install \
         build build-all \
-        test test-core test-etl test-utils test-inference test-registry \
+        test test-core test-etl test-utils test-inference test-registry test-cli \
         lint format type-check \
         docs-install docs-serve docs-build docstrings \
         clean set-gpg-relay devcontainer-post-create \
@@ -260,13 +261,14 @@ build:  ## build a single distribution — usage: make build PKG=radiologist-cor
 	@test -n "$(PKG)" || (echo "PKG is required, e.g. make build PKG=radiologist-core" && exit 1)
 	@uv build --package $(PKG) --out-dir dist
 
-build-all:  ## build all six distributions
+build-all:  ## build all seven distributions
 	@uv build --package radiologist --out-dir dist
 	@uv build --package radiologist-core --out-dir dist
 	@uv build --package radiologist-etl --out-dir dist
 	@uv build --package radiologist-inference --out-dir dist
 	@uv build --package radiologist-registry --out-dir dist
 	@uv build --package radiologist-utils --out-dir dist
+	@uv build --package radiologist-cli --out-dir dist
 
 # --------------------------------------------------------------------------- #
 #  Tests                                                                       #
@@ -290,6 +292,9 @@ test-inference:  ## run radiologist-inference tests only
 test-registry:  ## run radiologist-registry tests only
 	@uv run --active pytest $(PKG_REGISTRY)/radiologist_registry_tests $(PYTEST_FLAGS)
 
+test-cli:  ## run radiologist-cli tests only
+	@uv run --active pytest $(PKG_CLI)/radiologist_cli_tests $(PYTEST_FLAGS)
+
 # --------------------------------------------------------------------------- #
 #  Code quality                                                                #
 # --------------------------------------------------------------------------- #
@@ -302,7 +307,7 @@ format:  ## run black + isort in-place
 	@uv run --active isort .
 
 type-check:  ## run mypy across all packages
-	@uv run --active mypy $(PKG_CORE)/src $(PKG_ETL)/src $(PKG_UTILS)/src $(PKG_INFERENCE)/src $(PKG_REGISTRY)/src
+	@uv run --active mypy $(PKG_CORE)/src $(PKG_ETL)/src $(PKG_UTILS)/src $(PKG_INFERENCE)/src $(PKG_REGISTRY)/src $(PKG_CLI)/src
 
 # --------------------------------------------------------------------------- #
 #  Documentation                                                               #

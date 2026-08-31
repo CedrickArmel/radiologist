@@ -32,6 +32,7 @@ for _pkg in (
     "radiologist-core",
     "radiologist-inference",
     "radiologist-registry",
+    "radiologist-cli",
 ):
     sys.path.insert(0, str(_ROOT / _pkg / "src"))
 

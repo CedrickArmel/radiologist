@@ -24,15 +24,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
-import hydra
 from omegaconf import DictConfig
 
 from radiologist.utils.ml import (
     RankedLogger,
-    extras,
-    get_metric_value,
     instantiate_callbacks,
     instantiate_loggers,
     log_hyperparameters,
@@ -141,40 +138,3 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         log_hyperparameters(object_dict)
 
     return metric_dict, object_dict
-
-
-@hydra.main(version_base="1.3", config_path="configs", config_name="train")
-def main(cfg: DictConfig) -> Optional[float]:
-    """Hydra-composed entry point for training and evaluation runs.
-
-    Decorated with ``@hydra.main(version_base="1.3", config_path="configs",
-    config_name="train")``: Hydra resolves ``configs/train.yaml`` (or the
-    config selected via ``--config-name``), merges in any group overrides and
-    ``key=value`` overrides passed on the command line, changes the working
-    directory to the run's output directory, and instantiates the composed
-    tree into ``cfg`` before this function runs. Applies cross-cutting
-    ``extras`` (warning filters, tag enforcement, config printing), delegates
-    to :func:`train`, then extracts the metric named by
-    ``cfg.optimized_metric``.
-
-    Args:
-        cfg: fully composed Hydra ``DictConfig``, injected by the
-            ``@hydra.main`` decorator — never passed explicitly by callers.
-
-    Returns:
-        The scalar value of ``cfg.optimized_metric`` read from the metrics
-        returned by :func:`train`, or ``None`` when ``optimized_metric`` is
-        unset or the metric was never logged. HPO frameworks that invoke this
-        entry point as their objective — Optuna's Hydra sweeper plugin or W&B
-        Sweeps — read this return value directly to score the trial; a
-        ``None`` return typically fails or skips the trial, so
-        ``optimized_metric`` must name a metric that is always logged for the
-        stages that run.
-    """
-    extras(cfg)
-    metrics, _ = train(cfg)
-    return get_metric_value(metrics, cfg.get("optimized_metric"))
-
-
-if __name__ == "__main__":
-    main()

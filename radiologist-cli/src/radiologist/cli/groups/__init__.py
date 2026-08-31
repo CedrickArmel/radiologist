@@ -20,31 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Optional third-party import guards shared across the registry package.
+"""Command-group modules: etl, core, registry, infer.
 
-Wraps the `wandb` import in `try/except ImportError` so the package imports
-cleanly without the extra installed; callers that need the real SDK invoke
-`_guard_wandb()` first to fail with a clear message.
+Every group module exposes ``run(argv: List[str]) -> int``. Typer-backed
+groups (``registry``, ``inference``) additionally expose ``app``. Hydra-backed
+groups (``etl``, ``core``) additionally expose their decorated entry point.
 """
-
-try:
-    import wandb as _wandb  # type: ignore[import-untyped]
-except ImportError:
-    _wandb = None  # type: ignore[assignment]
-
-_WANDB_MISSING_MSG = (
-    "wandb is required for registry operations. "
-    "Install with: pip install 'radiologist-registry[wandb]'"
-)
-
-_MODEL_ARTIFACT_TYPE = "model"
-
-
-def _guard_wandb() -> None:
-    """Raise a clear error if the `wandb` extra is not installed.
-
-    Raises:
-        RuntimeError: If `wandb` could not be imported.
-    """
-    if _wandb is None:
-        raise RuntimeError(_WANDB_MISSING_MSG)

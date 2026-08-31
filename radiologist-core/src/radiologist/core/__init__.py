@@ -31,6 +31,7 @@ from radiologist.core.callbacks import (
 from radiologist.core.data import WebDatasetDataModule
 from radiologist.core.losses import FocalLoss
 from radiologist.core.module import LModule
+from radiologist.core.train import train
 
 __all__ = [
     "AttributionCallback",
@@ -38,6 +39,7 @@ __all__ = [
     "FocalLoss",
     "LModule",
     "OnnxExportCallback",
+    "train",
     "WandbDefineSummaryCallback",
     "WebDatasetDataModule",
 ]

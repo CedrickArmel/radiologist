@@ -28,7 +28,6 @@ import json
 import os
 
 import fsspec  # type: ignore[import-untyped]
-import hydra  # type: ignore[import-untyped]
 from omegaconf import DictConfig, OmegaConf
 
 import radiologist.utils.filesystem as fst
@@ -364,17 +363,3 @@ def etl_flow(cfg: DictConfig) -> str:
         )
 
     return manifest_path
-
-
-@hydra.main(config_path="conf", config_name="etl", version_base=None)
-def main(cfg: DictConfig) -> None:
-    """CLI entry point: run the full ETL pipeline from a Hydra config.
-
-    Args:
-        cfg: Hydra DictConfig populated from conf/etl.yaml and CLI overrides.
-    """
-    etl_flow(cfg)
-
-
-if __name__ == "__main__":
-    main()

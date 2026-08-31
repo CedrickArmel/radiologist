@@ -23,6 +23,7 @@ resolution-markers = [
 [manifest]
 members = [
     "radiologist",
+    "radiologist-cli",
     "radiologist-core",
     "radiologist-etl",
     "radiologist-inference",
@@ -5089,26 +5090,27 @@ wheels = [
 name = "radiologist"
 version = "0.1.0"
 source = { editable = "." }
+dependencies = [
+    { name = "radiologist-cli" },
+    { name = "radiologist-core", extra = ["all"] },
+]
 
 [package.optional-dependencies]
 all = [
-    { name = "radiologist-core", extra = ["all"] },
-    { name = "radiologist-etl", extra = ["all"] },
-    { name = "radiologist-inference", extra = ["all"] },
-    { name = "radiologist-registry", extra = ["all"] },
+    { name = "radiologist-cli", extra = ["all"] },
     { name = "radiologist-utils", extra = ["all"] },
 ]
 core = [
     { name = "radiologist-core", extra = ["all"] },
 ]
 etl = [
-    { name = "radiologist-etl", extra = ["all"] },
+    { name = "radiologist-cli", extra = ["etl"] },
 ]
 inference = [
-    { name = "radiologist-inference", extra = ["all"] },
+    { name = "radiologist-cli", extra = ["inference"] },
 ]
 registry = [
-    { name = "radiologist-registry", extra = ["all"] },
+    { name = "radiologist-cli", extra = ["registry"] },
 ]
 utils = [
     { name = "radiologist-utils", extra = ["all"] },
@@ -5143,14 +5145,13 @@ typing = [
 
 [package.metadata]
 requires-dist = [
-    { name = "radiologist-core", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-core" },
+    { name = "radiologist-cli", editable = "radiologist-cli" },
+    { name = "radiologist-cli", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-cli" },
+    { name = "radiologist-cli", extras = ["etl"], marker = "extra == 'etl'", editable = "radiologist-cli" },
+    { name = "radiologist-cli", extras = ["inference"], marker = "extra == 'inference'", editable = "radiologist-cli" },
+    { name = "radiologist-cli", extras = ["registry"], marker = "extra == 'registry'", editable = "radiologist-cli" },
+    { name = "radiologist-core", extras = ["all"], editable = "radiologist-core" },
     { name = "radiologist-core", extras = ["all"], marker = "extra == 'core'", editable = "radiologist-core" },
-    { name = "radiologist-etl", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-etl" },
-    { name = "radiologist-etl", extras = ["all"], marker = "extra == 'etl'", editable = "radiologist-etl" },
-    { name = "radiologist-inference", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-inference" },
-    { name = "radiologist-inference", extras = ["all"], marker = "extra == 'inference'", editable = "radiologist-inference" },
-    { name = "radiologist-registry", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-registry" },
-    { name = "radiologist-registry", extras = ["all"], marker = "extra == 'registry'", editable = "radiologist-registry" },
     { name = "radiologist-utils", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-utils" },
     { name = "radiologist-utils", extras = ["all"], marker = "extra == 'utils'", editable = "radiologist-utils" },
 ]
@@ -5180,6 +5181,50 @@ test = [
     { name = "pytest-mock", specifier = ">=3.0.0" },
 ]
 typing = [{ name = "mypy", specifier = ">=1.19.1" }]
+
+[[package]]
+name = "radiologist-cli"
+version = "0.1.0"
+source = { editable = "radiologist-cli" }
+dependencies = [
+    { name = "hydra-core" },
+    { name = "omegaconf" },
+    { name = "radiologist-core", extra = ["all"] },
+    { name = "radiologist-utils" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "radiologist-etl", extra = ["all"] },
+    { name = "radiologist-inference", extra = ["all"] },
+    { name = "radiologist-registry", extra = ["all"] },
+]
+etl = [
+    { name = "radiologist-etl", extra = ["all"] },
+]
+inference = [
+    { name = "radiologist-inference", extra = ["all"] },
+]
+registry = [
+    { name = "radiologist-registry", extra = ["all"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "hydra-core", specifier = ">=1.3.0" },
+    { name = "omegaconf", specifier = ">=2.3.0" },
+    { name = "radiologist-core", extras = ["all"], editable = "radiologist-core" },
+    { name = "radiologist-etl", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-etl" },
+    { name = "radiologist-etl", extras = ["all"], marker = "extra == 'etl'", editable = "radiologist-etl" },
+    { name = "radiologist-inference", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-inference" },
+    { name = "radiologist-inference", extras = ["all"], marker = "extra == 'inference'", editable = "radiologist-inference" },
+    { name = "radiologist-registry", extras = ["all"], marker = "extra == 'all'", editable = "radiologist-registry" },
+    { name = "radiologist-registry", extras = ["all"], marker = "extra == 'registry'", editable = "radiologist-registry" },
+    { name = "radiologist-utils", editable = "radiologist-utils" },
+    { name = "typer", specifier = ">=0.9.0" },
+]
+provides-extras = ["etl", "registry", "inference", "all"]
 
 [[package]]
 name = "radiologist-core"
@@ -5321,12 +5366,8 @@ all = [
     { name = "fastapi" },
     { name = "prometheus-client" },
     { name = "python-multipart" },
-    { name = "typer" },
     { name = "uvicorn" },
     { name = "wandb" },
-]
-cli = [
-    { name = "typer" },
 ]
 registry = [
     { name = "wandb" },
@@ -5350,14 +5391,12 @@ requires-dist = [
     { name = "python-multipart", marker = "extra == 'all'", specifier = ">=0.0.9" },
     { name = "python-multipart", marker = "extra == 'serve'", specifier = ">=0.0.9" },
     { name = "radiologist-registry", editable = "radiologist-registry" },
-    { name = "typer", marker = "extra == 'all'", specifier = ">=0.9.0" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.9.0" },
     { name = "uvicorn", marker = "extra == 'all'", specifier = ">=0.23.0" },
     { name = "uvicorn", marker = "extra == 'serve'", specifier = ">=0.23.0" },
     { name = "wandb", marker = "extra == 'all'", specifier = ">=0.27.0" },
     { name = "wandb", marker = "extra == 'registry'", specifier = ">=0.27.0" },
 ]
-provides-extras = ["all", "cli", "registry", "serve"]
+provides-extras = ["all", "registry", "serve"]
 
 [[package]]
 name = "radiologist-registry"
@@ -5366,11 +5405,7 @@ source = { editable = "radiologist-registry" }
 
 [package.optional-dependencies]
 all = [
-    { name = "typer" },
     { name = "wandb" },
-]
-cli = [
-    { name = "typer" },
 ]
 wandb = [
     { name = "wandb" },
@@ -5378,12 +5413,10 @@ wandb = [
 
 [package.metadata]
 requires-dist = [
-    { name = "typer", marker = "extra == 'all'", specifier = ">=0.9.0" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.9.0" },
     { name = "wandb", marker = "extra == 'all'", specifier = ">=0.27.0" },
     { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.27.0" },
 ]
-provides-extras = ["all", "cli", "wandb"]
+provides-extras = ["all", "wandb"]
 
 [[package]]
 name = "radiologist-utils"
@@ -5394,6 +5427,7 @@ dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pillow" },
+    { name = "pyyaml" },
     { name = "rich" },
 ]
 
@@ -5432,6 +5466,7 @@ requires-dist = [
     { name = "omegaconf", marker = "extra == 'all'", specifier = ">=2.3.0" },
     { name = "omegaconf", marker = "extra == 'ml'", specifier = ">=2.3.0" },
     { name = "pillow", specifier = ">=12.2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "torch", marker = "extra == 'all'", specifier = ">=2.12.0" },
     { name = "torch", marker = "extra == 'ml'", specifier = ">=2.12.0" },
