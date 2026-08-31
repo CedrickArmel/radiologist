@@ -42,6 +42,14 @@ class TestExtractOutputFlag:
         assert argv == ["registry", "resolve", "p"]
         assert fmt == "json"
 
+    def test_removes_short_flag_form_and_captures_format(self) -> None:
+        from radiologist.cli.main import extract_output_flag
+
+        argv, fmt = extract_output_flag(["-o", "json", "registry", "resolve", "p"])
+
+        assert argv == ["registry", "resolve", "p"]
+        assert fmt == "json"
+
     def test_leaves_argv_unchanged_and_returns_none_when_absent(self) -> None:
         from radiologist.cli.main import extract_output_flag
 

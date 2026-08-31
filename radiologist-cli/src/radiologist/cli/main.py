@@ -61,6 +61,8 @@ def _usage() -> str:
 def extract_output_flag(argv: List[str]) -> Tuple[List[str], Optional[str]]:
     """Pull the global ``--output``/``-o`` flag out of ``argv``.
 
+    Supports ``--output json``, ``-o json`` and ``--output=json`` forms.
+
     Args:
         argv: Raw command-line arguments (excluding the program name).
 
@@ -70,7 +72,7 @@ def extract_output_flag(argv: List[str]) -> Tuple[List[str], Optional[str]]:
     """
     result = list(argv)
     for index, token in enumerate(result):
-        if token == "--output" and index + 1 < len(result):
+        if token in ("--output", "-o") and index + 1 < len(result):
             fmt = result[index + 1]
             del result[index : index + 2]
             return result, fmt
