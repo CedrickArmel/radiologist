@@ -55,9 +55,9 @@ class TestRequire:
         self, monkeypatch
     ) -> None:
         from radiologist.cli.optional import require
-        from radiologist.etl import prefect_pipelines
+        from radiologist.etl import optional as etl_optional
 
-        monkeypatch.setattr(prefect_pipelines, "_PREFECT_AVAILABLE", False)
+        monkeypatch.setattr(etl_optional, "_PREFECT_AVAILABLE", False)
 
         with pytest.raises(RuntimeError) as excinfo:
             require("etl")

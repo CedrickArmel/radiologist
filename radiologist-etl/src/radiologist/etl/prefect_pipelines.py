@@ -31,42 +31,19 @@ import fsspec  # type: ignore[import-untyped]
 from omegaconf import DictConfig, OmegaConf
 
 import radiologist.utils.filesystem as fst
+from radiologist.etl.optional import (
+    _PREFECT_AVAILABLE,
+    _PREFECT_IMPORT_ERROR,
+    INPUTS,
+    create_link_artifact,
+    create_markdown_artifact,
+    create_table_artifact,
+    flow,
+    task,
+)
 from radiologist.utils import Logger
 
 logger = Logger(name=__name__)
-
-try:
-    from prefect import flow, task
-    from prefect.artifacts import (
-        create_link_artifact,
-        create_markdown_artifact,
-        create_table_artifact,
-    )
-    from prefect.cache_policies import INPUTS
-
-    _PREFECT_AVAILABLE = True
-except ImportError as ex:  # pragma: no cover
-
-    def flow(fn=None, **_):  # type: ignore[misc, no-redef]
-        """No-op stand-in for ``prefect.flow`` when prefect is not installed."""
-        return fn if fn is not None else (lambda f: f)
-
-    def task(fn=None, **_):  # type: ignore[misc, no-redef]
-        """No-op stand-in for ``prefect.task`` when prefect is not installed."""
-        return fn if fn is not None else (lambda f: f)
-
-    def create_link_artifact(**_):  # type: ignore[misc, no-redef]
-        """No-op stand-in for ``prefect.artifacts.create_link_artifact``."""
-
-    def create_markdown_artifact(**_):
-        """No-op stand-in for ``prefect.artifacts.create_markdown_artifact``."""
-
-    def create_table_artifact(**_):  # type: ignore[misc, no-redef]
-        """No-op stand-in for ``prefect.artifacts.create_table_artifact``."""
-
-    _PREFECT_AVAILABLE = False
-    _PREFECT_IMPORT_ERROR: str = str(ex)
-    INPUTS = None  # type: ignore[assignment]
 
 from radiologist.etl.models import EtlResult  # noqa: E402
 from radiologist.etl.ops import (  # noqa: E402
