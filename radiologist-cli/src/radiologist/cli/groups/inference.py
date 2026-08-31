@@ -24,19 +24,65 @@
 
 Commands: predict, explain, uncertainty, serve. Grammar carried over
 verbatim from the deleted
-``radiologist-inference/src/radiologist/inference/cli.py``.
+``radiologist-inference/src/radiologist/inference/cli.py``. Bodies route
+their keyed records through :func:`radiologist.utils.cli.emit` and map
+raised exceptions to process exit codes via
+:func:`radiologist.utils.cli.exit_code_for`.
 """
 
-from typing import List, Optional
+import functools
+from typing import Any, Callable, List, Optional, TypeVar
 
+import numpy as np
 import typer
+
+from radiologist.inference import optional as _inference_optional
+from radiologist.inference import verbs
+from radiologist.inference.app import create_app
+from radiologist.utils.cli import emit, exit_code_for
 
 app = typer.Typer(name="infer", add_completion=False)
 
 __all__ = ["app", "run"]
 
+F = TypeVar("F", bound=Callable[..., None])
+
+_SERVE_EXTRA_MISSING_MSG = (
+    "The 'serve' extra is required to use the serve command. "
+    "Install it with: pip install radiologist-inference[serve]"
+)
+_TOO_MANY_VERBS_MSG = "Choose at most one of --predict/--explain/--uncertainty."
+
+
+def _parse_int_list(value: Optional[str]) -> Optional[List[int]]:
+    """Parse a comma-separated string of ints, e.g. "1,3,224,224"."""
+    if value is None:
+        return None
+    return [int(part) for part in value.split(",")]
+
+
+def _exit_on_error(func: F) -> F:
+    """Wrap a command so an unhandled exception becomes a clean typer.Exit.
+
+    Local to this group — the repo-wide ``exit_on_error`` decorator in
+    ``radiologist.cli.errors`` is owned by a sibling issue and still a stub.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        try:
+            func(*args, **kwargs)
+        except typer.Exit:
+            raise
+        except Exception as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=exit_code_for(exc))
+
+    return wrapper  # type: ignore[return-value]
+
 
 @app.command()
+@_exit_on_error
 def predict(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
@@ -85,10 +131,29 @@ def predict(
     ),
 ) -> None:
     """Run classification inference on a chest X-ray image."""
-    raise NotImplementedError
+    classifier = verbs.load_predictor(
+        verbs.get_verb("predict"),
+        path,
+        run_id,
+        tags,
+        groups,
+        metric,
+        local_dir,
+        mean=mean,
+        std=std,
+        input_shape=_parse_int_list(input_shape),
+    )
+    result = classifier.predict(image=image_path)
+    emit(
+        {
+            "predicted_class": result.predicted_class,
+            "probabilities": result.probabilities,
+        }
+    )
 
 
 @app.command()
+@_exit_on_error
 def explain(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
@@ -140,10 +205,34 @@ def explain(
     ),
 ) -> None:
     """Produce a Score-CAM explanation for a chest X-ray image."""
-    raise NotImplementedError
+    explainer = verbs.load_predictor(
+        verbs.get_verb("explain"),
+        path,
+        run_id,
+        tags,
+        groups,
+        metric,
+        local_dir,
+        mean=mean,
+        std=std,
+        input_shape=_parse_int_list(input_shape),
+    )
+    result = explainer.explain(image=image_path)
+    saliency_path: Optional[str] = None
+    if out is not None:
+        np.save(out, result.saliency_map)
+        saliency_path = out
+    emit(
+        {
+            "predicted_class": result.predicted_class,
+            "saliency_shape": list(result.saliency_map.shape),
+            "saliency_path": saliency_path,
+        }
+    )
 
 
 @app.command()
+@_exit_on_error
 def uncertainty(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
@@ -195,10 +284,34 @@ def uncertainty(
     ),
 ) -> None:
     """Estimate MC-Dropout uncertainty for a chest X-ray image."""
-    raise NotImplementedError
+    predictor = verbs.load_predictor(
+        verbs.get_verb("uncertainty"),
+        path,
+        run_id,
+        tags,
+        groups,
+        metric,
+        local_dir,
+        mean=mean,
+        std=std,
+        input_shape=_parse_int_list(input_shape),
+    )
+    result = predictor.predict_with_uncertainty(image=image_path, n_passes=n_passes)
+    emit(
+        {
+            "predicted_class": max(
+                result.mean_probabilities, key=lambda k: result.mean_probabilities[k]
+            ),
+            "n_passes": result.n_passes,
+            "predictive_entropy": result.predictive_entropy,
+            "mean_probabilities": result.mean_probabilities,
+            "std_probabilities": result.std_per_class,
+        }
+    )
 
 
 @app.command()
+@_exit_on_error
 def serve(
     path: Optional[str] = typer.Option(
         None, "--path", help="Path to the deterministic ONNX model."
@@ -252,7 +365,36 @@ def serve(
     ),
 ) -> None:
     """Launch the FastAPI inference server via uvicorn."""
-    raise NotImplementedError
+    if _inference_optional._uvicorn is None:
+        raise RuntimeError(_SERVE_EXTRA_MISSING_MSG)
+    if sum([predict, explain, uncertainty]) > 1:
+        raise ValueError(_TOO_MANY_VERBS_MSG)
+    verb_name = "predict" if predict else "uncertainty" if uncertainty else "explain"
+    has_source = path is not None or any([run_id, tags, groups, metric])
+    predictor = (
+        verbs.load_predictor(
+            verbs.get_verb(verb_name),
+            path,
+            run_id,
+            tags,
+            groups,
+            metric,
+            local_dir,
+        )
+        if has_source
+        else None
+    )
+    fastapi_app = create_app(predictor)
+    emit(
+        {
+            "host": host,
+            "port": port,
+            "verb": verb_name,
+            "model_path": path,
+            "model_run_id": run_id,
+        }
+    )
+    _inference_optional._uvicorn.run(fastapi_app, host=host, port=port)
 
 
 def run(argv: List[str]) -> int:
@@ -265,4 +407,23 @@ def run(argv: List[str]) -> int:
     Returns:
         The process exit code.
     """
-    raise NotImplementedError
+    from typer.main import get_command
+
+    command = get_command(app)
+    try:
+        exit_code = command.main(
+            args=argv, prog_name="radiologist infer", standalone_mode=False
+        )
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 1
+    except Exception as exc:
+        # Click/Typer's UsageError/Abort/ClickException family — matched
+        # structurally rather than by type since typer vendors its own
+        # click fork (``typer._click``) distinct from the ``click`` package.
+        show = getattr(exc, "show", None)
+        if callable(show):
+            show()
+            return getattr(exc, "exit_code", 1)
+        typer.echo(f"Error: {exc}", err=True)
+        return exit_code_for(exc)
+    return exit_code if isinstance(exit_code, int) else 0

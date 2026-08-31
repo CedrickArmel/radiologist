@@ -1,10 +1,18 @@
 # Inference CLI Reference
 
-The `radiologist` CLI (Typer-based, entry point `radiologist.inference.cli:main`)
-exposes four commands: [`predict`](#predict), [`explain`](#explain),
-[`uncertainty`](#uncertainty), and [`serve`](#serve). It requires the `cli`
-extra (`pip install 'radiologist-inference[cli]'`); `serve` additionally
-requires the `serve` extra (fastapi, uvicorn).
+The unified `radiologist` CLI (Typer-based, entry point
+`radiologist.cli.main:main`, package `radiologist-cli`) exposes the `infer`
+command group with four commands: [`predict`](#predict), [`explain`](#explain),
+[`uncertainty`](#uncertainty), and [`serve`](#serve) — invoked as
+`radiologist infer <command>`. It requires the `inference` extra
+(`pip install 'radiologist-cli[inference]'`); `serve` additionally requires
+the `serve` extra on `radiologist-inference` (fastapi, uvicorn).
+
+Every command prints a single keyed record to stdout via
+`radiologist.utils.cli.emit` — `kv` (default, `key=value` lines), `json`, or
+`yaml`, selected with the global `--output`/`-o` flag or the
+`RADIOLOGIST_OUTPUT` environment variable (e.g.
+`radiologist --output json infer predict ...`).
 
 ## Registry selector vs. local path
 
@@ -38,20 +46,22 @@ forwarded straight to `from_path`/`from_selector`:
 
 ## `predict`
 
-Run deterministic classification on a chest X-ray image and print the
-predicted class label with per-class probabilities.
+Run deterministic classification on a chest X-ray image and emit a record
+carrying the predicted class label and per-class probabilities.
 
 ```bash
 # Local ONNX file
-radiologist predict chest_xray.png --path model.onnx
+radiologist infer predict chest_xray.png --path model.onnx
 
 # Registry-backed resolution
-radiologist predict chest_xray.png --run-id abc123 --local-dir ./models
+radiologist infer predict chest_xray.png --run-id abc123 --local-dir ./models
 
 # With explicit normalization and input shape
-radiologist predict chest_xray.png --path model.onnx \
+radiologist infer predict chest_xray.png --path model.onnx \
     --mean 128 --std 65 --input-shape 1,3,224,224
 ```
+
+Emitted keys: `predicted_class`, `probabilities` (nested `Dict[str, float]`).
 
 | Option | Description |
 |---|---|
@@ -68,16 +78,20 @@ radiologist predict chest_xray.png --path model.onnx \
 
 ## `explain`
 
-Produce a Score-CAM saliency map for a chest X-ray image, printing the
-predicted class and either saving the saliency map or printing its shape.
+Produce a Score-CAM saliency map for a chest X-ray image, emitting a record
+with the predicted class and either the saved saliency map's path or its
+shape.
 
 ```bash
 # Save the saliency map to disk
-radiologist explain chest_xray.png --path model.onnx --out saliency.npy
+radiologist infer explain chest_xray.png --path model.onnx --out saliency.npy
 
-# Print the saliency map shape only
-radiologist explain chest_xray.png --path model.onnx
+# Emit the saliency map shape only, writing no file
+radiologist infer explain chest_xray.png --path model.onnx
 ```
+
+Emitted keys: `predicted_class`, `saliency_shape` (list of ints),
+`saliency_path` (`null` unless `--out` was given).
 
 | Option | Description |
 |---|---|
@@ -96,19 +110,23 @@ radiologist explain chest_xray.png --path model.onnx
 ## `uncertainty`
 
 Estimate MC-Dropout predictive uncertainty for a chest X-ray image: runs
-`--n-passes` stochastic forward passes and prints per-class mean probability
-with standard deviation, plus the overall predictive entropy.
+`--n-passes` stochastic forward passes and emits a record with the predicted
+class, per-class mean probability and standard deviation, and the overall
+predictive entropy.
 
 ```bash
 # Local ONNX file
-radiologist uncertainty chest_xray.png --path model.onnx
+radiologist infer uncertainty chest_xray.png --path model.onnx
 
 # Registry-backed resolution
-radiologist uncertainty chest_xray.png --run-id abc123 --local-dir ./models
+radiologist infer uncertainty chest_xray.png --run-id abc123 --local-dir ./models
 
 # More stochastic passes for a tighter estimate
-radiologist uncertainty chest_xray.png --path model.onnx --n-passes 100
+radiologist infer uncertainty chest_xray.png --path model.onnx --n-passes 100
 ```
+
+Emitted keys: `predicted_class`, `n_passes`, `predictive_entropy`,
+`mean_probabilities`, `std_probabilities` (both nested `Dict[str, float]`).
 
 | Option | Description |
 |---|---|
@@ -129,17 +147,18 @@ radiologist uncertainty chest_xray.png --path model.onnx --n-passes 100
 Launch the FastAPI inference server via uvicorn. Loads a predictor matching
 exactly one of `--predict`/`--explain`/`--uncertainty` (default `explain`,
 which also satisfies the `Classifier` interface) using the same
-registry-selector-vs-local-path dispatch as the other commands.
+registry-selector-vs-local-path dispatch as the other commands. Emits a
+record before the server starts accepting connections.
 
 ```bash
 # Serve a local model (default verb: explain)
-radiologist serve --path model.onnx --host 0.0.0.0 --port 8000
+radiologist infer serve --path model.onnx --host 0.0.0.0 --port 8000
 
 # Serve a registry-resolved model as a Classifier
-radiologist serve --run-id abc123 --local-dir ./models --predict
+radiologist infer serve --run-id abc123 --local-dir ./models --predict
 
 # Start with no model loaded (routes return 503 until one is available)
-radiologist serve
+radiologist infer serve
 ```
 
 If neither `--path` nor a registry selector is provided, the server starts
@@ -147,6 +166,9 @@ with no predictor loaded: `/predict`, `/explain`, and `/uncertainty` each
 respond with a `503` "no model loaded" error until a predictor becomes
 available. `/healthz` (liveness) and `/readyz` (readiness) are always
 available regardless of predictor state.
+
+Emitted keys: `host`, `port`, `verb`, `model_path` (`null` unless `--path`
+was given), `model_run_id` (`null` unless `--run-id` was given).
 
 | Option | Description |
 |---|---|
