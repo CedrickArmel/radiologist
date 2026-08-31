@@ -6,8 +6,9 @@
 ![tested on](https://img.shields.io/badge/tested%20on-ubuntu--latest%20%7C%20python%203.10-blue)
 
 W&B model registry facade — resolve, download, push, and promote ONNX/checkpoint
-artifacts for the radiologist pipeline. Ships a `WandbRegistry` library and a
-Typer CLI (`radiologist-registry`) built on top of it.
+artifacts for the radiologist pipeline. Ships the `WandbRegistry` library;
+its CLI is exposed through the `registry` command group of the unified
+`radiologist` CLI, see [radiologist-cli](../radiologist-cli/README.md).
 
 ## Installation
 
@@ -22,10 +23,9 @@ pip install radiologist-registry
 | Extra | Installs | Enables |
 |---|---|---|
 | `wandb` | `wandb` | `WandbRegistry` (all registry operations) |
-| `cli` | `typer` | `radiologist-registry` CLI entry point |
 
 ```bash
-pip install "radiologist-registry[cli,wandb]"
+pip install "radiologist-registry[wandb]"
 ```
 
 ## Public API
@@ -66,46 +66,11 @@ ref = resolve_selector(selector, registry)
 local_ckpt = registry.download(ref, local_dir="./models")
 ```
 
-## CLI reference
+## CLI
 
-All commands construct a `WandbRegistry()` internally — no separate wiring
-required. Errors surface as `Error: {message}` on stderr with a non-zero exit
-code.
-
-| Command | Flags | Description |
-|---|---|---|
-| `resolve <path>` | `--run-id`, `--tags`, `--groups`, `--metric`, `--version`, `--include-sweeps` | Resolve a selector to a qualified name and version. |
-| `pull <path>` | `--local-dir`, `--run-id`, `--tags`, `--groups`, `--metric`, `--version`, `--include-sweeps` | Resolve (if any selector flag is given) then download, or treat `path` as a raw artifact path. |
-| `push` | `--det-path`, `--mcd-path`, `--run-id`, `--det-collection`, `--mcd-collection`, `--input-shape` (repeatable), `--classes` (repeatable) | Open an ephemeral W&B run and log the deterministic and MC-Dropout artifacts. |
-| `promote <path>` | `--run-id`, `--det-collection`, `--mcd-collection`, `--force` | Link both artifacts to their collections with `staging`/`production` alias; prompts unless `--force`. |
-| `transition-to-production` | `--det-collection`, `--mcd-collection`, `--force` | Flip the `staging` member of each collection to `production`; prompts unless `--force`. |
-| `list` | `--type`, `--collection` | List every member of a collection with its current aliases. |
-| `alias get <artifact_path>` | — | Print the artifact's current aliases. |
-| `alias set <artifact_path> <alias>` | — | Add an alias to the artifact. |
-| `alias remove <artifact_path> <alias>` | — | Remove an alias from the artifact. |
-
-### Examples
-
-```bash
-radiologist-registry resolve entity/project --run-id abc123
-
-radiologist-registry pull entity/project --local-dir ./models --run-id abc123
-
-radiologist-registry push \
-  --det-path model.onnx --mcd-path model_mcd.onnx --run-id abc123 \
-  --det-collection det-models --mcd-collection mcd-models \
-  --input-shape 1 --input-shape 3 --input-shape 224 --input-shape 224 \
-  --classes NORMAL --classes PNEUMONIA
-
-radiologist-registry promote entity/project --run-id abc123 \
-  --det-collection det-models --mcd-collection mcd-models --force
-
-radiologist-registry transition-to-production \
-  --det-collection det-models --mcd-collection mcd-models --force
-
-radiologist-registry list --type model --collection det-models
-
-radiologist-registry alias set entity/project/model-abc123:best staging
-radiologist-registry alias get entity/project/model-abc123:best
-radiologist-registry alias remove entity/project/model-abc123:best staging
-```
+This package no longer ships its own console script. Its commands are the
+`registry` group of the unified `radiologist` CLI — install
+`radiologist-cli[registry]` and see
+[docs/reference/cli-registry.md](../docs/reference/cli-registry.md) for the
+full command reference and examples (`radiologist registry resolve ...`,
+`radiologist registry push ...`, etc.).

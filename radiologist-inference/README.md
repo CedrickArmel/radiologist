@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/radiologist-inference)](https://pypi.org/project/radiologist-inference/)
 ![tested on](https://img.shields.io/badge/tested%20on-ubuntu--latest%20%7C%20python%203.10-blue)
 
-ONNX inference and serving for the radiologist pipeline. Pulls trained models from the W&B Model Registry, runs deterministic classification, Score-CAM saliency, and MC-Dropout uncertainty estimation via ONNX Runtime, and optionally exposes a FastAPI HTTP server and a Typer CLI.
+ONNX inference and serving for the radiologist pipeline. Pulls trained models from the W&B Model Registry, runs deterministic classification, Score-CAM saliency, and MC-Dropout uncertainty estimation via ONNX Runtime, and optionally exposes a FastAPI HTTP server. Its CLI is exposed through the `infer` command group of the unified `radiologist` CLI, see [radiologist-cli](../radiologist-cli/README.md).
 
 ## Installation
 
@@ -23,7 +23,6 @@ Installs: `numpy`, `Pillow`, `onnxruntime`.
 |---|---|---|
 | `registry` | `wandb` | `BasePredictor.from_registry` |
 | `serve` | `fastapi`, `uvicorn`, `python-multipart`, `prometheus-client` | `create_app`, HTTP server, `GET /metrics` |
-| `cli` | `typer` | `radiologist` CLI entry point |
 | `all` | all of the above | everything |
 
 ```bash
@@ -179,36 +178,15 @@ Two scope reconciliations, recorded here so they are not re-litigated:
 - `/uncertainty` does not increment `inference_predicted_class_total` —
   `UncertaintyResult` has no `predicted_class` field.
 
-### CLI (requires `cli` extra)
+### CLI
 
-```bash
-# Classify a chest X-ray
-radiologist predict chest_xray.png --path model.onnx
-
-# Score-CAM explanation
-radiologist explain chest_xray.png --path model.onnx --out saliency.npy
-
-# MC-Dropout uncertainty
-radiologist uncertainty chest_xray.png --path model_mcd.onnx
-```
-
-`predict`, `explain`, and `uncertainty` all accept optional `--mean`,
-`--std`, and `--input-shape` flags, threaded straight to `from_path`.
-`--input-shape` takes a comma-separated `N,C,H,W`, e.g. `1,3,224,224`.
-Omitting all three keeps today's default `/255.0`-only preprocessing:
-
-```bash
-radiologist predict chest_xray.png --path model.onnx \
-    --mean 128 --std 65 --input-shape 1,3,224,224
-```
-
-```bash
-# Serve — picks the verb to serve via --predict/--explain/--uncertainty
-# (default: explain, preserving today's behavior)
-radiologist serve --path model.onnx
-radiologist serve --uncertainty --path model_mcd.onnx
-radiologist serve --predict --run-id abc123
-```
+This package no longer ships its own console script. Its commands are the
+`infer` group of the unified `radiologist` CLI — install
+`radiologist-cli[inference]` and see
+[docs/reference/cli-inference.md](../docs/reference/cli-inference.md) for
+the full command reference and examples (`radiologist infer predict ...`,
+`radiologist infer explain ...`, `radiologist infer uncertainty ...`,
+`radiologist infer serve ...`).
 
 ## Public API reference
 
