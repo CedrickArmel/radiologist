@@ -164,7 +164,12 @@ def _assign_splits(
         Path to the split Parquet: same dir, with ``-split`` replacing ``-filtered``.
     """
     df = pd.read_parquet(parquet_path, storage_options=storage_options)
-    df["split"] = df["filename"].apply(lambda f: assign_split(f, ratios))
+    # assign_split now requires the ordered-sequence ratio contract (#184);
+    # this call site still receives a mapping from Hydra config, so it is
+    # normalized here into ordered pairs rather than changing this
+    # function's own (still dict-ratios) public signature.
+    ordered_ratios = list(ratios.items())
+    df["split"] = df["filename"].apply(lambda f: assign_split(f, ordered_ratios))
     name = fst.pathname(parquet_path).replace("-filtered", "-split")
     parent = fst.pathparent(parquet_path)
     out = fst.pathjoin(parent, name)
