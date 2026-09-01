@@ -31,9 +31,24 @@ stage's responsibility.
 
 from __future__ import annotations
 
-from radiologist.etl.execution import BatchMapper
+import functools
+from typing import Any
+
+import fsspec  # type: ignore[import-untyped]
+import pandas as pd
+
+from radiologist.etl.execution import (
+    BatchMapper,
+    chunked,
+    default_workers,
+    local_mapper,
+)
+from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
+from radiologist.etl.identity import compute_extract_run_id
+from radiologist.etl.manifest import JsonlWriter, ManifestRecord
 from radiologist.etl.models import ExtractResult
-from radiologist.etl.stats import StatExtractor
+from radiologist.etl.processors import process_batch
+from radiologist.etl.stats import StatExtractor, lung_asymmetry, make_haralick
 
 
 class ExtractionFailureError(RuntimeError):
@@ -58,7 +73,44 @@ def read_file_list(
         FileNotFoundError: if the listing itself is absent.
         ValueError: if the listing yields no entries.
     """
-    raise NotImplementedError
+    fs, path = fsspec.url_to_fs(file_list, **(storage_options or {}))
+    if not fs.exists(path):
+        raise FileNotFoundError(f"No such file or directory: {file_list!r}")
+
+    with fs.open(path, "rt", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    entries = [
+        stripped
+        for stripped in (line.strip() for line in lines)
+        if stripped and not stripped.startswith("#")
+    ]
+    if not entries:
+        raise ValueError(f"file listing {file_list!r} resolved to no entries")
+    return entries
+
+
+def _extractor_signature(extractor: StatExtractor) -> dict[str, Any]:
+    """Build a stable, JSON-serializable identity for a StatExtractor.
+
+    ``functools.partial``'s own ``repr``/``str`` embeds the wrapped
+    function's memory address, which would make the run id unstable across
+    processes. This introspects ``.func``/``.args``/``.keywords`` when
+    present (as produced by :func:`~radiologist.etl.stats.make_haralick`)
+    and falls back to the callable's qualified name.
+    """
+    func = getattr(extractor, "func", extractor)
+    args = getattr(extractor, "args", ()) or ()
+    keywords = getattr(extractor, "keywords", {}) or {}
+    return {
+        "name": f"{func.__module__}.{func.__qualname__}",
+        "args": list(args),
+        "kwargs": dict(keywords),
+    }
+
+
+def _default_extractors() -> list[StatExtractor]:
+    return [make_haralick(), lung_asymmetry]
 
 
 def extract(
@@ -101,4 +153,116 @@ def extract(
         ValueError: if ``masks_root`` is set without ``images_root``.
         ExtractionFailureError: if ``failed / total`` exceeds ``max_failure_rate``.
     """
-    raise NotImplementedError
+    if masks_root is not None and images_root is None:
+        raise ValueError(
+            "masks_root requires images_root to resolve the mask mirror path — "
+            "both are required together"
+        )
+
+    paths = read_file_list(file_list, storage_options=storage_options)
+
+    resolved_extractors = (
+        list(extractors) if extractors is not None else _default_extractors()
+    )
+    resolved_iqr_columns = (
+        list(iqr_columns) if iqr_columns is not None else ["haralick_mean"]
+    )
+    resolved_workers = workers if workers is not None else default_workers()
+
+    config: dict[str, Any] = {
+        "images_root": images_root,
+        "masks_root": masks_root,
+        "extractors": [_extractor_signature(e) for e in resolved_extractors],
+        "iqr_columns": resolved_iqr_columns,
+        "iqr_factor": iqr_factor,
+        "run_label": run_label,
+    }
+    run_id = compute_extract_run_id(file_list, config, storage_options=storage_options)
+    manifest_path = f"{destination.rstrip('/')}/extract-{run_id}.jsonl"
+
+    batches = chunked(paths, batch_size)
+
+    resolved_mapper: BatchMapper = (
+        mapper
+        if mapper is not None
+        else local_mapper(
+            functools.partial(
+                process_batch,
+                images_root=images_root,
+                masks_root=masks_root,
+                manifest_id=run_id,
+                extractors=resolved_extractors,
+                storage_options=storage_options,
+            ),
+            workers=resolved_workers,
+        )
+    )
+
+    outcomes = resolved_mapper(batches)
+
+    records: list[ManifestRecord] = []
+    failures: list[tuple[str, str]] = []
+    for outcome in outcomes:
+        records.extend(outcome.records)
+        failures.extend(outcome.failures)
+
+    total = len(paths)
+    failed = len(failures)
+    succeeded = len(records)
+    failure_rate = failed / total if total else 0.0
+
+    if failure_rate > max_failure_rate:
+        failure_desc = "; ".join(f"{p!r} ({msg})" for p, msg in failures)
+        raise ExtractionFailureError(
+            f"extract stage failed: {failed}/{total} image(s) unreadable "
+            f"(failure rate {failure_rate:.2%} exceeds max_failure_rate "
+            f"{max_failure_rate:.2%}): {failure_desc}"
+        )
+
+    _apply_quality_filters(records, resolved_iqr_columns, iqr_factor)
+    excluded = sum(1 for r in records if r.excluded)
+
+    JsonlWriter().write(records, manifest_path, storage_options=storage_options)
+
+    return ExtractResult(
+        run_id=run_id,
+        manifest_path=manifest_path,
+        total=total,
+        succeeded=succeeded,
+        failed=failed,
+        failure_rate=failure_rate,
+        excluded=excluded,
+    )
+
+
+def _apply_quality_filters(
+    records: list[ManifestRecord],
+    iqr_columns: list[str],
+    iqr_factor: float,
+) -> None:
+    """Run IQR + lung-out-of-frame filters over the assembled batch of records.
+
+    Mutates each record's ``excluded``/``exclusion_reason`` in place. The
+    IQR fence is a property of the whole listed batch, so this only runs
+    after every batch has completed.
+    """
+    if not records:
+        return
+
+    rows = []
+    for record in records:
+        row: dict[str, Any] = dict(record.stats)
+        row["lung_out_of_frame"] = record.lung_out_of_frame
+        row["excluded"] = record.excluded
+        row["exclusion_reason"] = record.exclusion_reason
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    present_columns = [col for col in iqr_columns if col in df.columns]
+    if present_columns:
+        df = filter_iqr(df, present_columns, iqr_factor)
+    df = filter_lung_out_of_frame(df)
+
+    for record, (_, row) in zip(records, df.iterrows()):
+        record.excluded = bool(row["excluded"])
+        record.exclusion_reason = str(row["exclusion_reason"])

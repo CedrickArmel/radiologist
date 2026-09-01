@@ -45,7 +45,7 @@ logger = Logger(__name__)
 
 def _resolve_mask(
     image_path: str,
-    images_root: str,
+    images_root: str | None,
     masks_root: str | None,
     storage_options: dict | None,
 ) -> np.ndarray | None:
@@ -97,7 +97,7 @@ def lung_out_of_frame(mask: np.ndarray) -> bool:
 
 def _process_one(
     image_path: str,
-    images_root: str,
+    images_root: str | None,
     masks_root: str | None,
     manifest_id: str,
     extractors: list[StatExtractor],
@@ -170,7 +170,18 @@ def process_batch(
         readable image, one ``(path, message)`` entry per unreadable one.
         Never raises for a single bad image.
     """
-    raise NotImplementedError
+    records: list[ManifestRecord] = []
+    failures: list[tuple[str, str]] = []
+    for path in paths:
+        try:
+            record = _process_one(
+                path, images_root, masks_root, manifest_id, extractors, storage_options
+            )
+        except Exception as exc:  # noqa: BLE001 - failures are carried as data
+            failures.append((path, str(exc)))
+        else:
+            records.append(record)
+    return BatchOutcome(records=records, failures=failures)
 
 
 class StatsProcessor:

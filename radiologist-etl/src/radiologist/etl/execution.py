@@ -33,7 +33,10 @@ is the only shared type: it tells a flow which wiring path to take.
 
 from __future__ import annotations
 
+import multiprocessing as mp
+import os
 from collections.abc import Callable, Sequence
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
@@ -57,7 +60,7 @@ def default_workers() -> int:
         ``os.cpu_count()`` or ``1``; every caller that needs a default
         worker count defers to this function.
     """
-    raise NotImplementedError
+    return os.cpu_count() or 1
 
 
 def chunked(items: Sequence[T], size: int) -> list[list[T]]:
@@ -73,7 +76,9 @@ def chunked(items: Sequence[T], size: int) -> list[list[T]]:
     Raises:
         ValueError: if ``size < 1``.
     """
-    raise NotImplementedError
+    if size < 1:
+        raise ValueError(f"size must be >= 1, got {size!r}")
+    return [list(items[i : i + size]) for i in range(0, len(items), size)]
 
 
 def local_mapper(
@@ -92,7 +97,43 @@ def local_mapper(
         A callable that applies ``fn`` across the pool and returns results in
         input order.
     """
-    raise NotImplementedError
+    resolved_workers = workers if workers is not None else default_workers()
+    resolved_max_pending = (
+        max_pending if max_pending is not None else resolved_workers * 2
+    )
+
+    def _mapper(items: Sequence[T]) -> list[R]:
+        items = list(items)
+        results: list[Any] = [None] * len(items)
+        pending: dict[Any, int] = {}
+        indices = iter(enumerate(items))
+
+        with ProcessPoolExecutor(
+            max_workers=resolved_workers, mp_context=mp.get_context("spawn")
+        ) as pool:
+
+            def _submit_next() -> bool:
+                try:
+                    idx, item = next(indices)
+                except StopIteration:
+                    return False
+                future = pool.submit(fn, item)
+                pending[future] = idx
+                return True
+
+            for _ in range(min(resolved_max_pending, len(items))):
+                _submit_next()
+
+            while pending:
+                done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    idx = pending.pop(future)
+                    results[idx] = future.result()
+                    _submit_next()
+
+        return results
+
+    return _mapper
 
 
 @dataclass(frozen=True)
