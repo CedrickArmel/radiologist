@@ -1,3 +1,7 @@
 # @package runner
-# Placeholder — deferred to the Ray issue (#188, excluded from this build pass).
+# Backend implemented in the deferred Ray issue (#188, excluded from this build pass).
 family: ray
+batch_size: 64
+task_runner:
+  _target_: prefect_ray.RayTaskRunner
+  address: ??? # e.g. ray://head-node:10001

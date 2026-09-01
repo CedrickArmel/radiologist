@@ -1,3 +1,7 @@
 # @package runner
-# Placeholder — full task_runner target added in the runner-selection issue (#182).
 family: dask
+batch_size: 64
+task_runner:
+  _target_: prefect_dask.DaskTaskRunner
+  address: ??? # e.g. tcp://dask-scheduler.default.svc:8786
+  client_kwargs: {}

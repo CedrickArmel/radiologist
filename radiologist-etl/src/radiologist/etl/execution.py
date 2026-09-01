@@ -37,6 +37,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+from hydra.utils import instantiate
+
+from radiologist.etl import optional
 from radiologist.etl.beam_executor import BeamExecutor
 from radiologist.etl.models import BatchOutcome, ShardJob, ShardOutcome
 
@@ -109,6 +112,37 @@ class ExecutionPlan:
     batch_size: int = 64
 
 
+_SUPPORTED_FAMILIES = ("local", "dask", "ray", "beam")
+
+_BACKEND_EXTRAS = {
+    "dask": "dask",
+    "ray": "ray",
+    "beam": "beam",
+}
+
+
+def _cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
+    """Fetch ``key`` from a ``DictConfig``, plain ``dict``, or ``None``."""
+    if cfg is None:
+        return default
+    getter = getattr(cfg, "get", None)
+    if getter is not None:
+        return getter(key, default)
+    return getattr(cfg, key, default)
+
+
+def _backend_available(family: str) -> bool:
+    if family == "local":
+        return bool(optional._PREFECT_AVAILABLE)
+    if family == "dask":
+        return bool(optional._PREFECT_DASK_AVAILABLE)
+    if family == "ray":
+        return bool(optional._PREFECT_RAY_AVAILABLE)
+    if family == "beam":
+        return bool(optional._BEAM_AVAILABLE)
+    return False
+
+
 def resolve_execution(
     runner_cfg: Any | None = None,
     batch_size: int | None = None,
@@ -130,4 +164,49 @@ def resolve_execution(
         RuntimeError: naming the extra to install when the family's backend
             package is unavailable.
     """
-    raise NotImplementedError
+    if runner_cfg is None:
+        return ExecutionPlan(
+            family="local",
+            task_runner=None,
+            beam=None,
+            batch_size=batch_size if batch_size is not None else 64,
+        )
+
+    family = _cfg_get(runner_cfg, "family", "local") or "local"
+    if family not in _SUPPORTED_FAMILIES:
+        raise ValueError(
+            f"Unknown runner family: {family!r}. "
+            f"Supported families: {', '.join(_SUPPORTED_FAMILIES)}"
+        )
+
+    resolved_batch_size = (
+        batch_size if batch_size is not None else _cfg_get(runner_cfg, "batch_size", 64)
+    )
+
+    if not _backend_available(family):
+        extra = _BACKEND_EXTRAS.get(family, "prefect")
+        raise RuntimeError(
+            f"the {family} extra is required to use the {family} runner family. "
+            f"Install with: pip install 'radiologist-etl[{extra}]'"
+        )
+
+    if family == "beam":
+        beam_node = _cfg_get(runner_cfg, "beam")
+        beam_obj = instantiate(beam_node) if beam_node is not None else None
+        return ExecutionPlan(
+            family=family,
+            task_runner=None,
+            beam=beam_obj,
+            batch_size=resolved_batch_size,
+        )
+
+    task_runner_node = _cfg_get(runner_cfg, "task_runner")
+    task_runner = (
+        instantiate(task_runner_node) if task_runner_node is not None else None
+    )
+    return ExecutionPlan(
+        family=family,
+        task_runner=task_runner,
+        beam=None,
+        batch_size=resolved_batch_size,
+    )

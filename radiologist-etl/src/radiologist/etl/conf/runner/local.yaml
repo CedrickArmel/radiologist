@@ -1,5 +1,6 @@
 # @package runner
 family: local
+batch_size: 64
 task_runner:
   _target_: prefect.task_runners.ProcessPoolTaskRunner
   max_workers: null
