@@ -83,16 +83,38 @@ df = filter_lung_out_of_frame(df)
 
 Both functions modify `excluded` and `exclusion_reason` in place on the loaded DataFrame and return it. They do not drop rows; exclusion is a flag so the manifest remains complete.
 
-### Deterministic splitting (`radiologist.etl.split`)
+### Deterministic splitting (`radiologist.etl.split`, `radiologist.etl.assign`)
 
 ```python
 from radiologist.etl import assign_split
 
-split = assign_split("patient_001_ap.png", ratios={"train": 0.70, "val": 0.15, "test": 0.15})
+split = assign_split("patient_001_ap.png", [("train", 0.70), ("val", 0.15), ("test", 0.15)])
 # → "train"  (deterministic: same filename always yields same split)
 ```
 
 The MD5 hex digest of the filename is converted to a fraction in `[0, 1)` and mapped to a cumulative-ratio bracket. No split state is stored.
+
+**Guaranteed property — split stability.** Split ratios are an explicitly
+ordered sequence of `(name, fraction)` pairs, never a mapping — the bracket
+order is part of the split contract, not a formatting detail. A filename's
+split is a pure function of the filename and this ordered sequence alone;
+it never depends on which other filenames are present, so a file's
+train/val/test assignment cannot flip as the corpus grows across
+incremental `assign_splits` runs. `assign_split`/`normalize_ratios` reject a
+plain mapping outright with `ValueError` rather than silently coercing it
+(e.g. by sorting its keys), because coercion would restore the hidden
+order-dependence this contract removes. **Changing the shipped default
+order or fractions (`train`, `val`, `test` = `0.70`, `0.15`, `0.15`)
+re-partitions every already-processed corpus and must be treated as a
+breaking data change.**
+
+The assign-split stage (`radiologist.etl.assign_splits`) reads every extract
+manifest in a folder (sorted by name), deduplicates records by source path
+(first occurrence — by sorted manifest name — wins; duplicates are counted
+and logged), assigns each surviving record's split from its filename alone,
+and writes one split manifest whose row shape matches today's manifest
+exactly. This stage always runs locally — it accepts no runner
+configuration.
 
 ### Shard construction (`radiologist.etl.shards`)
 

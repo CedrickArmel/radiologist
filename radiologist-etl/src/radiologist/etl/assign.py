@@ -26,12 +26,35 @@ Reads every extract manifest in a folder, concatenates and deduplicates by
 source path (warning on duplicates), assigns each record's split
 deterministically from its filename alone, and writes a single split
 manifest. This stage never uses a runner — it always runs locally.
+
+This stage lists its input folder twice per run: once (via
+:func:`~radiologist.etl.identity.compute_assign_run_id`) to fingerprint it
+for the run id, and once here to enumerate the manifests it then reads. That
+is a deliberate, accepted tradeoff — two calls, not a per-file stat storm —
+not an oversight; collapsing them would couple two otherwise single-purpose
+modules for a saving that is not measurable at this stage's cadence.
 """
 
 from __future__ import annotations
 
+import logging
+from dataclasses import replace
+
+import fsspec  # type: ignore[import-untyped]
+
+from radiologist.etl.identity import compute_assign_run_id
+from radiologist.etl.manifest import JsonlWriter, records_reader
 from radiologist.etl.models import AssignSplitResult
-from radiologist.etl.split import SplitRatios
+from radiologist.etl.split import SplitRatios, assign_split, normalize_ratios
+
+logger = logging.getLogger(__name__)
+
+# Shipped default order/values — every filename keeps the split the previous
+# (dict-ratios) pipeline gave it. Changing this order or these fractions
+# re-partitions every corpus and must be treated as a breaking data change.
+_DEFAULT_RATIOS: SplitRatios = (("train", 0.70), ("val", 0.15), ("test", 0.15))
+
+_MANIFEST_SUFFIX = ".jsonl"
 
 
 def assign_splits(
@@ -56,5 +79,78 @@ def assign_splits(
 
     Raises:
         FileNotFoundError: if the folder holds no manifest.
+        ValueError: see :func:`~radiologist.etl.split.normalize_ratios`.
     """
-    raise NotImplementedError
+    ordered_ratios = normalize_ratios(ratios if ratios is not None else _DEFAULT_RATIOS)
+
+    fs, path = fsspec.url_to_fs(manifests_dir, **(storage_options or {}))
+    try:
+        entries = fs.ls(path, detail=True)
+    except FileNotFoundError:
+        entries = []
+    manifest_files = sorted(
+        entry["name"]
+        for entry in entries
+        if entry.get("type") == "file" and str(entry["name"]).endswith(_MANIFEST_SUFFIX)
+    )
+    if not manifest_files:
+        raise FileNotFoundError(f"No extract manifest found in {manifests_dir!r}")
+
+    seen_paths: dict = {}
+    seen_filenames: dict = {}
+    duplicate_count = 0
+    records: list = []
+    collided_filenames: set = set()
+    for name in manifest_files:
+        uri = fs.unstrip_protocol(name)
+        for record in records_reader(uri, storage_options=storage_options):
+            if record.path in seen_paths:
+                duplicate_count += 1
+                continue
+            seen_paths[record.path] = record
+            records.append(record)
+            prior_path = seen_filenames.get(record.filename)
+            if prior_path is None:
+                seen_filenames[record.filename] = record.path
+            elif (
+                prior_path != record.path and record.filename not in collided_filenames
+            ):
+                collided_filenames.add(record.filename)
+                logger.warning(
+                    "Filename collision across distinct source paths: %r "
+                    "(a shared filename would collide as a shard key downstream)",
+                    record.filename,
+                )
+    if duplicate_count:
+        logger.warning(
+            "Dropped %d duplicate record(s) sharing a source path", duplicate_count
+        )
+
+    config = {
+        "ratios": [list(pair) for pair in ordered_ratios],
+        "run_label": run_label,
+    }
+    run_id = compute_assign_run_id(
+        manifests_dir, config, storage_options=storage_options
+    )
+
+    counts_by_split: dict = {name: 0 for name, _ in ordered_ratios}
+    final_records = []
+    for record in records:
+        split = assign_split(record.filename, ordered_ratios)
+        counts_by_split[split] += 1
+        final_records.append(replace(record, split=split, manifest_id=run_id))
+
+    split_manifest_path = f"{destination.rstrip('/')}/manifest-{run_id}.jsonl"
+    JsonlWriter().write(
+        final_records, split_manifest_path, storage_options=storage_options
+    )
+
+    return AssignSplitResult(
+        run_id=run_id,
+        split_manifest_path=split_manifest_path,
+        source_manifest_count=len(manifest_files),
+        record_count=len(final_records),
+        duplicate_count=duplicate_count,
+        counts_by_split=counts_by_split,
+    )
