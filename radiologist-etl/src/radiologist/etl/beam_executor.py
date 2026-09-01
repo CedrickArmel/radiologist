@@ -54,7 +54,9 @@ class BeamExecutor:
             parts_dir: scratch directory for intermediate Beam output.
             storage_options: extra kwargs forwarded to fsspec.
         """
-        raise NotImplementedError
+        self.pipeline_options = dict(pipeline_options)
+        self.parts_dir = parts_dir
+        self.storage_options = storage_options
 
     def run_batches(
         self,

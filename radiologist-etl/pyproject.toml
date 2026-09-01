@@ -34,9 +34,15 @@ dependencies = [
 [project.optional-dependencies]
 gcs = ["gcsfs>=2026.4.0"]
 prefect = ["prefect>=3.7.0"]
+dask = ["prefect-dask>=1.1.0"]
+ray = ["prefect-ray>=0.4.0"]
+beam = ["apache-beam>=2.60.0"]
 all = [
     "gcsfs>=2026.4.0",
-    "prefect>=3.7.0"
+    "prefect>=3.7.0",
+    "prefect-dask>=1.1.0",
+    "prefect-ray>=0.4.0",
+    "apache-beam>=2.60.0"
 ]
 
 [project.urls]

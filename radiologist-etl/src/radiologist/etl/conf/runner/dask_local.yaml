@@ -1,3 +1,9 @@
 # @package runner
-# Placeholder — full task_runner target added in the runner-selection issue (#182).
 family: dask
+batch_size: 64
+task_runner:
+  _target_: prefect_dask.DaskTaskRunner
+  cluster_kwargs:
+    n_workers: 4
+    threads_per_worker: 1
+    processes: true

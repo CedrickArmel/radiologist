@@ -1,3 +1,11 @@
 # @package runner
-# Placeholder — deferred to the Beam issue (#189, excluded from this build pass).
+# Beam pipeline execution implemented in the deferred Beam issue (#189, excluded
+# from this build pass); this node only carries the configured BeamExecutor.
 family: beam
+batch_size: 64
+beam:
+  _target_: radiologist.etl.beam_executor.BeamExecutor
+  pipeline_options:
+    runner: DirectRunner
+  parts_dir: ??? # scratch directory for intermediate Beam output
+  storage_options: null
