@@ -33,6 +33,9 @@ from radiologist.etl.identity import (
     compute_assign_run_id,
     compute_build_run_id,
     compute_extract_run_id,
+    config_digest,
+    content_digest,
+    directory_digest,
 )
 from radiologist.etl.manifest import (
     JsonlWriter,
@@ -87,7 +90,10 @@ __all__: list[str] = [
     "compute_extract_run_id",
     "compute_run_id",
     "compute_stats_task",
+    "config_digest",
+    "content_digest",
     "default_workers",
+    "directory_digest",
     "etl_flow",
     "EtlResult",
     "ExecutionPlan",
