@@ -1,0 +1,17 @@
+# @package _global_
+defaults:
+  - _self_
+  - runner: local
+
+file_list: ??? # URI of the newline-delimited listing of images to process
+destination: ??? # folder that accumulates extract manifests
+images_root: null # required when masks_root is set
+masks_root: null
+iqr_columns: ["haralick_mean"]
+iqr_factor: 1.5
+haralick: { features: ["mean"], distances: [1], angles: null }
+workers: null # null -> default_workers()
+batch_size: 64
+max_failure_rate: 0.0
+run_label: null
+storage_options: null

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
 import fsspec  # type: ignore[import-untyped]
 from omegaconf import DictConfig, OmegaConf
@@ -45,7 +46,16 @@ from radiologist.utils import Logger
 
 logger = Logger(name=__name__)
 
-from radiologist.etl.models import EtlResult  # noqa: E402
+from radiologist.etl.execution import ExecutionPlan  # noqa: E402
+from radiologist.etl.models import (  # noqa: E402
+    AssignSplitResult,
+    BatchOutcome,
+    BuildResult,
+    EtlResult,
+    ExtractResult,
+    ShardJob,
+    ShardOutcome,
+)
 from radiologist.etl.ops import (  # noqa: E402
     _apply_filters,
     _assign_splits,
@@ -343,3 +353,139 @@ def etl_flow(cfg: DictConfig) -> EtlResult:
         )
 
     return EtlResult(run_id=run_id, manifest_path=manifest_path)
+
+
+@task(cache_policy=INPUTS)
+def extract_batch_task(
+    paths: list[str],
+    images_root: str | None,
+    masks_root: str | None,
+    manifest_id: str,
+    extractors: list[StatExtractor],
+    storage_options: dict | None = None,
+) -> BatchOutcome:
+    """Prefect task: process one batch of image paths for the extract stage.
+
+    Args:
+        paths: image paths to process in this batch.
+        images_root: root directory used to resolve mask mirror paths.
+        masks_root: root directory of masks; None when masks are unavailable.
+        manifest_id: run identifier stamped on every produced record.
+        extractors: list of StatExtractor callables.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        A :class:`~radiologist.etl.models.BatchOutcome` for this batch.
+    """
+    raise NotImplementedError
+
+
+@task(cache_policy=INPUTS)
+def write_shard_task(
+    job: ShardJob,
+    storage_options: dict | None = None,
+) -> ShardOutcome:
+    """Prefect task: write one WebDataset tar shard for the build stage.
+
+    Args:
+        job: the shard's work unit.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        A :class:`~radiologist.etl.models.ShardOutcome` describing the write.
+    """
+    raise NotImplementedError
+
+
+def with_task_runner(flow_obj: Any, plan: ExecutionPlan) -> Any:
+    """Attach an :class:`~radiologist.etl.execution.ExecutionPlan`'s task runner to a flow.
+
+    Args:
+        flow_obj: a Prefect flow object.
+        plan: the resolved execution plan.
+
+    Returns:
+        ``flow_obj.with_options(task_runner=plan.task_runner)`` when a task
+        runner is present and prefect is installed; ``flow_obj`` unchanged
+        otherwise.
+    """
+    raise NotImplementedError
+
+
+@flow(name="etl-extract")
+def extract_flow(
+    cfg: DictConfig, execution: ExecutionPlan | None = None
+) -> ExtractResult:
+    """Prefect flow wrapping the extract stage.
+
+    Args:
+        cfg: Hydra DictConfig with the extract stage's parameters.
+        execution: resolved execution plan; defaults to a local plan.
+
+    Returns:
+        An :class:`~radiologist.etl.models.ExtractResult` describing the run.
+    """
+    raise NotImplementedError
+
+
+@flow(name="etl-assign-split")
+def assign_split_flow(cfg: DictConfig) -> AssignSplitResult:
+    """Prefect flow wrapping the assign-split stage.
+
+    Args:
+        cfg: Hydra DictConfig with the assign-split stage's parameters.
+
+    Returns:
+        An :class:`~radiologist.etl.models.AssignSplitResult` describing the run.
+    """
+    raise NotImplementedError
+
+
+@flow(name="etl-build")
+def build_flow(cfg: DictConfig, execution: ExecutionPlan | None = None) -> BuildResult:
+    """Prefect flow wrapping the build stage.
+
+    Args:
+        cfg: Hydra DictConfig with the build stage's parameters.
+        execution: resolved execution plan; defaults to a local plan.
+
+    Returns:
+        A :class:`~radiologist.etl.models.BuildResult` describing the run.
+    """
+    raise NotImplementedError
+
+
+def run_extract(cfg: DictConfig) -> ExtractResult:
+    """Resolve the runner config, attach the task runner, and run :func:`extract_flow`.
+
+    Args:
+        cfg: Hydra DictConfig with the extract stage's parameters.
+
+    Returns:
+        An :class:`~radiologist.etl.models.ExtractResult` describing the run.
+    """
+    raise NotImplementedError
+
+
+def run_assign_split(cfg: DictConfig) -> AssignSplitResult:
+    """Run :func:`assign_split_flow` (this stage never uses a runner).
+
+    Args:
+        cfg: Hydra DictConfig with the assign-split stage's parameters.
+
+    Returns:
+        An :class:`~radiologist.etl.models.AssignSplitResult` describing the run.
+    """
+    raise NotImplementedError
+
+
+def run_build(cfg: DictConfig) -> BuildResult:
+    """Resolve the runner config, attach the task runner, and run :func:`build_flow`.
+
+    Args:
+        cfg: Hydra DictConfig with the build stage's parameters.
+
+    Returns:
+        A :class:`~radiologist.etl.models.BuildResult` describing the run.
+    """
+    raise NotImplementedError

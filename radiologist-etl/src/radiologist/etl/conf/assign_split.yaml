@@ -1,0 +1,9 @@
+# @package _global_
+manifests_dir: ???
+destination: ???
+split_ratios: # ORDERED sequence of [name, fraction] pairs — the order is
+  - ["train", 0.70] # part of the split contract, not a formatting detail
+  - ["val", 0.15]
+  - ["test", 0.15]
+run_label: null
+storage_options: null

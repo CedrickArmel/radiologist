@@ -231,7 +231,9 @@ class JsonlWriter:
                 f.write(json.dumps(flat) + "\n")
 
 
-def records_reader(path: str, storage_options) -> list[ManifestRecord]:
+def records_reader(
+    path: str, storage_options: dict | None = None
+) -> list[ManifestRecord]:
     """Read a JSONL manifest back into a list of :class:`ManifestRecord`.
 
     Args:
@@ -241,7 +243,7 @@ def records_reader(path: str, storage_options) -> list[ManifestRecord]:
     Returns:
         List of ManifestRecord instances, one per non-empty line, in file order.
     """
-    fs, mpath = fsspec.url_to_fs(path, **storage_options)
+    fs, mpath = fsspec.url_to_fs(path, **(storage_options or {}))
     records: list[ManifestRecord] = []
     with fs.open(mpath, "rt", encoding="utf-8") as f:
         for line in f:

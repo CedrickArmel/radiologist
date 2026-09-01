@@ -26,8 +26,36 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Mapping, Sequence
 
 _MD5_MODULUS: int = 16**32
+
+# Explicitly ordered sequence of (split name, fraction) pairs — the order is
+# part of the split contract, not a formatting detail. A future issue (#184)
+# rewires assign_split onto this ordered-sequence contract; today's
+# dict-ratios signature below stays in place so the current, real,
+# production split-assignment path keeps working.
+SplitRatios = Sequence[tuple[str, float]]
+
+
+def normalize_ratios(
+    ratios: SplitRatios | Mapping[str, float],
+) -> list[tuple[str, float]]:
+    """Normalize split ratios to the explicitly ordered sequence form.
+
+    Args:
+        ratios: either the ordered ``(name, fraction)`` pair sequence, or a
+            plain mapping (rejected — see Raises).
+
+    Returns:
+        The ordered pair sequence, unchanged, as a list.
+
+    Raises:
+        ValueError: if ``ratios`` is a plain mapping — split ratios must be
+            an explicitly ordered sequence, because a mapping's key order is
+            not a stable part of the split contract.
+    """
+    raise NotImplementedError
 
 
 def assign_split(filename: str, ratios: dict[str, float]) -> str:

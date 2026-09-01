@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -33,6 +34,7 @@ import numpy as np
 from rich.progress import Progress
 
 from radiologist.etl.manifest import ManifestRecord
+from radiologist.etl.models import BatchOutcome
 from radiologist.etl.stats import StatExtractor
 from radiologist.utils import Logger, read_image
 
@@ -136,6 +138,39 @@ def _process_one(
         stats=stats,
         lung_out_of_frame=loof,
     )
+
+
+def process_batch(
+    paths: Sequence[str],
+    images_root: str | None,
+    masks_root: str | None,
+    manifest_id: str,
+    extractors: list[StatExtractor],
+    storage_options: dict | None = None,
+) -> BatchOutcome:
+    """Process one batch of image paths into a :class:`BatchOutcome`.
+
+    Top-level (picklable) function required for process-pool dispatch. This
+    is the extract stage's per-batch worker; it replaces
+    :class:`StatsProcessor` for the new explicit-file-listing extract flow
+    (issue #183 implements the body). ``StatsProcessor`` itself stays in
+    place, unchanged, because the current monolithic ``etl_flow`` still
+    depends on it.
+
+    Args:
+        paths: image paths to process in this batch.
+        images_root: root directory used to resolve mask mirror paths.
+        masks_root: root directory of masks; None when masks are unavailable.
+        manifest_id: run identifier stamped on every produced record.
+        extractors: list of StatExtractor callables.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        A :class:`~radiologist.etl.models.BatchOutcome`: one record per
+        readable image, one ``(path, message)`` entry per unreadable one.
+        Never raises for a single bad image.
+    """
+    raise NotImplementedError
 
 
 class StatsProcessor:
