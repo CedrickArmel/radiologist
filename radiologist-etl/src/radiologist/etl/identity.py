@@ -30,8 +30,16 @@ the digest.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from typing import Any
+
+import fsspec  # type: ignore[import-untyped]
+
+
+def _not_found(uri: str) -> FileNotFoundError:
+    return FileNotFoundError(f"No such file or directory: {uri!r}")
 
 
 def content_digest(
@@ -52,7 +60,18 @@ def content_digest(
     Raises:
         FileNotFoundError: if the object does not exist.
     """
-    raise NotImplementedError
+    fs, path = fsspec.url_to_fs(uri, **(storage_options or {}))
+    digest = hashlib.sha256()
+    try:
+        with fs.open(path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                digest.update(chunk)
+    except FileNotFoundError as exc:
+        raise _not_found(uri) from exc
+    return digest.hexdigest()
 
 
 def config_digest(config: Mapping[str, Any]) -> str:
@@ -64,7 +83,8 @@ def config_digest(config: Mapping[str, Any]) -> str:
     Returns:
         The full 64-char hex digest; key order never affects the result.
     """
-    raise NotImplementedError
+    payload = json.dumps(config, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def directory_digest(
@@ -83,7 +103,30 @@ def directory_digest(
         The full 64-char hex digest, obtained with a single detailed listing
         call — never one stat call per entry.
     """
-    raise NotImplementedError
+    fs, path = fsspec.url_to_fs(directory, **(storage_options or {}))
+    try:
+        entries = fs.ls(path, detail=True)
+    except FileNotFoundError as exc:
+        raise _not_found(directory) from exc
+
+    pairs = sorted(
+        (str(entry["name"]), entry.get("size"))
+        for entry in entries
+        if entry.get("type") == "file" and str(entry["name"]).endswith(suffix)
+    )
+    payload = json.dumps(pairs)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _stage_run_id(stage: str, input_digest: str, cfg_digest: str) -> str:
+    """Combine a stage name with its input and config digests into a 16-char id.
+
+    Mixing the stage name into the hashed payload (not just a filename
+    prefix) ensures two stages given otherwise-identical inputs can never
+    collide.
+    """
+    payload = json.dumps({"stage": stage, "input": input_digest, "config": cfg_digest})
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def compute_extract_run_id(
@@ -101,7 +144,8 @@ def compute_extract_run_id(
     Returns:
         16-char id over the file listing's content digest + ``config_digest(config)``.
     """
-    raise NotImplementedError
+    input_digest = content_digest(file_list, storage_options)
+    return _stage_run_id("extract", input_digest, config_digest(config))
 
 
 def compute_assign_run_id(
@@ -119,7 +163,8 @@ def compute_assign_run_id(
     Returns:
         16-char id over ``directory_digest(manifests_dir)`` + ``config_digest(config)``.
     """
-    raise NotImplementedError
+    input_digest = directory_digest(manifests_dir, storage_options=storage_options)
+    return _stage_run_id("assign", input_digest, config_digest(config))
 
 
 def compute_build_run_id(
@@ -137,4 +182,5 @@ def compute_build_run_id(
     Returns:
         16-char id over the split manifest's content digest + ``config_digest(config)``.
     """
-    raise NotImplementedError
+    input_digest = content_digest(split_manifest_path, storage_options)
+    return _stage_run_id("build", input_digest, config_digest(config))
