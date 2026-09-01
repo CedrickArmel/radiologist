@@ -1,0 +1,3 @@
+# @package runner
+# Placeholder — full task_runner target added in the runner-selection issue (#182).
+family: dask

@@ -1,0 +1,3 @@
+# @package runner
+# Placeholder — deferred to the Ray issue (#188, excluded from this build pass).
+family: ray

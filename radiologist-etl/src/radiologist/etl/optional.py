@@ -39,6 +39,7 @@ try:
         create_table_artifact,
     )
     from prefect.cache_policies import INPUTS
+    from prefect.task_runners import ProcessPoolTaskRunner, TaskRunner, unmapped
 
     _PREFECT_AVAILABLE = True
     _PREFECT_IMPORT_ERROR = ""
@@ -61,6 +62,13 @@ except ImportError as ex:  # pragma: no cover
     def create_table_artifact(**_):  # type: ignore[misc, no-redef]
         """No-op stand-in for ``prefect.artifacts.create_table_artifact``."""
 
+    def unmapped(value):  # type: ignore[misc, no-redef]
+        """No-op stand-in for ``prefect.tasks.unmapped`` when prefect is not installed."""
+        return value
+
+    ProcessPoolTaskRunner = None  # type: ignore[assignment, misc]
+    TaskRunner = None  # type: ignore[assignment, misc]
+
     _PREFECT_AVAILABLE = False
     _PREFECT_IMPORT_ERROR = str(ex)
     INPUTS = None  # type: ignore[assignment]
@@ -69,3 +77,24 @@ _PREFECT_MISSING_MSG = (
     "prefect is required to record etl runs. "
     "Install with: pip install 'radiologist-etl[prefect]'"
 )
+
+try:
+    import prefect_dask  # type: ignore[import-untyped]  # noqa: F401
+
+    _PREFECT_DASK_AVAILABLE = True
+except ImportError:
+    _PREFECT_DASK_AVAILABLE = False
+
+try:
+    import prefect_ray  # type: ignore[import-untyped]  # noqa: F401
+
+    _PREFECT_RAY_AVAILABLE = True
+except ImportError:
+    _PREFECT_RAY_AVAILABLE = False
+
+try:
+    import apache_beam  # type: ignore[import-untyped]  # noqa: F401
+
+    _BEAM_AVAILABLE = True
+except ImportError:
+    _BEAM_AVAILABLE = False

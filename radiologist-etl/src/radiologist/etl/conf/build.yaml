@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - _self_
+  - runner: local
+
+split_manifest: ???
+shard_root: ???
+shard_size: 1000
+split_ratios: # report only — never used for assignment here
+  - ["train", 0.70]
+  - ["val", 0.15]
+  - ["test", 0.15]
+workers: null
+run_label: null
+storage_options: null

@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
+from collections.abc import Sequence
 
 import fsspec  # type: ignore[import-untyped]
 import webdataset as wds  # type: ignore[import-untyped]
@@ -34,6 +35,49 @@ from rich.progress import Progress
 
 import radiologist.utils.filesystem as fst
 from radiologist.etl.manifest import JsonlWriter, ManifestRecord, records_reader
+from radiologist.etl.models import ShardJob, ShardOutcome
+
+
+def plan_shards(
+    records: Sequence[ManifestRecord],
+    shard_root: str,
+    shard_size: int = 1000,
+) -> list[ShardJob]:
+    """Group non-excluded records into deterministic per-shard work units.
+
+    Args:
+        records: manifest records to plan shards for.
+        shard_root: directory the resulting shards will be written under.
+        shard_size: max samples per shard.
+
+    Returns:
+        Records grouped by ``(split, label)`` in ascending key order, chunked
+        into ``shard_size`` units, indexed from 0 within each group;
+        deterministic for a given record order.
+
+    Raises:
+        ValueError: if ``shard_size < 1``.
+    """
+    raise NotImplementedError
+
+
+def write_shard(
+    job: ShardJob,
+    storage_options: dict | None = None,
+) -> ShardOutcome:
+    """Write one WebDataset tar shard for a planned job.
+
+    Top-level (picklable) function, safe to cross a process boundary.
+
+    Args:
+        job: the shard's work unit, as planned by :func:`plan_shards`.
+        storage_options: extra kwargs forwarded to fsspec.
+
+    Returns:
+        A :class:`~radiologist.etl.models.ShardOutcome` describing the write.
+        Per-image read errors are collected into ``failures`` rather than raised.
+    """
+    raise NotImplementedError
 
 
 def build_shards(

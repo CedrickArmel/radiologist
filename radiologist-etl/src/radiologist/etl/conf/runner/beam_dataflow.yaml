@@ -1,0 +1,3 @@
+# @package runner
+# Placeholder — deferred to the Beam issue (#189, excluded from this build pass).
+family: beam
