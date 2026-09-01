@@ -248,3 +248,65 @@ def test_every_shipped_runner_choice_composes_under_hydra(runner_choice):
     cfg = _compose("extract", overrides=[f"runner={runner_choice}"])
 
     assert cfg.runner.family in {"local", "dask", "ray", "beam"}
+
+
+# --- default_workers --------------------------------------------------------
+
+
+def test_default_workers_returns_a_positive_int():
+    import os
+
+    from radiologist.etl.execution import default_workers
+
+    workers = default_workers()
+
+    assert isinstance(workers, int)
+    assert workers >= 1
+    assert workers == (os.cpu_count() or 1)
+
+
+# --- chunked -----------------------------------------------------------------
+
+
+def test_chunked_splits_sequence_into_consecutive_chunks_of_at_most_size():
+    from radiologist.etl.execution import chunked
+
+    result = chunked([1, 2, 3, 4, 5], 2)
+
+    assert result == [[1, 2], [3, 4], [5]]
+
+
+def test_chunked_returns_empty_list_for_empty_input():
+    from radiologist.etl.execution import chunked
+
+    assert chunked([], 3) == []
+
+
+def test_chunked_raises_value_error_for_size_below_one():
+    from radiologist.etl.execution import chunked
+
+    with pytest.raises(ValueError):
+        chunked([1, 2, 3], 0)
+
+
+# --- local_mapper --------------------------------------------------------------
+
+
+def test_local_mapper_applies_fn_to_each_item_and_preserves_order():
+    from radiologist_etl_tests._picklable_fns import _double
+
+    from radiologist.etl.execution import local_mapper
+
+    mapper = local_mapper(_double, workers=2)
+
+    assert mapper([1, 2, 3, 4]) == [2, 4, 6, 8]
+
+
+def test_local_mapper_returns_empty_list_for_empty_input():
+    from radiologist_etl_tests._picklable_fns import _double
+
+    from radiologist.etl.execution import local_mapper
+
+    mapper = local_mapper(_double, workers=2)
+
+    assert mapper([]) == []

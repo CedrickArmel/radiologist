@@ -58,7 +58,30 @@ def plan_shards(
     Raises:
         ValueError: if ``shard_size < 1``.
     """
-    raise NotImplementedError
+    if shard_size < 1:
+        raise ValueError(f"shard_size must be >= 1, got {shard_size!r}")
+
+    groups: dict[tuple[str, str], list[ManifestRecord]] = defaultdict(list)
+    for record in records:
+        if not record.excluded:
+            groups[(record.split, record.label)].append(record)
+
+    jobs: list[ShardJob] = []
+    for key in sorted(groups.keys()):
+        split, label = key
+        group_records = groups[key]
+        for idx, chunk_start in enumerate(range(0, len(group_records), shard_size)):
+            chunk = group_records[chunk_start : chunk_start + shard_size]
+            jobs.append(
+                ShardJob(
+                    split=split,
+                    label=label,
+                    index=idx,
+                    shard_root=shard_root,
+                    records=chunk,
+                )
+            )
+    return jobs
 
 
 def write_shard(
@@ -77,7 +100,47 @@ def write_shard(
         A :class:`~radiologist.etl.models.ShardOutcome` describing the write.
         Per-image read errors are collected into ``failures`` rather than raised.
     """
-    raise NotImplementedError
+    opts = storage_options or {}
+    shard_filename = f"{job.split}-{job.label.lower()}-{job.index:06d}.tar"
+    relative_path = "/".join([job.split, job.label, shard_filename])
+    shard_path = fst.pathjoin(job.shard_root, job.split, job.label, shard_filename)
+
+    fs_dst, dst_path = fsspec.url_to_fs(shard_path, **opts)
+    if hasattr(fs_dst, "makedirs"):
+        fs_dst.makedirs(fst.pathparent(dst_path), exist_ok=True)
+
+    record_paths: list[str] = []
+    failures: list[tuple[str, str]] = []
+    written = 0
+
+    with fs_dst.open(dst_path, "wb") as out:
+        with wds.TarWriter(out) as sink:
+            for record in job.records:
+                try:
+                    fs_src, src_path = fsspec.url_to_fs(record.path, **opts)
+                    with fs_src.open(src_path, "rb") as img_f:
+                        img_bytes = img_f.read()
+                except OSError as exc:
+                    failures.append((record.path, str(exc)))
+                    continue
+
+                stem = fst.pathstem(record.filename)
+                sink.write(
+                    {
+                        "__key__": stem,
+                        "png": img_bytes,
+                        "cls": record.label.encode(),
+                    }
+                )
+                record_paths.append(record.path)
+                written += 1
+
+    return ShardOutcome(
+        relative_path=relative_path,
+        record_paths=record_paths,
+        written=written,
+        failures=failures,
+    )
 
 
 def build_shards(
