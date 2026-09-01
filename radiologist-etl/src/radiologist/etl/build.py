@@ -28,19 +28,29 @@ Writes shards, a shard-annotated manifest, and a split report under
 comparison — never for assignment (assignment already happened in the
 assign-split stage).
 
-Note: this module's :func:`build_shards` is the new pure-function public API
-for the build stage (issue #185 implements its body); it is deliberately
-*not* re-exported from ``radiologist.etl`` yet, since the package still
-exports the existing, real, working
-:func:`radiologist.etl.shards.build_shards` (a different signature) that the
-still-live monolithic ``etl_flow`` and the current test suite depend on. The
-package-level rebind happens once #185 lands the real implementation here.
+This module's :func:`build_shards` is the package-level public
+``radiologist.etl.build_shards`` (rebound here by issue #185). The old,
+differently-signatured :func:`radiologist.etl.shards.build_shards` (in-place
+manifest rewrite, dict ratios) is no longer re-exported at package level; it
+stays importable directly from :mod:`radiologist.etl.shards` for the still-
+live monolithic ``etl_flow`` (``ops.py``/``prefect_pipelines.py``), retired in
+a later issue.
 """
 
 from __future__ import annotations
 
-from radiologist.etl.execution import ShardMapper
+import functools
+import json
+from collections import defaultdict
+
+import fsspec  # type: ignore[import-untyped]
+
+import radiologist.utils.filesystem as fst
+from radiologist.etl.execution import ShardMapper, default_workers, local_mapper
+from radiologist.etl.identity import compute_build_run_id
+from radiologist.etl.manifest import JsonlWriter, records_reader
 from radiologist.etl.models import BuildResult
+from radiologist.etl.shards import plan_shards, write_shard
 from radiologist.etl.split import SplitRatios
 
 
@@ -70,5 +80,87 @@ def build_shards(
 
     Returns:
         A :class:`~radiologist.etl.models.BuildResult` describing the run.
+
+    Raises:
+        FileNotFoundError: if ``split_manifest_path`` does not exist.
+        ValueError: if ``shard_size < 1``.
     """
-    raise NotImplementedError
+    if shard_size < 1:
+        raise ValueError(f"shard_size must be >= 1, got {shard_size!r}")
+
+    opts = storage_options or {}
+    fs, fs_path = fsspec.url_to_fs(split_manifest_path, **opts)
+    if not fs.exists(fs_path):
+        raise FileNotFoundError(f"Split manifest not found: {split_manifest_path}")
+
+    config: dict = {"shard_size": shard_size}
+    if run_label is not None:
+        config["run_label"] = run_label
+    run_id = compute_build_run_id(split_manifest_path, config, storage_options)
+
+    output_dir = fst.pathjoin(shard_root, run_id)
+
+    records = records_reader(split_manifest_path, opts)
+
+    jobs = plan_shards(records, output_dir, shard_size)
+
+    if mapper is None:
+        resolved_workers = workers if workers is not None else default_workers()
+        mapper = local_mapper(
+            functools.partial(write_shard, storage_options=storage_options),
+            workers=resolved_workers,
+        )
+
+    outcomes = mapper(jobs) if jobs else []
+
+    path_to_shard: dict[str, str] = {}
+    for outcome in outcomes:
+        for record_path in outcome.record_paths:
+            path_to_shard[record_path] = outcome.relative_path
+
+    for record in records:
+        if not record.excluded:
+            record.shard = path_to_shard.get(record.path)
+
+    manifest_path = fst.pathjoin(output_dir, f"manifest-{run_id}.jsonl")
+    JsonlWriter().write(records, manifest_path, storage_options=storage_options)
+
+    label_split_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    for record in records:
+        if record.excluded:
+            label_split_counts[record.label]["excluded"] += 1
+        else:
+            label_split_counts[record.label][record.split] += 1
+
+    observed: dict[str, dict[str, float]] = {}
+    for label, split_counts in label_split_counts.items():
+        total_all = sum(split_counts.values())
+        observed[label] = {
+            split: (count / total_all) for split, count in split_counts.items()
+        }
+
+    report = {
+        "run_id": run_id,
+        "configured_ratios": list(ratios) if ratios is not None else [],
+        "observed": observed,
+    }
+    report_path = fst.pathjoin(output_dir, f"split-report-{run_id}.json")
+    fs_r, rpath = fsspec.url_to_fs(report_path, **opts)
+    if hasattr(fs_r, "makedirs"):
+        fs_r.makedirs(fst.pathparent(rpath), exist_ok=True)
+    with fs_r.open(rpath, "wt", encoding="utf-8") as rf:
+        json.dump(report, rf, indent=2)
+
+    shard_count = len(outcomes)
+    record_count = sum(outcome.written for outcome in outcomes)
+
+    return BuildResult(
+        run_id=run_id,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        report_path=report_path,
+        shard_count=shard_count,
+        record_count=record_count,
+    )

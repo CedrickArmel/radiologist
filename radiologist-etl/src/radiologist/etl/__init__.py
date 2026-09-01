@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from radiologist.etl.assign import assign_splits
 from radiologist.etl.beam_executor import BeamExecutor
+from radiologist.etl.build import build_shards
 from radiologist.etl.execution import ExecutionPlan, default_workers, resolve_execution
 from radiologist.etl.extract import ExtractionFailureError, extract
 from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
@@ -68,7 +69,7 @@ from radiologist.etl.prefect_pipelines import (
     write_jsonl_task,
 )
 from radiologist.etl.processors import StatsProcessor, lung_out_of_frame, process_batch
-from radiologist.etl.shards import build_shards, plan_shards, write_shard
+from radiologist.etl.shards import plan_shards, write_shard
 from radiologist.etl.split import SplitRatios, assign_split, normalize_ratios
 from radiologist.etl.stats import StatExtractor, lung_asymmetry, make_haralick
 
