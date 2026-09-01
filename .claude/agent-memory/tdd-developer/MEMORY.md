@@ -1,5 +1,6 @@
 # Memory Index — tdd-developer agent
 
+- [ETL runner selection #182](project_etl_runner_selection_182.md) — ExecutionPlan/resolve_execution contract, conf/runner/*.yaml shape, mock-the-SDK-not-owned-code pattern for absent dask/ray/beam
 - [Numpy bool assertions](feedback_numpy_bool_assertions.md) — use `== True/False` not `is True/False` for pandas/numpy cells from Parquet/DataFrame
 - [Pre-commit E402](feedback_precommit_e402.md) — add `# noqa: E402` to imports that must follow a `sys.path.insert(...)` shim
 - [Lazy imports for RED-phase tests](feedback_test_import.md) — import not-yet-implemented functions inside the test method body, not at module level, to avoid collection-time ImportError masking the real FAILED test
@@ -39,5 +40,7 @@
 - [Worktree scratch-clone shares gitdir](feedback_worktree_scratch_clone_shares_gitdir.md) — never `cp -r` a git worktree for a git sandbox; its `.git` is a pointer file to the shared repo, so commits/tags there pollute the real repo's refs
 - [Prefect broken local server, use .fn bypass](feedback_prefect_broken_local_server_use_fn_bypass.md) — local ephemeral Prefect API is broken (Starlette mismatch), real Cloud creds present in env; use `.fn` + stub artifact calls to test real business logic
 - [CLI run() env var must restore](feedback_cli_run_env_var_must_restore.md) — a group's `run(argv)` setting `RADIOLOGIST_OUTPUT` for a `@hydra.main` entry point must save/restore it in `finally`, or it leaks across the whole pytest session
+
+- [ETL assign-split stage #184](project_etl_assign_split_184.md) — ordered-ratio contract, dedup/collision handling, ops.py call-site fix, pre-commit mypy checks tests too
 
 See also: [[shared/MEMORY.md]] for cross-agent rules (TDD).
