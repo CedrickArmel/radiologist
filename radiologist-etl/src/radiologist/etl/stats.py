@@ -53,7 +53,7 @@ class StatExtractor(Protocol):
 
     Any callable matching this signature — a plain function or a
     ``functools.partial`` produced by :func:`make_haralick` — can be
-    plugged into :class:`~radiologist.etl.processors.StatsProcessor`.
+    plugged into :func:`~radiologist.etl.processors.process_batch`.
     """
 
     def __call__(
