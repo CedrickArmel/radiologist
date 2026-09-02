@@ -20,17 +20,25 @@ Raw clinical X-ray archives are large, heterogeneous, and noisy. Images may be c
 
 ## Pipeline stages
 
+Three independently invocable stages, each with its own `radiologist etl`
+subcommand, its own Hydra configuration root, and its own content-addressed
+run ID:
+
 ```
 Raw images (GCS or local)
-  └─ 1. StatsProcessor      → stats-{run_id}.parquet        (Haralick GLCM + lung asymmetry)
-  └─ 2. filter_iqr           → stats-{run_id}-filtered.parquet  (IQR outlier removal)
-       filter_lung_out_of_frame
-  └─ 3. assign_split         → stats-{run_id}-split.parquet  (MD5-deterministic split)
-  └─ 4. write_jsonl          → manifest-{run_id}.jsonl        (canonical manifest)
-  └─ 5. build_shards         → {shard_root}/{split}/{label}/{split}-{label}-{idx:06d}.tar
+  └─ 1. extract        → {destination}/extract-{run_id}.jsonl
+       (Haralick GLCM + lung asymmetry, IQR/lung-out-of-frame quality flags)
+  └─ 2. assign-split    → {destination}/manifest-{run_id}.jsonl
+       (reads every extract manifest in a folder, dedupes, assigns splits)
+  └─ 3. build           → {shard_root}/{run_id}/{split}/{label}/{split}-{label}-{idx:06d}.tar
+       (shards the split manifest into streaming-ready WebDataset tars)
 ```
 
-Each stage is independently resumable via Prefect task caching and the `resume_from_*` config flags.
+Re-running a stage over unchanged inputs lands on the same run ID and the
+same artifacts, so a per-stage `resume_from_*` mechanism is unnecessary --
+each stage is its own resumable unit. `extract` and `build` accept a
+`runner=` override (see [Execution runners](#execution-runners) below);
+`assign-split` always runs locally.
 
 ## Key classes and functions
 
@@ -133,56 +141,75 @@ Writes `{shard_root}/{split}/{label}/{split}-{label}-{idx:06d}.tar` files. The m
 
 ## Running the pipeline
 
-### Via Hydra (recommended)
+Each stage is its own `radiologist etl` subcommand (implemented in
+`radiologist-cli`; this package ships no CLI code of its own -- see
+[Configuration reference](#configuration-reference)).
 
 ```bash
-cd radiologist-etl
-uv run --active python -m radiologist.etl.prefect_pipelines \
-    source=gs://radiologist-liora-gcs/raw_chest_x_ray_data/images \
-    destination=gs://radiologist-liora-gcs/manifests/ \
-    shard_root=gs://radiologist-liora-gcs/shards/
+radiologist etl extract \
+    file_list=gs://radiologist-liora-gcs/listings/images.txt \
+    destination=gs://radiologist-liora-gcs/pipelines/manifests
+
+radiologist etl assign-split \
+    manifests_dir=gs://radiologist-liora-gcs/pipelines/manifests \
+    destination=gs://radiologist-liora-gcs/pipelines/manifests
+
+radiologist etl build \
+    split_manifest=gs://radiologist-liora-gcs/pipelines/manifests/manifest-<run_id>.jsonl \
+    shard_root=gs://radiologist-liora-gcs/shards
 ```
 
-Override any config key on the command line. Common overrides:
+Each subcommand accepts arbitrary Hydra overrides on the command line.
+Common ones:
 
-| Key | Default | Description |
+| Subcommand | Key | Default | Description |
+|---|---|---|---|
+| `extract` | `file_list` | required | Newline-delimited listing of image URIs |
+| `extract` | `masks_root` | `null` | Segmentation mask directory |
+| `extract` | `iqr_factor` | `1.5` | IQR multiplier for outlier threshold |
+| `extract` | `max_failure_rate` | `0.0` | Unreadable-image tolerance before the run fails |
+| `extract` | `runner` | `local` | Execution backend (see below) |
+| `assign-split` | `manifests_dir` | required | Folder of extract manifests to merge |
+| `assign-split` | `split_ratios` | `[[train,.70],[val,.15],[test,.15]]` | Ordered split contract |
+| `build` | `split_manifest` | required | Manifest produced by `assign-split` |
+| `build` | `shard_size` | `1000` | Max images per tar shard |
+| `build` | `runner` | `local` | Execution backend (see below) |
+
+### Execution runners
+
+`extract` and `build` accept `runner=<family>`, selecting the Prefect task
+runner the stage's batches/shards are dispatched through:
+
+| Family | Config | Extra |
 |---|---|---|
-| `source` | GCS URI | Raw image directory |
-| `masks_root` | GCS URI | Segmentation mask directory |
-| `destination` | GCS URI | Manifest output directory |
-| `iqr_factor` | `1.5` | IQR multiplier for outlier threshold |
-| `split_ratios.train` | `0.70` | Train fraction |
-| `workers` | `null` (all CPUs) | Parallel worker count |
-| `build_shards` | `true` | Whether to produce tar shards |
-| `shard_size` | `1000` | Max images per tar shard |
-| `resume_from_manifest` | `false` | Skip stats/filter/split, go straight to sharding |
+| `local` (default) | `runner=local` | none |
+| Dask | `runner=dask_local` / `runner=dask_cluster` / `runner=dask_address` | `radiologist-etl[dask]` |
+| Ray | `runner=ray_local` / `runner=ray_cluster` | `radiologist-etl[ray]` |
+| Beam | `runner=beam_direct` / `runner=beam_dataflow` | `radiologist-etl[beam]` |
 
-### Resume from a previous stage
-
-```bash
-uv run --active python -m radiologist.etl.prefect_pipelines \
-    resume_from_manifest=true \
-    destination=gs://bucket/manifests/ \
-    build_shards=true
-```
+`assign-split` always runs locally and accepts no `runner=` override.
 
 ### Programmatic use
 
 ```python
 from radiologist.etl import (
-    StatsProcessor, make_haralick,
+    make_haralick,
     filter_iqr, filter_lung_out_of_frame,
     assign_split, build_shards,
+    run_extract, run_assign_split, run_build,
     JsonlWriter,
 )
 ```
 
 ## Configuration reference
 
-Full config lives at `src/radiologist/etl/conf/etl.yaml`. The entry point is `radiologist.etl.prefect_pipelines:main` decorated with `@hydra.main`.
+Each stage has its own Hydra config root under `src/radiologist/etl/conf/`:
+`extract.yaml`, `assign_split.yaml`, `build.yaml` (plus `runner/*.yaml` for
+the execution backends above). The CLI entry points live in
+`radiologist-cli`, at `radiologist.cli.groups.etl`.
 
 ## Dependencies
 
 Core: `radiologist-utils`, `fsspec`, `gcsfs`, `numpy`, `Pillow`, `scikit-image`, `pandas`, `pyarrow`, `webdataset`.
 
-Optional: `prefect` (orchestration, install via `--extra prefect`). When not installed, `@flow` and `@task` are identity decorators and the pipeline runs as plain Python.
+Optional: `prefect` (orchestration, install via `--extra prefect`). When not installed, `@flow` and `@task` are identity decorators and the pipeline runs as plain Python. `dask`/`ray`/`beam` extras add the corresponding execution runner backend.

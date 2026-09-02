@@ -20,61 +20,174 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""``radiologist etl`` command group — Hydra-composed ETL pipeline entry point."""
+"""``radiologist etl`` command group.
+
+Three Hydra-composed subcommands (``extract``, ``assign-split``, ``build``),
+one per ETL stage, replacing the retired single-command monolithic ``etl``
+entry point: each stage now has its own Hydra configuration root and its own
+emitted result record, and can be run, scheduled and re-run independently.
+"""
 
 import os
 import sys
-from typing import List
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import fsspec  # type: ignore[import-untyped]
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
 from radiologist.cli.main import extract_output_flag
-from radiologist.etl import etl_flow
-from radiologist.utils.cli import OUTPUT_ENV_VAR, emit, exit_code_for
+from radiologist.etl import run_assign_split, run_build, run_extract
+from radiologist.utils.cli import (
+    EXIT_ERROR,
+    EXIT_OK,
+    OUTPUT_ENV_VAR,
+    emit,
+    exit_code_for,
+)
 
-__all__ = ["etl_main", "run"]
+__all__ = [
+    "SUBCOMMANDS",
+    "extract_main",
+    "assign_split_main",
+    "build_main",
+    "run",
+]
+
+SUBCOMMANDS: Tuple[str, ...] = ("extract", "assign-split", "build")
 
 
-def _ensure_source_exists(cfg: DictConfig) -> None:
-    """Raise ``FileNotFoundError`` when ``cfg.source`` does not resolve.
+def _usage() -> str:
+    return "usage: radiologist etl {" + ",".join(SUBCOMMANDS) + "} ..."
+
+
+def _storage_options_from_cfg(cfg: DictConfig) -> Optional[dict]:
+    storage_options = OmegaConf.select(cfg, "storage_options")
+    raw = OmegaConf.to_container(storage_options) if storage_options else None
+    return dict(raw) if isinstance(raw, dict) else None
+
+
+def _ensure_input_exists(
+    uri: str, label: str, storage_options: Optional[dict] = None
+) -> None:
+    """Raise ``FileNotFoundError`` when ``uri`` does not resolve.
 
     Args:
-        cfg: Composed Hydra config; ``cfg.source`` and the optional
-            ``cfg.storage_options`` are inspected.
+        uri: Path/URI of the input the stage is about to read.
+        label: Human-readable name for the input, used in the error message.
+        storage_options: Optional fsspec storage options.
 
     Raises:
-        FileNotFoundError: If the source path/URI does not exist.
+        FileNotFoundError: If the URI does not exist.
     """
-    storage_options = OmegaConf.select(cfg, "storage_options")
-    _raw = OmegaConf.to_container(storage_options) if storage_options else None
-    opts: dict = dict(_raw) if isinstance(_raw, dict) else {}
-    fs, root = fsspec.url_to_fs(cfg.source, **opts)
+    opts = storage_options or {}
+    fs, root = fsspec.url_to_fs(uri, **opts)
     if not fs.exists(root):
-        raise FileNotFoundError(f"ETL source not found: {cfg.source}")
+        raise FileNotFoundError(f"{label} not found: {uri}")
 
 
 @hydra.main(
     config_path="pkg://radiologist.etl.conf",
-    config_name="etl",
+    config_name="extract",
     version_base=None,
 )
-def etl_main(cfg: DictConfig) -> None:
-    """Hydra-composed entry point for the ``radiologist etl`` command group.
+def extract_main(cfg: DictConfig) -> None:
+    """Hydra-composed entry point for the ``extract`` subcommand.
 
     Args:
         cfg: fully composed Hydra ``DictConfig``, injected by the
             ``@hydra.main`` decorator — never passed explicitly by callers.
     """
     try:
-        _ensure_source_exists(cfg)
-        result = etl_flow(cfg)
+        _ensure_input_exists(
+            cfg.file_list, "File listing", _storage_options_from_cfg(cfg)
+        )
+        result = run_extract(cfg)
     except Exception as exc:  # noqa: BLE001 - mapped to an exit code below
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(exit_code_for(exc))
 
-    emit({"run_id": result.run_id, "manifest_path": result.manifest_path})
+    emit(
+        {
+            "run_id": result.run_id,
+            "manifest_path": result.manifest_path,
+            "total": result.total,
+            "succeeded": result.succeeded,
+            "failed": result.failed,
+            "excluded": result.excluded,
+        }
+    )
+
+
+@hydra.main(
+    config_path="pkg://radiologist.etl.conf",
+    config_name="assign_split",
+    version_base=None,
+)
+def assign_split_main(cfg: DictConfig) -> None:
+    """Hydra-composed entry point for the ``assign-split`` subcommand.
+
+    Args:
+        cfg: fully composed Hydra ``DictConfig``, injected by the
+            ``@hydra.main`` decorator — never passed explicitly by callers.
+    """
+    try:
+        _ensure_input_exists(
+            cfg.manifests_dir, "Manifests folder", _storage_options_from_cfg(cfg)
+        )
+        result = run_assign_split(cfg)
+    except Exception as exc:  # noqa: BLE001 - mapped to an exit code below
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(exit_code_for(exc))
+
+    emit(
+        {
+            "run_id": result.run_id,
+            "split_manifest_path": result.split_manifest_path,
+            "source_manifest_count": result.source_manifest_count,
+            "record_count": result.record_count,
+            "duplicate_count": result.duplicate_count,
+        }
+    )
+
+
+@hydra.main(
+    config_path="pkg://radiologist.etl.conf",
+    config_name="build",
+    version_base=None,
+)
+def build_main(cfg: DictConfig) -> None:
+    """Hydra-composed entry point for the ``build`` subcommand.
+
+    Args:
+        cfg: fully composed Hydra ``DictConfig``, injected by the
+            ``@hydra.main`` decorator — never passed explicitly by callers.
+    """
+    try:
+        _ensure_input_exists(
+            cfg.split_manifest, "Split manifest", _storage_options_from_cfg(cfg)
+        )
+        result = run_build(cfg)
+    except Exception as exc:  # noqa: BLE001 - mapped to an exit code below
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(exit_code_for(exc))
+
+    emit(
+        {
+            "run_id": result.run_id,
+            "output_dir": result.output_dir,
+            "manifest_path": result.manifest_path,
+            "report_path": result.report_path,
+            "shard_count": result.shard_count,
+        }
+    )
+
+
+_MAIN_BY_SUBCOMMAND: Dict[str, Callable[[], None]] = {
+    "extract": extract_main,
+    "assign-split": assign_split_main,
+    "build": build_main,
+}
 
 
 def run(argv: List[str]) -> int:
@@ -87,24 +200,39 @@ def run(argv: List[str]) -> int:
     Returns:
         The process exit code.
     """
+    # The global output-format flag is extracted from the FULL incoming
+    # argv first, before any subcommand parsing, so it is honoured whether
+    # it appears before or after the subcommand token.
     remaining, fmt = extract_output_flag(argv)
-    sys.argv = ["radiologist etl"] + remaining
+
+    if remaining and remaining[0] in ("--help", "-h"):
+        print(_usage())
+        return EXIT_OK
+
+    if not remaining or remaining[0] not in SUBCOMMANDS:
+        print(_usage(), file=sys.stderr)
+        return EXIT_ERROR
+
+    subcommand, rest = remaining[0], remaining[1:]
+    main_fn = _MAIN_BY_SUBCOMMAND[subcommand]
+
+    sys.argv = [f"radiologist etl {subcommand}", *rest]
     previous_fmt = os.environ.get(OUTPUT_ENV_VAR)
     if fmt is not None:
         os.environ[OUTPUT_ENV_VAR] = fmt
     try:
-        etl_main()
+        main_fn()
     except SystemExit as exc:
-        code = exc.code
+        code: Any = exc.code
         if code is None:
-            return 0
+            return EXIT_OK
         if isinstance(code, int):
             return code
-        return 1
+        return EXIT_ERROR
     finally:
         if fmt is not None:
             if previous_fmt is None:
                 os.environ.pop(OUTPUT_ENV_VAR, None)
             else:
                 os.environ[OUTPUT_ENV_VAR] = previous_fmt
-    return 0
+    return EXIT_OK
