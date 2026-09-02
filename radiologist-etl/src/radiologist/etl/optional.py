@@ -56,7 +56,7 @@ except ImportError as ex:  # pragma: no cover
     def create_link_artifact(**_):  # type: ignore[misc, no-redef]
         """No-op stand-in for ``prefect.artifacts.create_link_artifact``."""
 
-    def create_markdown_artifact(**_):
+    def create_markdown_artifact(**_):  # type: ignore[misc, no-redef]
         """No-op stand-in for ``prefect.artifacts.create_markdown_artifact``."""
 
     def create_table_artifact(**_):  # type: ignore[misc, no-redef]
@@ -93,8 +93,23 @@ except ImportError:
     _PREFECT_RAY_AVAILABLE = False
 
 try:
-    import apache_beam  # type: ignore[import-untyped]  # noqa: F401
+    import apache_beam  # type: ignore[import-untyped]
+    from apache_beam.options.pipeline_options import (  # type: ignore[import-untyped]
+        PipelineOptions,
+    )
+    from apache_beam.runners.runner import (  # type: ignore[import-untyped]
+        PipelineState,
+    )
 
     _BEAM_AVAILABLE = True
 except ImportError:
+    apache_beam = None  # type: ignore[assignment]
+    PipelineOptions = None  # type: ignore[assignment, misc]
+    PipelineState = None  # type: ignore[assignment, misc]
+
     _BEAM_AVAILABLE = False
+
+_BEAM_MISSING_MSG = (
+    "the beam extra is required to use the beam runner family. "
+    "Install with: pip install 'radiologist-etl[beam]'"
+)

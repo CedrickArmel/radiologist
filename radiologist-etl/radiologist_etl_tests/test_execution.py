@@ -219,8 +219,18 @@ def test_resolve_execution_beam_family_builds_beam_executor(monkeypatch):
     assert isinstance(plan.beam, BeamExecutor)
 
 
-def test_resolve_execution_beam_without_backend_installed_raises_runtime_error():
+def test_resolve_execution_beam_without_backend_installed_raises_runtime_error(
+    monkeypatch,
+):
+    from radiologist.etl import optional
     from radiologist.etl.execution import resolve_execution
+
+    # #189 needed a real apache-beam install in this shared environment to
+    # exercise the real BeamExecutor against the direct runner, so the
+    # backend is genuinely available here now — force the unavailable branch
+    # explicitly instead of relying on real absence, exactly as the dask test
+    # above does.
+    monkeypatch.setattr(optional, "_BEAM_AVAILABLE", False)
 
     cfg = _compose(
         "extract",

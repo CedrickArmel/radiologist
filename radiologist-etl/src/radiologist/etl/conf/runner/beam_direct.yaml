@@ -1,6 +1,7 @@
 # @package runner
-# Beam pipeline execution implemented in the deferred Beam issue (#189, excluded
-# from this build pass); this node only carries the configured BeamExecutor.
+# Beam's in-process direct runner: the pipeline owns its own parallelism and
+# runs inside a single orchestration task. A local parts_dir is acceptable
+# here because driver and workers share the same machine.
 family: beam
 # Fallback dispatch/wave size when the stage doesn't supply its own (e.g.
 # the build stage, which has no top-level batch_size of its own); the
@@ -10,5 +11,7 @@ beam:
   _target_: radiologist.etl.beam_executor.BeamExecutor
   pipeline_options:
     runner: DirectRunner
+    direct_num_workers: 0 # 0 -> one per available core
+    direct_running_mode: multi_processing
   parts_dir: ??? # scratch directory for intermediate Beam output
   storage_options: null
