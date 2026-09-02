@@ -353,6 +353,45 @@ def test_changing_shard_size_writes_to_a_different_output_folder_leaving_first_i
     assert Path(result2.output_dir).exists()
 
 
+def test_changing_ratios_writes_to_a_different_output_folder(tmp_path: Path) -> None:
+    from radiologist.etl.build import build_shards
+
+    path_a = _make_png(tmp_path, "a.png", "NORMAL")
+    records = [_record(path_a, "a.png", "NORMAL", "train")]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result1 = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        ratios=[("train", 0.70), ("val", 0.15), ("test", 0.15)],
+    )
+    result2 = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        ratios=[("train", 0.80), ("val", 0.10), ("test", 0.10)],
+    )
+
+    assert result1.run_id != result2.run_id
+    assert result1.output_dir != result2.output_dir
+
+
+def test_identical_ratios_including_order_across_two_runs_produce_the_same_run_id(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    path_a = _make_png(tmp_path, "a.png", "NORMAL")
+    records = [_record(path_a, "a.png", "NORMAL", "train")]
+    manifest_path = _make_split_manifest(tmp_path, records)
+    same_ratios = [("train", 0.70), ("val", 0.15), ("test", 0.15)]
+
+    result1 = build_shards(manifest_path, str(tmp_path / "shards"), ratios=same_ratios)
+    result2 = build_shards(manifest_path, str(tmp_path / "shards"), ratios=same_ratios)
+
+    assert result1.run_id == result2.run_id
+    assert result1.output_dir == result2.output_dir
+
+
 def test_changing_manifest_content_writes_to_a_different_output_folder(
     tmp_path: Path,
 ) -> None:
