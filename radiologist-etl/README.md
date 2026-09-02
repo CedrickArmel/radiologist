@@ -76,7 +76,7 @@ extractor = make_haralick(
 # extractor(image, metadata, mask) -> dict[str, float]
 ```
 
-`make_haralick` returns a `StatExtractor` (a `Protocol`-typed callable). Any function with signature `(image, metadata, mask?) -> dict[str, float]` can be plugged into `StatsProcessor` in its place.
+`make_haralick` returns a `StatExtractor` (a `Protocol`-typed callable). Any function with signature `(image, metadata, mask?) -> dict[str, float]` can be plugged into `process_batch` in its place.
 
 `lung_asymmetry(image, metadata, mask)` — returns `asymmetry_ratio` and `asymmetry_diff` from a lung segmentation mask.
 
