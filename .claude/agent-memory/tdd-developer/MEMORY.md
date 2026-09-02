@@ -1,5 +1,6 @@
 # Memory Index — tdd-developer agent
 
+- [ETL retire legacy flow #190](project_etl_retire_legacy_flow_190.md) — final epic refactor: ops.py/etl_flow/*_task/EtlResult were all dead, deletion-only, zero test changes
 - [ETL runner selection #182](project_etl_runner_selection_182.md) — ExecutionPlan/resolve_execution contract, conf/runner/*.yaml shape, mock-the-SDK-not-owned-code pattern for absent dask/ray/beam
 - [Numpy bool assertions](feedback_numpy_bool_assertions.md) — use `== True/False` not `is True/False` for pandas/numpy cells from Parquet/DataFrame
 - [Pre-commit E402](feedback_precommit_e402.md) — add `# noqa: E402` to imports that must follow a `sys.path.insert(...)` shim
