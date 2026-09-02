@@ -30,20 +30,6 @@ from radiologist.etl.manifest import ManifestRecord
 
 
 @dataclass(frozen=True)
-class EtlResult:
-    """The two facts a caller needs after a completed ETL run.
-
-    Attributes:
-        run_id: The run identifier the pipeline computed and stamped on
-            every artifact it produced.
-        manifest_path: Path to the final JSONL manifest file.
-    """
-
-    run_id: str
-    manifest_path: str
-
-
-@dataclass(frozen=True)
 class ExtractResult:
     """Outcome of one extract-stage run.
 
