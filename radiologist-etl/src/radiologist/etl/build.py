@@ -30,11 +30,9 @@ assign-split stage).
 
 This module's :func:`build_shards` is the package-level public
 ``radiologist.etl.build_shards`` (rebound here by issue #185). The old,
-differently-signatured :func:`radiologist.etl.shards.build_shards` (in-place
-manifest rewrite, dict ratios) is no longer re-exported at package level; it
-stays importable directly from :mod:`radiologist.etl.shards` for the still-
-live monolithic ``etl_flow`` (``ops.py``/``prefect_pipelines.py``), retired in
-a later issue.
+differently-signatured ``radiologist.etl.shards.build_shards`` (in-place
+manifest rewrite, dict ratios) predated the three-stage redesign and has
+been removed.
 """
 
 from __future__ import annotations
@@ -94,6 +92,8 @@ def build_shards(
         raise FileNotFoundError(f"Split manifest not found: {split_manifest_path}")
 
     config: dict = {"shard_size": shard_size}
+    if ratios is not None:
+        config["ratios"] = [list(pair) for pair in ratios]
     if run_label is not None:
         config["run_label"] = run_label
     run_id = compute_build_run_id(split_manifest_path, config, storage_options)
