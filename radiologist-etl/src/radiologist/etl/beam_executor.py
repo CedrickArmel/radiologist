@@ -34,7 +34,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from radiologist.etl.models import BatchOutcome
+from radiologist.etl.models import BatchOutcome, ShardJob, ShardOutcome
 from radiologist.etl.stats import StatExtractor
 
 
@@ -77,5 +77,22 @@ class BeamExecutor:
 
         Returns:
             One :class:`~radiologist.etl.models.BatchOutcome` per input batch.
+        """
+        raise NotImplementedError
+
+    def run_shards(self, jobs: Sequence[ShardJob]) -> list[ShardOutcome]:
+        """Run every shard-writing job through a Beam pipeline and collect the outcomes.
+
+        This is the build stage's counterpart to :meth:`run_batches` — the
+        method the build flow hands to :func:`~radiologist.etl.build.build_shards`
+        as its :data:`~radiologist.etl.execution.ShardMapper` when the resolved
+        plan carries a Beam executor. Stub only in this issue; the real
+        implementation lands in the deferred Beam issue (#189).
+
+        Args:
+            jobs: shard work units to run.
+
+        Returns:
+            One :class:`~radiologist.etl.models.ShardOutcome` per input job.
         """
         raise NotImplementedError

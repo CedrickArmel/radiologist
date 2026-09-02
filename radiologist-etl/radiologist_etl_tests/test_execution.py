@@ -180,8 +180,17 @@ def test_resolve_execution_with_unknown_family_raises_value_error():
         resolve_execution({"family": "spark"})
 
 
-def test_resolve_execution_dask_without_backend_installed_raises_runtime_error():
+def test_resolve_execution_dask_without_backend_installed_raises_runtime_error(
+    monkeypatch,
+):
+    from radiologist.etl import optional
     from radiologist.etl.execution import resolve_execution
+
+    # #186 needed a real prefect_dask install in this shared environment to
+    # exercise real DaskTaskRunner wiring, so the backend is genuinely
+    # available here now — force the unavailable branch explicitly instead
+    # of relying on real absence.
+    monkeypatch.setattr(optional, "_PREFECT_DASK_AVAILABLE", False)
 
     cfg = _compose("extract", overrides=["runner=dask_local"])
 
