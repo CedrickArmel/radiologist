@@ -34,10 +34,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import fsspec  # type: ignore[import-untyped]
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from radiologist.cli.main import extract_output_flag
 from radiologist.etl import run_assign_split, run_build, run_extract
+from radiologist.etl import storage_options_from_cfg as _storage_options_from_cfg
 from radiologist.utils.cli import (
     EXIT_ERROR,
     EXIT_OK,
@@ -59,12 +60,6 @@ SUBCOMMANDS: Tuple[str, ...] = ("extract", "assign-split", "build")
 
 def _usage() -> str:
     return "usage: radiologist etl {" + ",".join(SUBCOMMANDS) + "} ..."
-
-
-def _storage_options_from_cfg(cfg: DictConfig) -> Optional[dict]:
-    storage_options = OmegaConf.select(cfg, "storage_options")
-    raw = OmegaConf.to_container(storage_options) if storage_options else None
-    return dict(raw) if isinstance(raw, dict) else None
 
 
 def _ensure_input_exists(

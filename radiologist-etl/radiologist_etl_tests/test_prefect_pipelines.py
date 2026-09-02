@@ -33,8 +33,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 from omegaconf import OmegaConf
+from PIL import Image  # type: ignore[import-untyped]
 
 import radiologist.etl.prefect_pipelines as prefect_pipelines
 from radiologist.etl.assign import assign_splits  # noqa: E402
@@ -126,6 +128,33 @@ def _all_image_paths(image_dir: Path) -> list:
 def _pop_prefect_cloud_creds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PREFECT_API_URL", raising=False)
     monkeypatch.delenv("PREFECT_API_KEY", raising=False)
+
+
+class _MapSpy:
+    """Stand-in for a Prefect ``Task``'s ``.map()`` — records how many items
+    it was asked to map per call, so a test can assert bounded-wave dispatch
+    without a live task-runner-backed engine. Mirrors ``_FakeBeamExecutor``'s
+    role as a stand-in for the third-party call boundary; never mocks
+    ``radiologist.etl`` business logic — it delegates to the real ``fn``."""
+
+    def __init__(self, fn) -> None:
+        self._fn = fn
+        self.calls: list[list] = []
+
+    def map(self, items, **unmapped_kwargs):
+        items = list(items)
+        self.calls.append(items)
+        kwargs = {k: v.value for k, v in unmapped_kwargs.items()}
+        results = [self._fn(item, **kwargs) for item in items]
+        return _MapResult(results)
+
+
+class _MapResult:
+    def __init__(self, results: list) -> None:
+        self._results = results
+
+    def result(self):
+        return self._results
 
 
 class _FakeBeamExecutor:
@@ -353,6 +382,42 @@ def test_extract_flow_with_beam_shaped_plan_uses_the_executors_run_batches_as_ma
     assert result.total == len(paths)
 
 
+def test_extract_flow_with_task_runner_shaped_plan_dispatches_in_bounded_waves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A dask/ray-shaped plan (task_runner set) must never submit the whole
+    corpus to ``.map()`` in one call — it must chunk into waves bounded by
+    the plan's batch_size, mirroring local_mapper's backpressure guarantee."""
+    from radiologist.etl.processors import process_batch
+
+    image_dir = tmp_path / "images"
+    rng_paths = []
+    for i in range(9):
+        p = image_dir / "NORMAL" / f"img{i:03d}.png"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(np.zeros((10, 10, 3), dtype=np.uint8)).save(str(p))
+        rng_paths.append(str(p))
+
+    listing = _write_listing(tmp_path, rng_paths)
+    destination = tmp_path / "dest"
+    cfg = _extract_cfg(Path(listing), destination, batch_size=1)
+
+    spy = _MapSpy(process_batch)
+    monkeypatch.setattr(prefect_pipelines, "extract_batch_task", spy)
+
+    # extract_stage chunks the 9 paths into batches of plan.batch_size=2 each
+    # (5 batches: 2,2,2,2,1), then the wave bound (also plan.batch_size=2)
+    # chunks those 5 batches into waves of at most 2 batches per .map() call.
+    plan = ExecutionPlan(family="dask", task_runner=object(), batch_size=2)
+
+    prefect_pipelines.extract_flow.fn(cfg, execution=plan)
+
+    assert len(spy.calls) > 1, "expected multiple waves, not one giant .map() call"
+    assert all(len(call) <= 2 for call in spy.calls)
+    total_images = sum(len(batch) for call in spy.calls for batch in call)
+    assert total_images == 9
+
+
 # --- build_flow ----------------------------------------------------------------
 
 
@@ -450,6 +515,52 @@ def test_build_flow_with_beam_shaped_plan_uses_the_executors_run_shards_as_mappe
 
     assert fake_beam.shard_calls, "expected the beam executor's run_shards to be used"
     assert result.shard_count > 0
+
+
+def test_build_flow_with_task_runner_shaped_plan_dispatches_in_bounded_waves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A dask/ray-shaped plan (task_runner set) must never submit the whole
+    corpus of shard jobs to ``.map()`` in one call — it must chunk into waves
+    bounded by the plan's batch_size, mirroring local_mapper's backpressure
+    guarantee."""
+    from radiologist.etl.manifest import JsonlWriter, ManifestRecord
+    from radiologist.etl.shards import write_shard
+
+    image_dir = tmp_path / "images"
+    records = []
+    for i in range(9):
+        p = image_dir / "NORMAL" / f"img{i:03d}.png"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(np.zeros((10, 10, 3), dtype=np.uint8)).save(str(p))
+        records.append(
+            ManifestRecord(
+                manifest_id="assignrun0000001",
+                path=str(p),
+                filename=p.name,
+                label="NORMAL",
+                split="train",
+                stats={},
+            )
+        )
+    manifest_path = str(
+        tmp_path / "split-manifests" / "manifest-assignrun0000001.jsonl"
+    )
+    JsonlWriter().write(records, manifest_path)
+    shard_root = tmp_path / "shards"
+    # shard_size=1 -> 9 single-record shard jobs; wave bound from plan.batch_size=2
+    cfg = _build_cfg(Path(manifest_path), shard_root, shard_size=1)
+
+    spy = _MapSpy(lambda job, storage_options=None: write_shard(job, storage_options))
+    monkeypatch.setattr(prefect_pipelines, "write_shard_task", spy)
+
+    plan = ExecutionPlan(family="dask", task_runner=object(), batch_size=2)
+
+    prefect_pipelines.build_flow.fn(cfg, execution=plan)
+
+    assert len(spy.calls) > 1, "expected multiple waves, not one giant .map() call"
+    assert all(len(call) <= 2 for call in spy.calls)
+    assert sum(len(call) for call in spy.calls) == 9
 
 
 # --- assign_split_flow -----------------------------------------------------------

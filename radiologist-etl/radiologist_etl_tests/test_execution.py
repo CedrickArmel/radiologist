@@ -319,3 +319,46 @@ def test_local_mapper_returns_empty_list_for_empty_input():
     mapper = local_mapper(_double, workers=2)
 
     assert mapper([]) == []
+
+
+# --- storage_options_from_cfg ---------------------------------------------------
+
+
+def test_storage_options_from_cfg_returns_none_when_key_absent():
+    from omegaconf import OmegaConf
+
+    from radiologist.etl.execution import storage_options_from_cfg
+
+    cfg = OmegaConf.create({"foo": "bar"})
+
+    assert storage_options_from_cfg(cfg) is None
+
+
+def test_storage_options_from_cfg_returns_none_when_explicitly_null():
+    from omegaconf import OmegaConf
+
+    from radiologist.etl.execution import storage_options_from_cfg
+
+    cfg = OmegaConf.create({"storage_options": None})
+
+    assert storage_options_from_cfg(cfg) is None
+
+
+def test_storage_options_from_cfg_treats_explicit_empty_dict_as_a_valid_value():
+    from omegaconf import OmegaConf
+
+    from radiologist.etl.execution import storage_options_from_cfg
+
+    cfg = OmegaConf.create({"storage_options": {}})
+
+    assert storage_options_from_cfg(cfg) == {}
+
+
+def test_storage_options_from_cfg_returns_plain_dict_for_populated_options():
+    from omegaconf import OmegaConf
+
+    from radiologist.etl.execution import storage_options_from_cfg
+
+    cfg = OmegaConf.create({"storage_options": {"key": "abc123"}})
+
+    assert storage_options_from_cfg(cfg) == {"key": "abc123"}

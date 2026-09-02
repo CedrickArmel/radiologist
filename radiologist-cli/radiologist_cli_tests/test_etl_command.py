@@ -712,6 +712,24 @@ def test_output_flag_honoured_after_subcommand_token(
     assert "run_id" in payload
 
 
+# --- storage_options resolution -------------------------------------------------
+
+
+def test_cli_storage_options_resolution_treats_explicit_empty_dict_as_valid() -> None:
+    """The CLI's pre-flight ``storage_options`` resolution is the same shared
+    ``radiologist.etl.storage_options_from_cfg`` the ETL stages use (issue
+    #191 review finding 4) — an explicitly configured empty dict must not
+    collapse to ``None``, since ``None`` and ``{}`` are different configs."""
+    from omegaconf import OmegaConf
+
+    from radiologist.etl import storage_options_from_cfg
+
+    cfg = OmegaConf.create({"storage_options": {}})
+
+    assert etl_group._storage_options_from_cfg(cfg) == {}
+    assert etl_group._storage_options_from_cfg is storage_options_from_cfg
+
+
 # --- package export cutover ---------------------------------------------------
 
 

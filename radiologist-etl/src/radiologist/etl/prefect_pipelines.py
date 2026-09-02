@@ -53,7 +53,10 @@ from radiologist.etl.execution import (  # noqa: E402
     BatchMapper,
     ExecutionPlan,
     ShardMapper,
+    chunked,
+    default_workers,
     resolve_execution,
+    storage_options_from_cfg,
 )
 from radiologist.etl.extract import extract as extract_stage  # noqa: E402
 from radiologist.etl.models import (  # noqa: E402
@@ -157,16 +160,6 @@ def with_task_runner(flow_obj: Any, plan: ExecutionPlan) -> Any:
     return flow_obj
 
 
-def _storage_options_from_cfg(cfg: DictConfig) -> dict | None:
-    """Pull a plain ``dict`` out of ``cfg.storage_options`` (or ``None``)."""
-    raw = (
-        OmegaConf.to_container(cfg.storage_options)
-        if OmegaConf.select(cfg, "storage_options") is not None
-        else None
-    )
-    return dict(raw) if isinstance(raw, dict) else None
-
-
 def _ordered_ratios(cfg: DictConfig) -> SplitRatios | None:
     """Pull an ordered ``[(name, fraction), ...]`` sequence out of ``cfg.split_ratios``."""
     raw = OmegaConf.select(cfg, "split_ratios")
@@ -176,6 +169,23 @@ def _ordered_ratios(cfg: DictConfig) -> SplitRatios | None:
     if not isinstance(pairs, list):
         raise ValueError(f"split_ratios must resolve to a list of pairs, got {raw!r}")
     return tuple((str(name), float(fraction)) for name, fraction in pairs)
+
+
+def _wave_size(plan: ExecutionPlan) -> int:
+    """The max number of work units submitted to a task runner's ``.map()`` at once.
+
+    Task-runner-backed dispatch (dask/ray) must get the same backpressure
+    guarantee :func:`~radiologist.etl.execution.local_mapper` gives the local
+    path: bounded in-flight work, not the whole corpus submitted as futures
+    up front. ``plan.batch_size`` (resolved from the runner config's
+    ``batch_size``, see ``conf/runner/*.yaml``) is reused as that bound;
+    ``default_workers() * 2`` is the fallback when it isn't a usable bound.
+    """
+    return (
+        plan.batch_size
+        if plan.batch_size and plan.batch_size >= 1
+        else (default_workers() * 2)
+    )
 
 
 def _extract_batch_mapper(
@@ -205,17 +215,21 @@ def _extract_batch_mapper(
             extractors=extractors,
         )
     if plan.task_runner is not None:
+        wave_size = _wave_size(plan)
 
         def _mapped(batches: Sequence[Sequence[str]]) -> list[BatchOutcome]:
-            futures = extract_batch_task.map(
-                batches,
-                images_root=unmapped(images_root),
-                masks_root=unmapped(masks_root),
-                manifest_id=unmapped(""),
-                extractors=unmapped(extractors),
-                storage_options=unmapped(storage_options),
-            )
-            return list(futures.result())
+            results: list[BatchOutcome] = []
+            for wave in chunked(list(batches), wave_size):
+                futures = extract_batch_task.map(
+                    wave,
+                    images_root=unmapped(images_root),
+                    masks_root=unmapped(masks_root),
+                    manifest_id=unmapped(""),
+                    extractors=unmapped(extractors),
+                    storage_options=unmapped(storage_options),
+                )
+                results.extend(futures.result())
+            return results
 
         return _mapped
     return None
@@ -233,12 +247,16 @@ def _shard_mapper(
     if plan.beam is not None:
         return plan.beam.run_shards
     if plan.task_runner is not None:
+        wave_size = _wave_size(plan)
 
         def _mapped(jobs: Sequence[ShardJob]) -> list[ShardOutcome]:
-            futures = write_shard_task.map(
-                jobs, storage_options=unmapped(storage_options)
-            )
-            return list(futures.result())
+            results: list[ShardOutcome] = []
+            for wave in chunked(list(jobs), wave_size):
+                futures = write_shard_task.map(
+                    wave, storage_options=unmapped(storage_options)
+                )
+                results.extend(futures.result())
+            return results
 
         return _mapped
     return None
@@ -277,7 +295,7 @@ def extract_flow(
         ),
     )
 
-    storage_options = _storage_options_from_cfg(cfg)
+    storage_options = storage_options_from_cfg(cfg)
     images_root = OmegaConf.select(cfg, "images_root")
     masks_root = OmegaConf.select(cfg, "masks_root")
 
@@ -360,7 +378,7 @@ def assign_split_flow(cfg: DictConfig) -> AssignSplitResult:
         destination=cfg.destination,
         ratios=_ordered_ratios(cfg),
         run_label=OmegaConf.select(cfg, "run_label"),
-        storage_options=_storage_options_from_cfg(cfg),
+        storage_options=storage_options_from_cfg(cfg),
     )
 
     create_link_artifact(
@@ -406,7 +424,7 @@ def build_flow(cfg: DictConfig, execution: ExecutionPlan | None = None) -> Build
         ),
     )
 
-    storage_options = _storage_options_from_cfg(cfg)
+    storage_options = storage_options_from_cfg(cfg)
     mapper = _shard_mapper(plan, storage_options)
 
     result = build_shards_stage(
