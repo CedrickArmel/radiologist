@@ -1,6 +1,7 @@
 # @package runner
-# Beam pipeline execution implemented in the deferred Beam issue (#189, excluded
-# from this build pass); this node only carries the configured BeamExecutor.
+# Managed Beam runner. `pipeline_options` is handed to Beam verbatim, so a
+# cluster runner (Flink, Spark, ...) is this same file with a different
+# `pipeline_options` mapping and nothing else.
 family: beam
 # Fallback dispatch/wave size when the stage doesn't supply its own (e.g.
 # the build stage, which has no top-level batch_size of its own); the
@@ -13,5 +14,8 @@ beam:
     project: ??? # GCP project id
     region: ??? # GCP region
     temp_location: ??? # gs:// scratch bucket for Dataflow
-  parts_dir: ??? # scratch directory for intermediate Beam output
+    staging_location: ??? # gs:// staging bucket for Dataflow
+    sdk_container_image: null
+    max_num_workers: null
+  parts_dir: ??? # must be a shared remote URI, reachable by the workers
   storage_options: null

@@ -447,7 +447,17 @@ def test_extract_with_uninstalled_runner_backend_exits_nonzero_naming_extra(
     bypass_prefect_orchestration: None,
     clear_global_hydra: None,
     capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from radiologist.etl import optional
+
+    # The execution-runner extras are all genuinely installed in this shared
+    # environment (each family's issue needed its real backend to verify the
+    # wiring), so force the unavailable branch explicitly rather than relying
+    # on real absence — same approach as the per-family tests in
+    # radiologist-etl's test_execution.py.
+    monkeypatch.setattr(optional, "_PREFECT_RAY_AVAILABLE", False)
+
     images = _build_image_tree(tmp_path)
     paths = _all_image_paths(images)
     listing = _write_listing(tmp_path, paths)

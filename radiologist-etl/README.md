@@ -189,6 +189,38 @@ runner the stage's batches/shards are dispatched through:
 
 `assign-split` always runs locally and accepts no `runner=` override.
 
+#### Beam
+
+Beam is the one family that is not a Prefect task runner: a Beam pipeline
+owns its own parallelism and its own runner, so a Beam-backed stage is a
+single opaque unit of work from the orchestrator's point of view. It is
+configured through `runner.beam`:
+
+| Key | Description |
+|---|---|
+| `runner.beam.parts_dir` | required; scratch prefix the pipeline writes its per-unit outcomes to, then reads back — a Beam pipeline cannot return a collection to its driver |
+| `runner.beam.pipeline_options` | handed to Beam's `PipelineOptions` verbatim (runner name, project, region, temp/staging location, container image, …) |
+| `runner.beam.storage_options` | extra kwargs forwarded to fsspec |
+
+```bash
+radiologist etl extract file_list=data/listing.txt \
+  runner=beam_direct runner.beam.parts_dir=/tmp/beam-parts
+
+radiologist etl build split_manifest=... runner=beam_dataflow \
+  runner.beam.parts_dir=gs://bucket/beam-parts \
+  runner.beam.pipeline_options.project=my-project \
+  runner.beam.pipeline_options.region=europe-west1 \
+  runner.beam.pipeline_options.temp_location=gs://bucket/tmp \
+  runner.beam.pipeline_options.staging_location=gs://bucket/staging
+```
+
+`parts_dir` must be reachable by the Beam workers as well as by the driver:
+a local path is fine for the direct runner, but pairing a non-direct runner
+with a local `parts_dir` raises `ValueError` at construction. Supporting a
+further Beam runner (Flink, Spark, …) is a new `conf/runner/*.yaml` with a
+different `pipeline_options` mapping and no code change. Provisioning the
+project, bucket, or cluster a non-direct runner needs is the operator's.
+
 ### Programmatic use
 
 ```python
