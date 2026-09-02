@@ -167,6 +167,9 @@ addopts = [
     "--deselect=radiologist-core/radiologist_core_tests/test_onnx_export_callback.py::test_on_fit_end_noop_when_no_active_wandb_run",
 ]
 
+[tool.uv]
+constraint-dependencies = ["fastapi<0.116.0"]
+
 [tool.uv.build-backend]
 namespace = true
 
