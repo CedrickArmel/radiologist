@@ -27,7 +27,12 @@ from __future__ import annotations
 from radiologist.etl.assign import assign_splits
 from radiologist.etl.beam_executor import BeamExecutor
 from radiologist.etl.build import build_shards
-from radiologist.etl.execution import ExecutionPlan, default_workers, resolve_execution
+from radiologist.etl.execution import (
+    ExecutionPlan,
+    default_workers,
+    resolve_execution,
+    storage_options_from_cfg,
+)
 from radiologist.etl.extract import ExtractionFailureError, extract
 from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
 from radiologist.etl.identity import (
@@ -107,5 +112,6 @@ __all__: list[str] = [
     "ShardOutcome",
     "SplitRatios",
     "StatExtractor",
+    "storage_options_from_cfg",
     "write_shard",
 ]

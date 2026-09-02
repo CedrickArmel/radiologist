@@ -2,6 +2,9 @@
 # Beam pipeline execution implemented in the deferred Beam issue (#189, excluded
 # from this build pass); this node only carries the configured BeamExecutor.
 family: beam
+# Fallback dispatch/wave size when the stage doesn't supply its own (e.g.
+# the build stage, which has no top-level batch_size of its own); the
+# extract stage always overrides this via its own top-level batch_size.
 batch_size: 64
 beam:
   _target_: radiologist.etl.beam_executor.BeamExecutor

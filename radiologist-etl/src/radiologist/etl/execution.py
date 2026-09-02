@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
 
 from radiologist.etl import optional
 from radiologist.etl.beam_executor import BeamExecutor
@@ -51,6 +52,28 @@ R = TypeVar("R")
 
 BatchMapper = Callable[[Sequence[Sequence[str]]], list[BatchOutcome]]
 ShardMapper = Callable[[Sequence[ShardJob]], list[ShardOutcome]]
+
+
+def storage_options_from_cfg(cfg: DictConfig) -> dict | None:
+    """Pull a plain ``dict`` out of ``cfg.storage_options``, or ``None``.
+
+    An explicitly configured empty ``storage_options: {}`` is a deliberate,
+    valid "no special options" value and is returned as ``{}``, not
+    collapsed to ``None`` — only an absent/null key yields ``None``.
+
+    Args:
+        cfg: a Hydra ``DictConfig`` that may carry a ``storage_options`` key.
+
+    Returns:
+        A plain ``dict`` (possibly empty), or ``None`` when the key is
+        absent or explicitly ``null``.
+    """
+    raw = (
+        OmegaConf.to_container(cfg.storage_options)
+        if OmegaConf.select(cfg, "storage_options") is not None
+        else None
+    )
+    return dict(raw) if isinstance(raw, dict) else None
 
 
 def default_workers() -> int:
