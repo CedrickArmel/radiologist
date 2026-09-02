@@ -206,6 +206,14 @@ def extract(
         records.extend(outcome.records)
         failures.extend(outcome.failures)
 
+    # Guarantee every record carries this run's id regardless of which
+    # mapper produced it — an injected mapper (e.g. a flow's mapped-task
+    # wrapper) cannot know run_id until this function has computed it, so
+    # it may stamp a placeholder. The default local mapper already binds
+    # the correct value, making this a no-op re-assignment for that path.
+    for record in records:
+        record.manifest_id = run_id
+
     total = len(paths)
     failed = len(failures)
     succeeded = len(records)

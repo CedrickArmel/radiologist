@@ -186,6 +186,49 @@ def test_records_carry_lung_asymmetry_stats_when_masks_available(
     assert all("asymmetry_ratio" in r for r in rows)
 
 
+def test_records_carry_the_run_id_even_when_an_injected_mapper_stamps_a_placeholder(
+    image_dir, tmp_path
+):
+    """A caller-injected mapper (e.g. a Prefect flow's mapped-task wrapper)
+    cannot know ``run_id`` before ``extract()`` computes it, so it may stamp
+    a placeholder ``manifest_id`` on the records it returns. ``extract()``
+    must correct every record's ``manifest_id`` to the real run id before
+    writing the manifest, regardless of which mapper produced them."""
+    from radiologist.etl.extract import extract
+
+    paths = _all_image_paths(image_dir)
+    listing = _write_listing(tmp_path, paths)
+    destination = str(tmp_path / "dest")
+
+    def _placeholder_mapper(batches):
+        from radiologist.etl.processors import process_batch
+
+        outcomes = []
+        for batch in batches:
+            outcome = process_batch(
+                batch,
+                images_root=str(image_dir),
+                masks_root=None,
+                manifest_id="WRONG-PLACEHOLDER",
+                extractors=[],
+            )
+            outcomes.append(outcome)
+        return outcomes
+
+    result = extract(
+        listing,
+        destination,
+        images_root=str(image_dir),
+        extractors=[],
+        mapper=_placeholder_mapper,
+    )
+
+    rows = _read_manifest_lines(result.manifest_path)
+    assert rows, "expected at least one record"
+    assert all(row["manifest_id"] == result.run_id for row in rows)
+    assert all(row["manifest_id"] != "WRONG-PLACEHOLDER" for row in rows)
+
+
 def test_no_masks_means_no_record_flagged_out_of_frame_and_stage_completes(
     image_dir, tmp_path
 ):
