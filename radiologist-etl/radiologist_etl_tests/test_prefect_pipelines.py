@@ -766,3 +766,206 @@ def test_run_build_resolves_the_plan_and_attaches_its_task_runner(
 
     assert Path(result.manifest_path).exists()
     assert seen_execution and isinstance(seen_execution[0], ExecutionPlan)
+
+
+# --- issue #200: zero-valued knobs and distinct build artifacts ---------------
+
+
+def _make_split_manifest_with_missing(
+    tmp_path: Path, image_dir: Path, missing: int = 1
+) -> str:
+    """A split manifest over the real corpus plus ``missing`` unreadable paths.
+
+    The fabricated paths point at files that were never written, so
+    ``write_shard`` collects them as ``(path, message)`` failures — the
+    build stage's observable failure population.
+    """
+    from radiologist.etl.manifest import JsonlWriter, ManifestRecord
+
+    paths = [str(p) for p in sorted(image_dir.rglob("*.png"))]
+    paths += [str(image_dir / "NORMAL" / f"ghost{i:03d}.png") for i in range(missing)]
+    records = [
+        ManifestRecord(
+            manifest_id="assignrun0000001",
+            path=path,
+            filename=Path(path).name,
+            label=Path(path).parent.name,
+            split="train",
+            stats={},
+        )
+        for path in paths
+    ]
+    manifest_path = str(
+        tmp_path / "split-manifests" / "manifest-assignrun0000001.jsonl"
+    )
+    JsonlWriter().write(records, manifest_path)
+    return manifest_path
+
+
+def test_extract_flow_with_batch_size_configured_as_zero_raises_naming_the_size(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    listing = _write_listing(tmp_path, _all_image_paths(image_dir))
+    cfg = _extract_cfg(Path(listing), tmp_path / "dest", batch_size=0)
+
+    with pytest.raises(ValueError, match=r"size must be >= 1, got 0"):
+        prefect_pipelines.extract_flow.fn(cfg)
+
+
+def test_extract_flow_with_workers_configured_as_zero_raises(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    listing = _write_listing(tmp_path, _all_image_paths(image_dir))
+    cfg = _extract_cfg(Path(listing), tmp_path / "dest", workers=0)
+
+    with pytest.raises(ValueError):
+        prefect_pipelines.extract_flow.fn(cfg)
+
+
+def test_build_flow_with_workers_configured_as_zero_raises(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    split_manifest = _make_split_manifest(tmp_path, image_dir)
+    cfg = _build_cfg(Path(split_manifest), tmp_path / "shards", workers=0)
+
+    with pytest.raises(ValueError):
+        prefect_pipelines.build_flow.fn(cfg)
+
+
+def test_extract_flow_with_absent_batch_size_and_workers_uses_the_stage_defaults(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    paths = _all_image_paths(image_dir)
+    listing = _write_listing(tmp_path, paths)
+    cfg = _extract_cfg(Path(listing), tmp_path / "dest", batch_size=None, workers=None)
+
+    result = prefect_pipelines.extract_flow.fn(cfg)
+
+    assert result.total == len(paths)
+    assert Path(result.manifest_path).exists()
+
+
+def test_build_flow_with_absent_workers_uses_the_stage_default(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    split_manifest = _make_split_manifest(tmp_path, image_dir)
+    cfg = _build_cfg(Path(split_manifest), tmp_path / "shards", workers=None)
+
+    result = prefect_pipelines.build_flow.fn(cfg)
+
+    assert result.shard_count > 0
+    assert Path(result.manifest_path).exists()
+
+
+def test_extract_flow_dispatches_work_in_batches_of_the_configured_batch_size(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A positive configured batch size reaches the stage unchanged.
+
+    Companion to the zero-valued cases above: the same accessor feeds both,
+    so this pins the non-zero half of its contract.
+    """
+    from radiologist.etl.processors import process_batch
+
+    image_dir = tmp_path / "images"
+    paths = []
+    for i in range(9):
+        p = image_dir / "NORMAL" / f"img{i:03d}.png"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(np.zeros((10, 10, 3), dtype=np.uint8)).save(str(p))
+        paths.append(str(p))
+
+    listing = _write_listing(tmp_path, paths)
+    cfg = _extract_cfg(
+        Path(listing),
+        tmp_path / "dest",
+        batch_size=3,
+        runner={
+            "family": "local",
+            "task_runner": {"_target_": "prefect.task_runners.ThreadPoolTaskRunner"},
+        },
+    )
+
+    spy = _MapSpy(process_batch)
+    monkeypatch.setattr(prefect_pipelines, "extract_batch_task", spy)
+
+    prefect_pipelines.extract_flow.fn(cfg)
+
+    dispatched = [batch for call in spy.calls for batch in call]
+    assert dispatched, "expected batches to be dispatched"
+    assert [len(batch) for batch in dispatched] == [3, 3, 3]
+
+
+def test_build_flow_creates_the_split_report_and_the_output_link_under_distinct_keys(
+    monkeypatch: pytest.MonkeyPatch, image_dir: Path, tmp_path: Path
+) -> None:
+    split_manifest = _make_split_manifest(tmp_path, image_dir)
+    cfg = _build_cfg(Path(split_manifest), tmp_path / "shards")
+
+    table: dict = {}
+    link: dict = {}
+    monkeypatch.setattr(
+        prefect_pipelines, "create_table_artifact", lambda **kw: table.update(kw)
+    )
+    monkeypatch.setattr(
+        prefect_pipelines, "create_link_artifact", lambda **kw: link.update(kw)
+    )
+
+    result = prefect_pipelines.build_flow.fn(cfg)
+
+    assert table["table"], "expected the split-report rows"
+    assert link["link"] == result.output_dir
+    assert table["key"] != link["key"]
+    assert link["key"] == f"build-{result.run_id}"
+
+
+def test_build_flow_with_tolerance_above_the_failure_rate_completes_and_counts(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    split_manifest = _make_split_manifest_with_missing(tmp_path, image_dir, missing=1)
+    cfg = _build_cfg(Path(split_manifest), tmp_path / "shards", max_failure_rate=0.5)
+
+    result = prefect_pipelines.build_flow.fn(cfg)
+
+    assert result.failed == 1
+    assert Path(result.manifest_path).exists()
+
+
+def test_build_flow_with_tolerance_below_the_failure_rate_fails(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    from radiologist.etl.build import BuildFailureError
+
+    split_manifest = _make_split_manifest_with_missing(tmp_path, image_dir, missing=1)
+    cfg = _build_cfg(Path(split_manifest), tmp_path / "shards", max_failure_rate=0.1)
+
+    with pytest.raises(BuildFailureError):
+        prefect_pipelines.build_flow.fn(cfg)
+
+
+def test_build_flow_with_no_tolerance_configured_behaves_as_zero(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    from radiologist.etl.build import BuildFailureError
+
+    split_manifest = _make_split_manifest_with_missing(tmp_path, image_dir, missing=1)
+    cfg = _build_cfg(Path(split_manifest), tmp_path / "shards")
+
+    with pytest.raises(BuildFailureError):
+        prefect_pipelines.build_flow.fn(cfg)
+
+
+def test_build_flow_output_link_description_names_the_failure_count(
+    monkeypatch: pytest.MonkeyPatch, image_dir: Path, tmp_path: Path
+) -> None:
+    split_manifest = _make_split_manifest_with_missing(tmp_path, image_dir, missing=1)
+    cfg = _build_cfg(Path(split_manifest), tmp_path / "shards", max_failure_rate=0.5)
+
+    link: dict = {}
+    monkeypatch.setattr(
+        prefect_pipelines, "create_link_artifact", lambda **kw: link.update(kw)
+    )
+
+    result = prefect_pipelines.build_flow.fn(cfg)
+
+    assert f"{result.failed} failed" in link["description"]
