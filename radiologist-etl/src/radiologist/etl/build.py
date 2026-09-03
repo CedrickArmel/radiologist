@@ -52,6 +52,16 @@ from radiologist.etl.shards import plan_shards, write_shard
 from radiologist.etl.split import SplitRatios
 
 
+class BuildFailureError(RuntimeError):
+    """Raised when the share of unsharded records exceeds max_failure_rate."""
+
+
+# Exclusion reason code stamped on a record whose image could not be written
+# into its tar shard. Reason codes are pipe-joined when a record accumulates
+# more than one.
+SHARD_WRITE_FAILED_REASON: str = "shard_write_failed"
+
+
 def build_shards(
     split_manifest_path: str,
     shard_root: str,
@@ -61,6 +71,7 @@ def build_shards(
     run_label: str | None = None,
     mapper: ShardMapper | None = None,
     storage_options: dict | None = None,
+    max_failure_rate: float = 0.0,
 ) -> BuildResult:
     """Build WebDataset tar shards, a shard-annotated manifest, and a split report.
 
@@ -75,6 +86,8 @@ def build_shards(
         run_label: optional label folded into the run id.
         mapper: shard-dispatching callable; defaults to a local process-pool mapper.
         storage_options: extra kwargs forwarded to fsspec.
+        max_failure_rate: tolerated share of records that cannot be written into
+            a shard. Accepted but not yet enforced.
 
     Returns:
         A :class:`~radiologist.etl.models.BuildResult` describing the run.
