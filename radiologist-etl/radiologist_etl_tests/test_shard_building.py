@@ -197,3 +197,45 @@ def test_write_shard_relative_path_resolves_against_shard_root(tmp_path: Path) -
 
     resolved = str(Path(shard_root) / outcome.relative_path)
     assert Path(resolved).exists()
+
+
+def _empty_split_outcome(tmp_path: Path):
+    from radiologist.etl.models import ShardJob
+    from radiologist.etl.shards import write_shard
+
+    path_a = _make_png(tmp_path, "scan001.png", "NORMAL")
+    shard_root = str(tmp_path / "shards")
+    job = ShardJob(
+        split="",
+        label="NORMAL",
+        index=0,
+        shard_root=shard_root,
+        records=[_record(path_a, "scan001.png", "NORMAL", "")],
+    )
+    return shard_root, write_shard(job)
+
+
+def test_write_shard_relative_path_resolves_against_shard_root_for_empty_split(
+    tmp_path: Path,
+) -> None:
+    shard_root, outcome = _empty_split_outcome(tmp_path)
+
+    resolved = Path(shard_root) / outcome.relative_path
+    assert resolved.is_file()
+    assert _tar_members(str(resolved))
+
+
+def test_write_shard_relative_path_is_not_absolute_for_empty_split(
+    tmp_path: Path,
+) -> None:
+    _, outcome = _empty_split_outcome(tmp_path)
+
+    assert not outcome.relative_path.startswith("/")
+
+
+def test_write_shard_relative_path_names_label_then_filename_for_empty_split(
+    tmp_path: Path,
+) -> None:
+    _, outcome = _empty_split_outcome(tmp_path)
+
+    assert outcome.relative_path == "NORMAL/-normal-000000.tar"
