@@ -154,9 +154,11 @@ def build_shards(
     for outcome in outcomes:
         failures.extend(outcome.failures)
 
-    # ``planned`` is the population plan_shards actually grouped into jobs:
-    # the non-excluded records of the input manifest.
-    planned = sum(1 for record in records if not record.excluded)
+    # ``planned`` is read off the jobs plan_shards actually built, not
+    # re-derived from ``records`` — the two are equal today, but reading
+    # plan_shards' own output keeps that true by construction rather than by
+    # two modules agreeing on the same selection rule independently.
+    planned = sum(len(job.records) for job in jobs)
     failed = len(failures)
     failure_rate = failed / planned if planned else 0.0
 
