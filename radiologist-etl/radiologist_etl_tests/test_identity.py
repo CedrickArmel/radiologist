@@ -513,3 +513,42 @@ def test_records_reader_accepts_storage_options_positionally(tmp_path: Path) -> 
     records_no_opts = records_reader(dest)
     records_with_opts = records_reader(dest, {})
     assert records_with_opts == records_no_opts
+
+
+def test_directory_digest_is_location_independent_for_identical_basenames(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.identity import directory_digest
+
+    here = tmp_path / "here" / "manifests"
+    there = tmp_path / "somewhere" / "else" / "manifests"
+    for d in (here, there):
+        _write_jsonl(d / "extract-a.jsonl", b'{"x": 1}\n')
+        _write_jsonl(d / "extract-b.jsonl", b'{"y": 2}\n')
+
+    assert directory_digest(str(here)) == directory_digest(str(there))
+
+
+def test_directory_digest_ignores_entries_whose_basename_lacks_the_prefix(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.identity import directory_digest
+
+    d = tmp_path / "manifests"
+    _write_jsonl(d / "extract-a.jsonl", b'{"x": 1}\n')
+    before = directory_digest(str(d), prefix="extract-")
+    _write_jsonl(d / "manifest-deadbeef.jsonl", b'{"z": 3}\n')
+    after = directory_digest(str(d), prefix="extract-")
+    assert before == after
+
+
+def test_directory_digest_with_a_prefix_still_tracks_matching_manifests(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.identity import directory_digest
+
+    d = tmp_path / "manifests"
+    _write_jsonl(d / "extract-a.jsonl", b'{"x": 1}\n')
+    before = directory_digest(str(d), prefix="extract-")
+    _write_jsonl(d / "extract-b.jsonl", b'{"y": 2}\n')
+    assert directory_digest(str(d), prefix="extract-") != before

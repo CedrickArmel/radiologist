@@ -100,15 +100,17 @@ def directory_digest(
     storage_options: dict | None = None,
     prefix: str = "",
 ) -> str:
-    """Hash the sorted (name, size) pairs of a directory's matching entries.
+    """Hash the sorted (basename, size) pairs of a directory's matching entries.
+
+    Only the final path component of each entry is hashed, so a byte-identical
+    folder copied to another location yields the same digest.
 
     Args:
         directory: fsspec-compatible URI to the directory.
-        suffix: only entries ending in this suffix are included.
+        suffix: only entries whose basename ends with this suffix are included.
         storage_options: extra kwargs forwarded to fsspec.
         prefix: only entries whose basename starts with this prefix are
-            included. Accepted but not yet enforced; ``""`` matches on suffix
-            alone.
+            included; ``""`` matches on suffix alone.
 
     Returns:
         The full 64-char hex digest, obtained with a single detailed listing
@@ -121,9 +123,13 @@ def directory_digest(
         raise _not_found(directory) from exc
 
     pairs = sorted(
-        (str(entry["name"]), entry.get("size"))
-        for entry in entries
-        if entry.get("type") == "file" and str(entry["name"]).endswith(suffix)
+        (basename, entry.get("size"))
+        for entry, basename in (
+            (entry, str(entry["name"]).rsplit("/", 1)[-1]) for entry in entries
+        )
+        if entry.get("type") == "file"
+        and basename.startswith(prefix)
+        and basename.endswith(suffix)
     )
     payload = json.dumps(pairs)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -172,9 +178,16 @@ def compute_assign_run_id(
         storage_options: extra kwargs forwarded to fsspec.
 
     Returns:
-        16-char id over ``directory_digest(manifests_dir)`` + ``config_digest(config)``.
+        16-char id over the digest of the folder's ``extract-``-prefixed
+        manifests + ``config_digest(config)``. Files the extract stage did not
+        write — including this stage's own previous output — are ignored.
     """
-    input_digest = directory_digest(manifests_dir, storage_options=storage_options)
+    input_digest = directory_digest(
+        manifests_dir,
+        suffix=EXTRACT_MANIFEST_SUFFIX,
+        storage_options=storage_options,
+        prefix=EXTRACT_MANIFEST_PREFIX,
+    )
     return _stage_run_id("assign", input_digest, config_digest(config))
 
 
