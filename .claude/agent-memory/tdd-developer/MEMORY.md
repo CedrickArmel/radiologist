@@ -31,6 +31,7 @@
 - [Narrowed shared-helper signature drops params](feedback_narrowed_shared_helper_signature_drops_params.md) — a "rewire onto shared helper X" issue's literal call-signature snippet can predate optional kwargs that landed afterward; grep old call sites' full kwargs before deleting any, extend the helper instead of regressing
 - [Review-fix reverts epic seam scope creep](feedback_review_fix_reverts_epic_seam_scope_creep.md) — when a review says an internal seam leaked into `__all__`, revert both the export and the test's expected set atomically; don't just widen the test to match the leak
 - [Spawn pool test module PYTHONPATH](feedback_spawn_pool_test_module_pythonpath.md) — process-pool tests need PYTHONPATH set (not just sys.path) so spawned children can import the test module's worker function
+- [OOM kills pytest under parallel agents](feedback_oom_kills_pytest_under_parallel_agents.md) — exit 137 + empty output looks like a hang/pass; run `-u`, file-by-file, and inject a serial mapper in your own tests
 - [Docstring lint cutover scope](feedback_docstring_lint_cutover_scope.md) — a "clean" claim measured under a still-suppressed rule isn't proof the flip is clean; re-verify after; scope src-only enforcement via per-file-ignores instead of writing test docstrings
 
 - [Epic slice readonly seam reuse](feedback_epic_slice_readonly_seam_reuse.md) — verify a "already implemented, check if it's a gap" hedge by reading the file before writing extra code
