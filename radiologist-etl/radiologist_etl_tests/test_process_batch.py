@@ -25,6 +25,8 @@ per-batch worker the extract stage's mapper dispatches."""
 
 from __future__ import annotations
 
+import pytest
+
 
 def test_readable_images_in_a_batch_each_produce_a_record(image_dir):
     from radiologist.etl.models import BatchOutcome
@@ -123,3 +125,69 @@ def test_records_have_no_lung_out_of_frame_flag_without_masks(image_dir):
     )
 
     assert all(r.lung_out_of_frame is None for r in outcome.records)
+
+
+# --- masks_root/images_root invariant ----------------------------------------
+
+
+def test_a_mask_root_without_an_images_root_is_rejected_naming_both_settings(
+    image_dir, mask_dir
+):
+    from radiologist.etl import process_batch
+    from radiologist.etl.stats import make_haralick
+
+    paths = [str(p) for p in sorted(image_dir.rglob("*.png"))]
+
+    with pytest.raises(ValueError) as excinfo:
+        process_batch(
+            paths,
+            images_root=None,
+            masks_root=str(mask_dir),
+            manifest_id="run-0000000000000001",
+            extractors=[make_haralick(features=["mean"])],
+        )
+
+    message = str(excinfo.value)
+    assert "masks_root" in message
+    assert "images_root" in message
+
+
+def test_the_invalid_root_pair_is_rejected_before_any_image_is_read(tmp_path):
+    from radiologist.etl import process_batch
+    from radiologist.etl.stats import make_haralick
+
+    absent = [str(tmp_path / "nowhere" / f"img{i}.png") for i in range(3)]
+
+    for paths in ([], absent):
+        with pytest.raises(ValueError, match="images_root"):
+            process_batch(
+                paths,
+                images_root=None,
+                masks_root=str(tmp_path / "masks"),
+                manifest_id="run-0000000000000001",
+                extractors=[make_haralick(features=["mean"])],
+            )
+
+
+def test_dispatching_beam_batches_without_an_images_root_surfaces_the_error(
+    image_dir, mask_dir, tmp_path
+):
+    from radiologist.etl.beam_executor import BeamExecutor
+    from radiologist.etl.stats import make_haralick
+
+    paths = [str(p) for p in sorted(image_dir.rglob("*.png"))]
+    executor = BeamExecutor(
+        pipeline_options={"runner": "DirectRunner"},
+        parts_dir=str(tmp_path / "parts"),
+    )
+
+    with pytest.raises(Exception) as excinfo:
+        executor.run_batches(
+            [paths],
+            images_root=None,
+            masks_root=str(mask_dir),
+            manifest_id="run-0000000000000001",
+            extractors=[make_haralick(features=["mean"])],
+        )
+
+    assert "images_root" in str(excinfo.value)

@@ -47,7 +47,10 @@ from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
 from radiologist.etl.identity import compute_extract_run_id
 from radiologist.etl.manifest import JsonlWriter, ManifestRecord
 from radiologist.etl.models import ExtractResult
-from radiologist.etl.processors import process_batch
+from radiologist.etl.processors import (
+    _MASKS_ROOT_REQUIRES_IMAGES_ROOT,
+    process_batch,
+)
 from radiologist.etl.stats import StatExtractor, lung_asymmetry, make_haralick
 
 
@@ -154,10 +157,7 @@ def extract(
         ExtractionFailureError: if ``failed / total`` exceeds ``max_failure_rate``.
     """
     if masks_root is not None and images_root is None:
-        raise ValueError(
-            "masks_root requires images_root to resolve the mask mirror path — "
-            "both are required together"
-        )
+        raise ValueError(_MASKS_ROOT_REQUIRES_IMAGES_ROOT)
 
     paths = read_file_list(file_list, storage_options=storage_options)
 
