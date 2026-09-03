@@ -109,6 +109,7 @@ def extract_main(cfg: DictConfig) -> None:
             "total": result.total,
             "succeeded": result.succeeded,
             "failed": result.failed,
+            "failure_rate": result.failure_rate,
             "excluded": result.excluded,
         }
     )
@@ -142,6 +143,7 @@ def assign_split_main(cfg: DictConfig) -> None:
             "source_manifest_count": result.source_manifest_count,
             "record_count": result.record_count,
             "duplicate_count": result.duplicate_count,
+            "counts_by_split": result.counts_by_split,
         }
     )
 
@@ -174,6 +176,8 @@ def build_main(cfg: DictConfig) -> None:
             "manifest_path": result.manifest_path,
             "report_path": result.report_path,
             "shard_count": result.shard_count,
+            "record_count": result.record_count,
+            "failed": result.failed,
         }
     )
 
