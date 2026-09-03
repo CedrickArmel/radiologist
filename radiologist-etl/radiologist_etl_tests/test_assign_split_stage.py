@@ -464,3 +464,87 @@ class TestReportingAndReadability:
             result.split_manifest_path, storage_options={"auto_mkdir": True}
         )
         assert len(written) == 1
+
+
+class TestAssignSplitsInputIdentity:
+    def test_a_byte_identical_manifests_folder_elsewhere_yields_the_same_run_id(
+        self, tmp_path: Path
+    ) -> None:
+        from radiologist.etl import assign_splits
+
+        records = [
+            _make_record("/d/a.png", "a.png"),
+            _make_record("/d/b.png", "b.png"),
+        ]
+        run_ids = []
+        manifest_names = []
+        for location in ("here", "somewhere/deeper/else"):
+            manifests_dir = tmp_path / location / "manifests"
+            manifests_dir.mkdir(parents=True)
+            _write_manifest(manifests_dir, "extract-0001.jsonl", records)
+            result = assign_splits(str(manifests_dir), str(tmp_path / location / "out"))
+            run_ids.append(result.run_id)
+            manifest_names.append(Path(result.split_manifest_path).name)
+
+        assert run_ids[0] == run_ids[1]
+        assert manifest_names[0] == manifest_names[1]
+
+    def test_a_jsonl_file_without_the_extract_prefix_is_not_a_source_manifest(
+        self, tmp_path: Path
+    ) -> None:
+        from radiologist.etl import assign_splits, records_reader
+
+        manifests_dir = tmp_path / "manifests"
+        manifests_dir.mkdir()
+        dest_dir = tmp_path / "out"
+        _write_manifest(
+            manifests_dir, "extract-0001.jsonl", [_make_record("/d/a.png", "a.png")]
+        )
+        before = assign_splits(str(manifests_dir), str(dest_dir))
+
+        _write_manifest(
+            manifests_dir, "manifest-cafe.jsonl", [_make_record("/d/z.png", "z.png")]
+        )
+        after = assign_splits(str(manifests_dir), str(dest_dir))
+
+        assert after.run_id == before.run_id
+        assert after.source_manifest_count == 1
+        written = records_reader(after.split_manifest_path)
+        assert {r.path for r in written} == {"/d/a.png"}
+
+    def test_rerunning_in_place_is_stable_and_leaves_one_split_manifest(
+        self, tmp_path: Path
+    ) -> None:
+        from radiologist.etl import assign_splits
+
+        folder = tmp_path / "manifests"
+        folder.mkdir()
+        _write_manifest(
+            folder,
+            "extract-0001.jsonl",
+            [_make_record("/d/a.png", "a.png"), _make_record("/d/b.png", "b.png")],
+        )
+
+        first = assign_splits(str(folder), str(folder))
+        second = assign_splits(str(folder), str(folder))
+
+        assert second.run_id == first.run_id
+        assert second.source_manifest_count == first.source_manifest_count
+        assert second.record_count == first.record_count
+        assert sorted(p.name for p in folder.glob("manifest-*.jsonl")) == [
+            "manifest-" + first.run_id + ".jsonl"
+        ]
+
+    def test_a_folder_of_only_non_extract_jsonl_files_raises_naming_the_folder(
+        self, tmp_path: Path
+    ) -> None:
+        from radiologist.etl import assign_splits
+
+        manifests_dir = tmp_path / "manifests"
+        manifests_dir.mkdir()
+        _write_manifest(
+            manifests_dir, "manifest-cafe.jsonl", [_make_record("/d/z.png", "z.png")]
+        )
+
+        with pytest.raises(FileNotFoundError, match="manifests"):
+            assign_splits(str(manifests_dir), str(tmp_path / "out"))

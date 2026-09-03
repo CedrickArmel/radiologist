@@ -42,7 +42,11 @@ from dataclasses import replace
 
 import fsspec  # type: ignore[import-untyped]
 
-from radiologist.etl.identity import compute_assign_run_id
+from radiologist.etl.identity import (
+    EXTRACT_MANIFEST_PREFIX,
+    EXTRACT_MANIFEST_SUFFIX,
+    compute_assign_run_id,
+)
 from radiologist.etl.manifest import JsonlWriter, records_reader
 from radiologist.etl.models import AssignSplitResult
 from radiologist.etl.split import SplitRatios, assign_split, normalize_ratios
@@ -53,8 +57,6 @@ logger = logging.getLogger(__name__)
 # (dict-ratios) pipeline gave it. Changing this order or these fractions
 # re-partitions every corpus and must be treated as a breaking data change.
 _DEFAULT_RATIOS: SplitRatios = (("train", 0.70), ("val", 0.15), ("test", 0.15))
-
-_MANIFEST_SUFFIX = ".jsonl"
 
 
 def assign_splits(
@@ -67,7 +69,10 @@ def assign_splits(
     """Concatenate, dedupe, and split-assign every extract manifest in a folder.
 
     Args:
-        manifests_dir: folder of extract manifests, read in sorted name order.
+        manifests_dir: folder scanned for ``extract-``-prefixed ``.jsonl``
+            manifests, read in sorted name order. Anything else in the folder —
+            including a split manifest this stage wrote on a previous run — is
+            ignored, so ``destination`` may safely equal ``manifests_dir``.
         destination: folder the split manifest is written into.
         ratios: explicitly ordered split ratios; defaults to
             ``[("train", 0.70), ("val", 0.15), ("test", 0.15)]``.
@@ -88,13 +93,20 @@ def assign_splits(
         entries = fs.ls(path, detail=True)
     except FileNotFoundError:
         entries = []
+    # Selects exactly the set compute_assign_run_id fingerprints — the same two
+    # constants, the same basename test. Sorting the full names (not the
+    # basenames) keeps multi-manifest merge order unchanged for existing corpora.
     manifest_files = sorted(
-        entry["name"]
-        for entry in entries
-        if entry.get("type") == "file" and str(entry["name"]).endswith(_MANIFEST_SUFFIX)
+        name
+        for entry, name in ((entry, str(entry["name"])) for entry in entries)
+        if entry.get("type") == "file"
+        and name.rsplit("/", 1)[-1].startswith(EXTRACT_MANIFEST_PREFIX)
+        and name.endswith(EXTRACT_MANIFEST_SUFFIX)
     )
     if not manifest_files:
-        raise FileNotFoundError(f"No extract manifest found in {manifests_dir!r}")
+        raise FileNotFoundError(
+            f"No {EXTRACT_MANIFEST_PREFIX!r} manifest found in {manifests_dir!r}"
+        )
 
     seen_paths: dict = {}
     seen_filenames: dict = {}

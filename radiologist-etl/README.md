@@ -169,7 +169,7 @@ Common ones:
 | `extract` | `iqr_factor` | `1.5` | IQR multiplier for outlier threshold |
 | `extract` | `max_failure_rate` | `0.0` | Unreadable-image tolerance before the run fails |
 | `extract` | `runner` | `local` | Execution backend (see below) |
-| `assign-split` | `manifests_dir` | required | Folder of extract manifests to merge |
+| `assign-split` | `manifests_dir` | required | Folder of extract manifests to merge. Only files whose name starts with `extract-` and ends in `.jsonl` are selected — any other file, including a split manifest written by a previous run, is ignored, so `destination` may equal `manifests_dir` |
 | `assign-split` | `split_ratios` | `[[train,.70],[val,.15],[test,.15]]` | Ordered split contract |
 | `build` | `split_manifest` | required | Manifest produced by `assign-split` |
 | `build` | `shard_size` | `1000` | Max images per tar shard |
