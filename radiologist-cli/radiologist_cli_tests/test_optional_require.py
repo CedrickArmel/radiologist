@@ -51,13 +51,26 @@ class TestRequire:
 
         assert "pip install 'radiologist-cli[inference]'" in str(excinfo.value)
 
-    def test_raises_cli_hint_not_business_hint_when_etl_feature_sentinel_missing(
+    def test_returns_the_etl_module_when_prefect_is_unavailable(
         self, monkeypatch
     ) -> None:
+        """The ``etl`` group gates on module importability only: prefect is an
+        optional execution backend, not a precondition for starting the group.
+        """
+        import radiologist.etl as etl_module
         from radiologist.cli.optional import require
         from radiologist.etl import optional as etl_optional
 
         monkeypatch.setattr(etl_optional, "_PREFECT_AVAILABLE", False)
+
+        assert require("etl") is etl_module
+
+    def test_raises_cli_hint_when_the_etl_package_is_absent(self, monkeypatch) -> None:
+        import radiologist.cli.optional as optional
+
+        monkeypatch.setattr(optional, "_etl", None)
+
+        from radiologist.cli.optional import require
 
         with pytest.raises(RuntimeError) as excinfo:
             require("etl")
@@ -65,6 +78,25 @@ class TestRequire:
         message = str(excinfo.value)
         assert "pip install 'radiologist-cli[etl]'" in message
         assert "radiologist-etl" not in message
+
+    def test_etl_group_dispatches_and_prints_usage_when_prefect_is_unavailable(
+        self, monkeypatch, capsys
+    ) -> None:
+        """End-to-end consequence of the relaxed gate: ``radiologist etl`` with
+        no subcommand reaches the group and prints its own usage line instead
+        of refusing to start."""
+        import radiologist.cli.groups.etl as etl_group
+        from radiologist.cli.main import run_group
+        from radiologist.etl import optional as etl_optional
+
+        monkeypatch.setattr(etl_optional, "_PREFECT_AVAILABLE", False)
+
+        exit_code = run_group("etl", [])
+
+        captured = capsys.readouterr()
+        assert exit_code != 0
+        for subcommand in etl_group.SUBCOMMANDS:
+            assert subcommand in captured.err
 
     def test_raises_cli_hint_not_business_hint_when_registry_feature_sentinel_missing(
         self, monkeypatch
