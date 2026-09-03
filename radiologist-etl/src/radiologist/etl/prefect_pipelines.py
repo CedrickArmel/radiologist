@@ -94,6 +94,23 @@ def _haralick_list(cfg_node: object, key: str) -> list | None:
     return (list(val) or None) if val else None
 
 
+def _opt_int(cfg: DictConfig, key: str) -> int | None:
+    """Read an optional integer stage setting out of a config.
+
+    Args:
+        cfg: the stage's config node.
+        key: the key to resolve.
+
+    Returns:
+        ``int(value)`` when ``key`` resolves to a non-null value — including a
+        configured ``0``, which reaches the stage and is rejected there rather
+        than silently replaced by a default — and ``None`` when the key is
+        absent or explicitly null.
+    """
+    value = OmegaConf.select(cfg, key)
+    return int(value) if value is not None else None
+
+
 @task(cache_policy=INPUTS)
 def extract_batch_task(
     paths: list[str],
@@ -280,7 +297,7 @@ def extract_flow(
             f"{_PREFECT_IMPORT_ERROR}: prefect is missing. This run will not be recorded!"
         )
 
-    batch_size = int(cfg.batch_size) if OmegaConf.select(cfg, "batch_size") else None
+    batch_size = _opt_int(cfg, "batch_size")
     plan = (
         execution
         if execution is not None
@@ -329,7 +346,7 @@ def extract_flow(
             if OmegaConf.select(cfg, "iqr_factor") is not None
             else 1.5
         ),
-        workers=int(cfg.workers) if OmegaConf.select(cfg, "workers") else None,
+        workers=_opt_int(cfg, "workers"),
         batch_size=plan.batch_size,
         max_failure_rate=(
             float(cfg.max_failure_rate)
@@ -432,10 +449,15 @@ def build_flow(cfg: DictConfig, execution: ExecutionPlan | None = None) -> Build
         shard_root=cfg.shard_root,
         shard_size=int(cfg.shard_size),
         ratios=_ordered_ratios(cfg),
-        workers=int(cfg.workers) if OmegaConf.select(cfg, "workers") else None,
+        workers=_opt_int(cfg, "workers"),
         run_label=OmegaConf.select(cfg, "run_label"),
         mapper=mapper,
         storage_options=storage_options,
+        max_failure_rate=(
+            float(cfg.max_failure_rate)
+            if OmegaConf.select(cfg, "max_failure_rate") is not None
+            else 0.0
+        ),
     )
 
     opts = storage_options or {}
@@ -448,7 +470,7 @@ def build_flow(cfg: DictConfig, execution: ExecutionPlan | None = None) -> Build
     ]
     create_table_artifact(
         table=rows,
-        key=f"build-{result.run_id}",
+        key=f"build-report-{result.run_id}",
         description=f"Shard split report for run {result.run_id}",
     )
 
@@ -457,7 +479,8 @@ def build_flow(cfg: DictConfig, execution: ExecutionPlan | None = None) -> Build
         key=f"build-{result.run_id}",
         description=(
             f"Build output for run {result.run_id}: "
-            f"{result.shard_count} shard(s), {result.record_count} record(s)."
+            f"{result.shard_count} shard(s), {result.record_count} record(s), "
+            f"{result.failed} failed."
         ),
     )
     return result
@@ -472,7 +495,7 @@ def run_extract(cfg: DictConfig) -> ExtractResult:
     Returns:
         An :class:`~radiologist.etl.models.ExtractResult` describing the run.
     """
-    batch_size = int(cfg.batch_size) if OmegaConf.select(cfg, "batch_size") else None
+    batch_size = _opt_int(cfg, "batch_size")
     plan = resolve_execution(OmegaConf.select(cfg, "runner"), batch_size=batch_size)
     flow_to_run = with_task_runner(extract_flow, plan)
     return flow_to_run(cfg, execution=plan)
