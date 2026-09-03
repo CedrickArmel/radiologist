@@ -37,6 +37,13 @@ from typing import Any
 
 import fsspec  # type: ignore[import-untyped]
 
+# Filename prefix and suffix the extract stage writes
+# ("{destination}/extract-{run_id}.jsonl"). Single source of truth for "this
+# file is an extract manifest", shared by the assign-split folder scan and the
+# assign-split run-id fingerprint so the two can never disagree.
+EXTRACT_MANIFEST_PREFIX: str = "extract-"
+EXTRACT_MANIFEST_SUFFIX: str = ".jsonl"
+
 
 def _not_found(uri: str) -> FileNotFoundError:
     return FileNotFoundError(f"No such file or directory: {uri!r}")
@@ -91,6 +98,7 @@ def directory_digest(
     directory: str,
     suffix: str = ".jsonl",
     storage_options: dict | None = None,
+    prefix: str = "",
 ) -> str:
     """Hash the sorted (name, size) pairs of a directory's matching entries.
 
@@ -98,6 +106,9 @@ def directory_digest(
         directory: fsspec-compatible URI to the directory.
         suffix: only entries ending in this suffix are included.
         storage_options: extra kwargs forwarded to fsspec.
+        prefix: only entries whose basename starts with this prefix are
+            included. Accepted but not yet enforced; ``""`` matches on suffix
+            alone.
 
     Returns:
         The full 64-char hex digest, obtained with a single detailed listing

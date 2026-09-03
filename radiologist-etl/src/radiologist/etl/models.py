@@ -84,6 +84,8 @@ class BuildResult:
         report_path: ``{output_dir}/split-report-{run_id}.json``.
         shard_count: number of tar shards written.
         record_count: non-excluded records written into shards.
+        failed: records that were planned into a shard but could not be written.
+        failure_rate: ``failed / planned``, ``0.0`` when nothing was planned.
     """
 
     run_id: str
@@ -92,6 +94,8 @@ class BuildResult:
     report_path: str
     shard_count: int
     record_count: int
+    failed: int = 0
+    failure_rate: float = 0.0
 
 
 @dataclass(frozen=True)

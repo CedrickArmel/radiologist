@@ -26,7 +26,11 @@ from __future__ import annotations
 
 from radiologist.etl.assign import assign_splits
 from radiologist.etl.beam_executor import BeamExecutor
-from radiologist.etl.build import build_shards
+from radiologist.etl.build import (
+    SHARD_WRITE_FAILED_REASON,
+    BuildFailureError,
+    build_shards,
+)
 from radiologist.etl.execution import (
     ExecutionPlan,
     default_workers,
@@ -36,6 +40,8 @@ from radiologist.etl.execution import (
 from radiologist.etl.extract import ExtractionFailureError, extract
 from radiologist.etl.filters import filter_iqr, filter_lung_out_of_frame
 from radiologist.etl.identity import (
+    EXTRACT_MANIFEST_PREFIX,
+    EXTRACT_MANIFEST_SUFFIX,
     compute_assign_run_id,
     compute_build_run_id,
     compute_extract_run_id,
@@ -79,6 +85,7 @@ __all__: list[str] = [
     "BeamExecutor",
     "build_flow",
     "build_shards",
+    "BuildFailureError",
     "BuildResult",
     "compute_assign_run_id",
     "compute_build_run_id",
@@ -90,6 +97,8 @@ __all__: list[str] = [
     "ExecutionPlan",
     "extract",
     "extract_flow",
+    "EXTRACT_MANIFEST_PREFIX",
+    "EXTRACT_MANIFEST_SUFFIX",
     "ExtractionFailureError",
     "ExtractResult",
     "filter_iqr",
@@ -110,6 +119,7 @@ __all__: list[str] = [
     "run_extract",
     "ShardJob",
     "ShardOutcome",
+    "SHARD_WRITE_FAILED_REASON",
     "SplitRatios",
     "StatExtractor",
     "storage_options_from_cfg",
