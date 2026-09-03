@@ -173,6 +173,7 @@ Common ones:
 | `assign-split` | `split_ratios` | `[[train,.70],[val,.15],[test,.15]]` | Ordered split contract |
 | `build` | `split_manifest` | required | Manifest produced by `assign-split` |
 | `build` | `shard_size` | `1000` | Max images per tar shard |
+| `build` | `max_failure_rate` | `0.0` | Unshardable-record tolerance before the run fails |
 | `build` | `runner` | `local` | Execution backend (see below) |
 
 ### Execution runners

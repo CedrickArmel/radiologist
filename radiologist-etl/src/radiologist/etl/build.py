@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 from collections import defaultdict
 
 import fsspec  # type: ignore[import-untyped]
@@ -50,6 +51,8 @@ from radiologist.etl.manifest import JsonlWriter, records_reader
 from radiologist.etl.models import BuildResult
 from radiologist.etl.shards import plan_shards, write_shard
 from radiologist.etl.split import SplitRatios
+
+logger = logging.getLogger(__name__)
 
 
 class BuildFailureError(RuntimeError):
@@ -86,8 +89,10 @@ def build_shards(
         run_label: optional label folded into the run id.
         mapper: shard-dispatching callable; defaults to a local process-pool mapper.
         storage_options: extra kwargs forwarded to fsspec.
-        max_failure_rate: tolerated share of records that cannot be written into
-            a shard. Accepted but not yet enforced.
+        max_failure_rate: tolerated share of the records planned into shards that
+            may fail to be written before the run is failed. Failures at or below
+            the tolerance mark their records excluded with
+            :data:`SHARD_WRITE_FAILED_REASON`.
 
     Returns:
         A :class:`~radiologist.etl.models.BuildResult` describing the run.
@@ -95,6 +100,9 @@ def build_shards(
     Raises:
         FileNotFoundError: if ``split_manifest_path`` does not exist.
         ValueError: if ``shard_size < 1``.
+        BuildFailureError: if the share of records that could not be written into
+            a shard exceeds ``max_failure_rate``. Raised before the manifest and
+            the split report are written.
     """
     if shard_size < 1:
         raise ValueError(f"shard_size must be >= 1, got {shard_size!r}")
@@ -125,6 +133,44 @@ def build_shards(
         )
 
     outcomes = mapper(jobs) if jobs else []
+
+    failures: list[tuple[str, str]] = []
+    for outcome in outcomes:
+        failures.extend(outcome.failures)
+
+    # ``planned`` is the population plan_shards actually grouped into jobs:
+    # the non-excluded records of the input manifest.
+    planned = sum(1 for record in records if not record.excluded)
+    failed = len(failures)
+    failure_rate = failed / planned if planned else 0.0
+
+    if failed:
+        logger.warning(
+            "build stage: %d/%d record(s) could not be written into a shard",
+            failed,
+            planned,
+        )
+
+    if failure_rate > max_failure_rate:
+        failure_desc = "; ".join(f"{p!r} ({msg})" for p, msg in failures)
+        raise BuildFailureError(
+            f"build stage failed: {failed}/{planned} record(s) could not be "
+            f"written into a shard (failure rate {failure_rate:.2%} exceeds "
+            f"max_failure_rate {max_failure_rate:.2%}): {failure_desc}"
+        )
+
+    # Tolerated failures still must not leave a record non-excluded and
+    # shard-less — that combination breaks the manifest invariant the
+    # training datamodule relies on.
+    failed_paths = {path for path, _ in failures}
+    for record in records:
+        if record.path in failed_paths:
+            record.excluded = True
+            record.exclusion_reason = (
+                f"{record.exclusion_reason}|{SHARD_WRITE_FAILED_REASON}"
+                if record.exclusion_reason
+                else SHARD_WRITE_FAILED_REASON
+            )
 
     path_to_shard: dict[str, str] = {}
     for outcome in outcomes:
@@ -176,4 +222,6 @@ def build_shards(
         report_path=report_path,
         shard_count=shard_count,
         record_count=record_count,
+        failed=failed,
+        failure_rate=failure_rate,
     )

@@ -66,6 +66,13 @@ def _make_split_manifest(root: Path, records: list[ManifestRecord]) -> str:
     return path
 
 
+def _serial_mapper(jobs):
+    """Run the real shard writer in-process, avoiding a process pool."""
+    from radiologist.etl.shards import write_shard
+
+    return [write_shard(job) for job in jobs]
+
+
 def _tar_members(tar_path: str) -> list[str]:
     with tarfile.open(tar_path) as tf:
         return [m.name for m in tf.getmembers()]
@@ -473,20 +480,286 @@ def test_shard_size_below_one_raises_value_error(tmp_path: Path) -> None:
         build_shards(manifest_path, str(tmp_path / "shards"), shard_size=0)
 
 
-def test_unreadable_image_is_reported_as_failure_not_written_as_shard_entry(
+# --- shard-write failure surfacing and gating ----------------------------------
+
+
+def test_fully_readable_manifest_reports_no_failures(tmp_path: Path) -> None:
+    from radiologist.etl.build import build_shards
+
+    path_a = _make_png(tmp_path, "a.png", "NORMAL")
+    records = [_record(path_a, "a.png", "NORMAL", "train")]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result = build_shards(
+        manifest_path, str(tmp_path / "shards"), mapper=_serial_mapper
+    )
+
+    assert result.failed == 0
+    assert result.failure_rate == 0.0
+    assert result.record_count == 1
+    assert result.shard_count == 1
+
+
+def test_unreadable_image_under_default_tolerance_raises_naming_counts_and_rates(
     tmp_path: Path,
 ) -> None:
-    from radiologist.etl.build import build_shards
+    from radiologist.etl.build import BuildFailureError, build_shards
 
     missing_path = str(tmp_path / "gone.png")
     records = [_record(missing_path, "gone.png", "NORMAL", "train")]
     manifest_path = _make_split_manifest(tmp_path, records)
 
-    result = build_shards(manifest_path, str(tmp_path / "shards"))
+    with pytest.raises(BuildFailureError) as excinfo:
+        build_shards(manifest_path, str(tmp_path / "shards"), mapper=_serial_mapper)
 
-    assert result.record_count == 0
+    message = str(excinfo.value)
+    assert "1/1" in message
+    assert "100.00%" in message
+    assert "0.00%" in message
+    assert "max_failure_rate" in message
+
+
+def test_build_failure_message_names_every_unreadable_source_path(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import BuildFailureError, build_shards
+
+    gone_a = str(tmp_path / "gone_a.png")
+    gone_b = str(tmp_path / "gone_b.png")
+    records = [
+        _record(gone_a, "gone_a.png", "NORMAL", "train"),
+        _record(gone_b, "gone_b.png", "NORMAL", "train"),
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    with pytest.raises(BuildFailureError) as excinfo:
+        build_shards(manifest_path, str(tmp_path / "shards"), mapper=_serial_mapper)
+
+    message = str(excinfo.value)
+    assert gone_a in message
+    assert gone_b in message
+
+
+def test_no_manifest_and_no_report_are_written_when_the_run_is_failed(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import BuildFailureError, build_shards
+
+    missing_path = str(tmp_path / "gone.png")
+    records = [_record(missing_path, "gone.png", "NORMAL", "train")]
+    manifest_path = _make_split_manifest(tmp_path, records)
+    shard_root = tmp_path / "shards"
+
+    with pytest.raises(BuildFailureError):
+        build_shards(manifest_path, str(shard_root), mapper=_serial_mapper)
+
+    assert list(shard_root.rglob("manifest-*.jsonl")) == []
+    assert list(shard_root.rglob("split-report-*.json")) == []
+
+
+def test_tolerated_failures_are_counted_against_the_records_planned_into_shards(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    ok_a = _make_png(tmp_path, "a.png", "NORMAL")
+    ok_b = _make_png(tmp_path, "b.png", "NORMAL")
+    ok_c = _make_png(tmp_path, "c.png", "NORMAL")
+    gone = str(tmp_path / "gone.png")
+    records = [
+        _record(ok_a, "a.png", "NORMAL", "train"),
+        _record(ok_b, "b.png", "NORMAL", "train"),
+        _record(ok_c, "c.png", "NORMAL", "train"),
+        _record(gone, "gone.png", "NORMAL", "train"),
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        mapper=_serial_mapper,
+        max_failure_rate=0.5,
+    )
+
+    assert result.failed == 1
+    assert result.failure_rate == pytest.approx(0.25)
+
+
+def test_no_manifest_record_is_both_non_excluded_and_shard_less(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    ok_a = _make_png(tmp_path, "a.png", "NORMAL")
+    gone = str(tmp_path / "gone.png")
+    records = [
+        _record(ok_a, "a.png", "NORMAL", "train"),
+        _record(gone, "gone.png", "NORMAL", "train"),
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        mapper=_serial_mapper,
+        max_failure_rate=0.5,
+    )
+
     out_records = records_reader(result.manifest_path)
-    assert out_records[0].shard is None
+    assert out_records
+    assert all(r.excluded or r.shard is not None for r in out_records)
+
+
+def test_record_that_could_not_be_written_carries_the_shard_write_failed_reason(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    ok_a = _make_png(tmp_path, "a.png", "NORMAL")
+    gone = str(tmp_path / "gone.png")
+    records = [
+        _record(ok_a, "a.png", "NORMAL", "train"),
+        _record(gone, "gone.png", "NORMAL", "train"),
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        mapper=_serial_mapper,
+        max_failure_rate=0.5,
+    )
+
+    out_records = records_reader(result.manifest_path)
+    failed_record = next(r for r in out_records if r.filename == "gone.png")
+    assert failed_record.excluded is True
+    assert "shard_write_failed" in failed_record.exclusion_reason
+
+
+def test_already_excluded_record_keeps_its_reason_alongside_shard_write_failed(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    gone = str(tmp_path / "gone.png")
+    already = ManifestRecord(
+        manifest_id="assignrun00000001",
+        path=gone,
+        filename="gone.png",
+        label="NORMAL",
+        split="train",
+        stats={},
+        excluded=True,
+        exclusion_reason="lung_out_of_frame",
+    )
+    records = [
+        _record(gone, "gone.png", "NORMAL", "train"),
+        already,
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        mapper=_serial_mapper,
+        max_failure_rate=1.0,
+    )
+
+    out_records = records_reader(result.manifest_path)
+    reasons = {r.exclusion_reason for r in out_records}
+    assert "lung_out_of_frame|shard_write_failed" in reasons
+
+
+def test_split_report_excluded_count_includes_records_that_failed_to_be_written(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    ok_a = _make_png(tmp_path, "a.png", "NORMAL")
+    gone = str(tmp_path / "gone.png")
+    records = [
+        _record(ok_a, "a.png", "NORMAL", "train"),
+        _record(gone, "gone.png", "NORMAL", "train"),
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        mapper=_serial_mapper,
+        max_failure_rate=0.5,
+    )
+
+    report = json.loads(Path(result.report_path).read_text())
+    assert report["observed"]["NORMAL"]["excluded"] == pytest.approx(0.5)
+
+
+def test_manifest_of_only_excluded_records_reports_zero_failure_rate_and_succeeds(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    path_a = _make_png(tmp_path, "a.png", "NORMAL")
+    records = [_record(path_a, "a.png", "NORMAL", "train", excluded=True)]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result = build_shards(
+        manifest_path, str(tmp_path / "shards"), mapper=_serial_mapper
+    )
+
+    assert result.failed == 0
+    assert result.failure_rate == 0.0
+
+
+def test_two_different_tolerances_produce_the_same_run_id_and_output_folder(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    path_a = _make_png(tmp_path, "a.png", "NORMAL")
+    records = [_record(path_a, "a.png", "NORMAL", "train")]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    result1 = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        mapper=_serial_mapper,
+        max_failure_rate=0.0,
+    )
+    result2 = build_shards(
+        manifest_path,
+        str(tmp_path / "shards"),
+        mapper=_serial_mapper,
+        max_failure_rate=0.9,
+    )
+
+    assert result1.run_id == result2.run_id
+    assert result1.output_dir == result2.output_dir
+
+
+def test_tolerated_failures_emit_a_warning_naming_the_failure_count(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from radiologist.etl.build import build_shards
+
+    ok_a = _make_png(tmp_path, "a.png", "NORMAL")
+    gone = str(tmp_path / "gone.png")
+    records = [
+        _record(ok_a, "a.png", "NORMAL", "train"),
+        _record(gone, "gone.png", "NORMAL", "train"),
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    with caplog.at_level("WARNING", logger="radiologist.etl.build"):
+        build_shards(
+            manifest_path,
+            str(tmp_path / "shards"),
+            mapper=_serial_mapper,
+            max_failure_rate=0.5,
+        )
+
+    assert any("1" in rec.getMessage() for rec in caplog.records)
 
 
 # --- storage options -----------------------------------------------------------

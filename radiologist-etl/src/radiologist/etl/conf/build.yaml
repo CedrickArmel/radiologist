@@ -11,5 +11,6 @@ split_ratios: # report only — never used for assignment here
   - ["val", 0.15]
   - ["test", 0.15]
 workers: null
+max_failure_rate: 0.0 # unshardable-record tolerance before the run fails
 run_label: null
 storage_options: null
