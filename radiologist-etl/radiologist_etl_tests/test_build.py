@@ -540,6 +540,27 @@ def test_build_failure_message_names_every_unreadable_source_path(
     assert gone_b in message
 
 
+def test_build_failure_message_caps_the_enumerated_failures(
+    tmp_path: Path,
+) -> None:
+    from radiologist.etl.build import BuildFailureError, build_shards
+
+    records = [
+        _record(str(tmp_path / f"gone_{i}.png"), f"gone_{i}.png", "NORMAL", "train")
+        for i in range(25)
+    ]
+    manifest_path = _make_split_manifest(tmp_path, records)
+
+    with pytest.raises(BuildFailureError) as excinfo:
+        build_shards(manifest_path, str(tmp_path / "shards"), mapper=_serial_mapper)
+
+    message = str(excinfo.value)
+    assert str(tmp_path / "gone_0.png") in message
+    assert str(tmp_path / "gone_19.png") in message
+    assert str(tmp_path / "gone_20.png") not in message
+    assert "and 5 more" in message
+
+
 def test_no_manifest_and_no_report_are_written_when_the_run_is_failed(
     tmp_path: Path,
 ) -> None:

@@ -458,6 +458,28 @@ def test_unreadable_image_with_zero_tolerance_raises_and_writes_no_manifest(
             max_failure_rate=0.0,
         )
 
+
+def test_extract_failure_message_caps_the_enumerated_failures(tmp_path):
+    from radiologist.etl.extract import ExtractionFailureError, extract
+
+    bad_paths = [str(tmp_path / f"missing_{i}.png") for i in range(25)]
+    listing = _write_listing(tmp_path, bad_paths)
+    destination = str(tmp_path / "dest")
+
+    with pytest.raises(ExtractionFailureError) as excinfo:
+        extract(
+            listing,
+            destination,
+            images_root=str(tmp_path),
+            max_failure_rate=0.0,
+        )
+
+    message = str(excinfo.value)
+    assert "missing_0.png" in message
+    assert "missing_19.png" in message
+    assert "missing_20.png" not in message
+    assert "and 5 more" in message
+
     assert not Path(destination).exists() or not any(Path(destination).iterdir())
 
 
