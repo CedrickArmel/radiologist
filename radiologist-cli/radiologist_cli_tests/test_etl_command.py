@@ -252,7 +252,7 @@ def test_help_flag_prints_usage_naming_subcommands_and_exits_zero(
 
 def test_extract_missing_file_list_exits_not_found(tmp_path: Path) -> None:
     missing = tmp_path / "does-not-exist.txt"
-    returncode, _, stderr = _run_cli_subprocess(
+    returncode, stdout, stderr = _run_cli_subprocess(
         [
             "extract",
             f"file_list={missing}",
@@ -262,13 +262,14 @@ def test_extract_missing_file_list_exits_not_found(tmp_path: Path) -> None:
     )
 
     assert returncode == 2
+    assert stdout.strip() == ""
     assert "Error: " in stderr
     assert str(missing) in stderr
 
 
 def test_assign_split_missing_manifests_dir_exits_not_found(tmp_path: Path) -> None:
     missing = tmp_path / "no-manifests-here"
-    returncode, _, stderr = _run_cli_subprocess(
+    returncode, stdout, stderr = _run_cli_subprocess(
         [
             "assign-split",
             f"manifests_dir={missing}",
@@ -278,13 +279,14 @@ def test_assign_split_missing_manifests_dir_exits_not_found(tmp_path: Path) -> N
     )
 
     assert returncode == 2
+    assert stdout.strip() == ""
     assert "Error: " in stderr
     assert str(missing) in stderr
 
 
 def test_build_missing_split_manifest_exits_not_found(tmp_path: Path) -> None:
     missing = tmp_path / "no-such-manifest.jsonl"
-    returncode, _, stderr = _run_cli_subprocess(
+    returncode, stdout, stderr = _run_cli_subprocess(
         [
             "build",
             f"split_manifest={missing}",
@@ -294,6 +296,7 @@ def test_build_missing_split_manifest_exits_not_found(tmp_path: Path) -> None:
     )
 
     assert returncode == 2
+    assert stdout.strip() == ""
     assert "Error: " in stderr
     assert str(missing) in stderr
 
@@ -340,10 +343,15 @@ def test_extract_subcommand_prints_record_with_run_id_and_counts(
         "succeeded",
         "failed",
         "excluded",
+        "failure_rate",
     }
     assert payload["total"] == len(paths)
     assert payload["succeeded"] == len(paths)
     assert payload["failed"] == 0
+    # The rate the stage itself gates on, forwarded rather than re-derived.
+    assert payload["failure_rate"] == payload["failed"] / payload["total"]
+    # Every image in the listing is readable, so nothing failed.
+    assert payload["failure_rate"] == 0.0
 
 
 def test_extract_subcommand_applies_config_overrides(
@@ -511,9 +519,82 @@ def test_assign_split_subcommand_prints_record_with_run_id_and_counts(
         "source_manifest_count",
         "record_count",
         "duplicate_count",
+        "counts_by_split",
     }
     assert payload["source_manifest_count"] == 1
     assert payload["record_count"] == 4
+    # One entry per configured split ratio, serialised as a nested object in
+    # JSON rather than flattened into dotted keys.
+    assert set(payload["counts_by_split"]) == {"train", "val", "test"}
+    assert sum(payload["counts_by_split"].values()) == payload["record_count"]
+
+
+def test_assign_split_result_counts_a_split_that_received_no_records(
+    tmp_path: Path,
+    bypass_prefect_orchestration: None,
+    clear_global_hydra: None,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Every configured split name is keyed in the emitted per-split counts,
+    including one whose ratio sends it zero records -- an empty split is the
+    most common reason a downstream training run fails immediately, so it must
+    be visible in the result rather than absent from it."""
+    images = _build_image_tree(tmp_path)
+    manifests_dir = tmp_path / "manifests"
+    _make_extract_manifest(tmp_path, images, manifests_dir)
+
+    exit_code = etl_group.run(
+        [
+            "assign-split",
+            "--output=json",
+            f"manifests_dir={manifests_dir}",
+            f"destination={tmp_path / 'dest'}",
+            'split_ratios=[["train", 1.0], ["holdout", 0.0]]',
+            f"hydra.run.dir={tmp_path / 'hydra_run'}",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out.strip().splitlines()[-1])
+    assert payload["counts_by_split"] == {"train": 4, "holdout": 0}
+
+
+def test_assign_split_key_value_output_prints_one_line_per_split_count(
+    tmp_path: Path,
+    bypass_prefect_orchestration: None,
+    clear_global_hydra: None,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """In the default key-value format the per-split counts flatten to one
+    dotted leaf line per split name, keyed by that name."""
+    images = _build_image_tree(tmp_path)
+    manifests_dir = tmp_path / "manifests"
+    _make_extract_manifest(tmp_path, images, manifests_dir)
+
+    exit_code = etl_group.run(
+        [
+            "assign-split",
+            f"manifests_dir={manifests_dir}",
+            f"destination={tmp_path / 'dest'}",
+            f"hydra.run.dir={tmp_path / 'hydra_run'}",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    lines = captured.out.strip().splitlines()
+    split_lines = {
+        line.split("=", 1)[0]: line.split("=", 1)[1]
+        for line in lines
+        if line.startswith("counts_by_split.")
+    }
+    assert set(split_lines) == {
+        "counts_by_split.train",
+        "counts_by_split.val",
+        "counts_by_split.test",
+    }
+    assert sum(int(value) for value in split_lines.values()) == 4
 
 
 def test_assign_split_subcommand_applies_config_overrides(
@@ -580,8 +661,14 @@ def test_build_subcommand_prints_record_with_run_id_and_counts(
         "manifest_path",
         "report_path",
         "shard_count",
+        "record_count",
+        "failed",
     }
     assert payload["shard_count"] >= 1
+    # Volume and failure fields: a build that sharded nothing usable is now
+    # distinguishable from a healthy one.
+    assert payload["record_count"] == len(_all_image_paths(images))
+    assert payload["failed"] == 0
     assert Path(payload["manifest_path"]).exists()
     assert Path(payload["report_path"]).exists()
 

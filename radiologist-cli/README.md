@@ -59,3 +59,25 @@ that stage's full composed config tree. `core` composes its config with
 Hydra directly — `radiologist core --help` prints the full composed config
 tree. Both `etl` subcommands and `core` accept `key=value` overrides and
 `--multirun` sweeps.
+
+Each `etl` subcommand's result record carries the volume and failure fields the
+stage itself computed, so a scheduler can gate the next stage on the previous
+one's output without re-deriving anything or re-reading the manifest:
+
+| Subcommand | Emitted fields |
+|---|---|
+| `extract` | `run_id`, `manifest_path`, `total`, `succeeded`, `failed`, `failure_rate`, `excluded` |
+| `assign-split` | `run_id`, `split_manifest_path`, `source_manifest_count`, `record_count`, `duplicate_count`, `counts_by_split` |
+| `build` | `run_id`, `output_dir`, `manifest_path`, `report_path`, `shard_count`, `record_count`, `failed` |
+
+`failure_rate` is `failed / total` (`0.0` when nothing was processed) — the same
+rate the extract stage's own tolerance check gates on. `counts_by_split` maps
+each configured split name to its record count and always carries one entry per
+configured ratio, including splits that received zero records, so an empty split
+is visible in the result rather than absent from it. Being a nested mapping, it
+serialises as a nested object under `--output json`/`--output yaml` and flattens
+to one dotted `counts_by_split.<split>=<count>` line per split in the default
+`key=value` format.
+
+A run that fails prints no result record at all — only `Error: {message}` on
+stderr, with the exit code described above.
