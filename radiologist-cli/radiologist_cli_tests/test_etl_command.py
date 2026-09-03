@@ -663,12 +663,14 @@ def test_build_subcommand_prints_record_with_run_id_and_counts(
         "shard_count",
         "record_count",
         "failed",
+        "failure_rate",
     }
     assert payload["shard_count"] >= 1
     # Volume and failure fields: a build that sharded nothing usable is now
     # distinguishable from a healthy one.
     assert payload["record_count"] == len(_all_image_paths(images))
     assert payload["failed"] == 0
+    assert payload["failure_rate"] == 0.0
     assert Path(payload["manifest_path"]).exists()
     assert Path(payload["report_path"]).exists()
 

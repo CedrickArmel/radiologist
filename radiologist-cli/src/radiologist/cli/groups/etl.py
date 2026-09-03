@@ -178,6 +178,7 @@ def build_main(cfg: DictConfig) -> None:
             "shard_count": result.shard_count,
             "record_count": result.record_count,
             "failed": result.failed,
+            "failure_rate": result.failure_rate,
         }
     )
 
