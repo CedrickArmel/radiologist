@@ -30,6 +30,7 @@ must reject a parts location the workers could not reach.
 
 from __future__ import annotations
 
+import logging
 import tarfile
 from pathlib import Path
 
@@ -146,6 +147,15 @@ def _shard_contents(output_dir: str) -> dict:
     return contents
 
 
+def _scratch_files(parts_dir: Path) -> list:
+    """Every file left under the configured scratch directory, if it exists."""
+    if not parts_dir.exists():
+        return []
+    return sorted(
+        str(p.relative_to(parts_dir)) for p in parts_dir.rglob("*") if p.is_file()
+    )
+
+
 class _CountingBeamExecutor(BeamExecutor):
     """A real executor that also records how many times it was dispatched to."""
 
@@ -156,6 +166,31 @@ class _CountingBeamExecutor(BeamExecutor):
     def run_batches(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         self.run_batches_calls += 1
         return super().run_batches(*args, **kwargs)
+
+
+class _LosingBeamExecutor(BeamExecutor):
+    """A real executor that loses a part between the pipeline and the read-back.
+
+    Reproduces the "pipeline reported success but wrote no part" failure
+    without touching how outcomes are written or read.
+    """
+
+    def _run_pipeline(self, label, elements, fn, **fn_kwargs):  # type: ignore[no-untyped-def] # noqa: E501
+        super()._run_pipeline(label, elements, fn, **fn_kwargs)
+        prefix = Path(fn_kwargs["parts_prefix"])
+        sorted(prefix.glob("part-*.jsonl"))[-1].unlink()
+
+
+class _SealingBeamExecutor(BeamExecutor):
+    """A real executor that makes its scratch directory unwritable once run.
+
+    The prefix underneath it can then no longer be unlinked, so reclamation
+    genuinely fails at the filesystem level.
+    """
+
+    def _run_pipeline(self, label, elements, fn, **fn_kwargs):  # type: ignore[no-untyped-def] # noqa: E501
+        super()._run_pipeline(label, elements, fn, **fn_kwargs)
+        Path(self.parts_dir).chmod(0o500)
 
 
 # --- runner selection --------------------------------------------------------
@@ -464,3 +499,135 @@ def test_a_beam_backed_extract_is_dispatched_as_a_single_unit_of_work(
 
     assert result.succeeded == len(paths)
     assert executor.run_batches_calls == 1
+
+
+# --- scratch reclamation -----------------------------------------------------
+
+
+def test_a_successful_batch_dispatch_leaves_no_scratch_behind(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    parts_dir = tmp_path / "parts"
+    executor = _direct_executor(parts_dir)
+    paths = _all_image_paths(image_dir)
+
+    outcomes = executor.run_batches(
+        [[p] for p in paths],
+        images_root=None,
+        masks_root=None,
+        manifest_id="beamrun000000001",
+        extractors=[],
+    )
+
+    assert [[r.path for r in o.records] for o in outcomes] == [[p] for p in paths]
+    assert [o.failures for o in outcomes] == [[] for _ in paths]
+    assert _scratch_files(parts_dir) == []
+
+
+def test_a_successful_shard_dispatch_leaves_no_scratch_behind(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    parts_dir = tmp_path / "parts"
+    executor = _direct_executor(parts_dir)
+    jobs = plan_shards(
+        _split_records(image_dir), str(tmp_path / "shards"), shard_size=1
+    )
+
+    outcomes = executor.run_shards(jobs)
+
+    assert [o.relative_path for o in outcomes] == [
+        f"{job.split}/{job.label}/{job.split}-{job.label.lower()}-{job.index:06d}.tar"
+        for job in jobs
+    ]
+    assert _scratch_files(parts_dir) == []
+
+
+def test_two_successive_dispatches_leave_no_scratch_behind(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    parts_dir = tmp_path / "parts"
+    executor = _direct_executor(parts_dir)
+    paths = _all_image_paths(image_dir)
+
+    executor.run_batches(
+        [paths[:2], paths[2:]],
+        images_root=None,
+        masks_root=None,
+        manifest_id="first-run-00000",
+        extractors=[],
+    )
+    second = executor.run_batches(
+        [paths[:1]],
+        images_root=None,
+        masks_root=None,
+        manifest_id="second-run-0000",
+        extractors=[],
+    )
+
+    assert [r.path for r in second[0].records] == paths[:1]
+    assert _scratch_files(parts_dir) == []
+
+
+def test_a_dispatch_missing_an_outcome_still_raises_and_still_reclaims_scratch(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    parts_dir = tmp_path / "parts"
+    executor = _LosingBeamExecutor(
+        pipeline_options={"runner": "DirectRunner"}, parts_dir=str(parts_dir)
+    )
+    paths = _all_image_paths(image_dir)
+
+    with pytest.raises(RuntimeError, match="wrote no part for unit"):
+        executor.run_batches(
+            [[p] for p in paths],
+            images_root=None,
+            masks_root=None,
+            manifest_id="beamrun000000001",
+            extractors=[],
+        )
+
+    assert _scratch_files(parts_dir) == []
+
+
+def test_scratch_that_cannot_be_removed_warns_and_still_returns_its_outcomes(
+    image_dir: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    parts_dir = tmp_path / "parts"
+    executor = _SealingBeamExecutor(
+        pipeline_options={"runner": "DirectRunner"}, parts_dir=str(parts_dir)
+    )
+    paths = _all_image_paths(image_dir)
+
+    try:
+        with caplog.at_level(logging.WARNING):
+            outcomes = executor.run_batches(
+                [[p] for p in paths],
+                images_root=None,
+                masks_root=None,
+                manifest_id="beamrun000000001",
+                extractors=[],
+            )
+    finally:
+        parts_dir.chmod(0o755)
+
+    assert [[r.path for r in o.records] for o in outcomes] == [[p] for p in paths]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert any(f"{parts_dir}/batches-" in message for message in warnings)
+
+
+def test_a_dispatch_of_no_units_creates_no_scratch_prefix(tmp_path: Path) -> None:
+    parts_dir = tmp_path / "parts"
+    executor = _direct_executor(parts_dir)
+
+    assert (
+        executor.run_batches(
+            [],
+            images_root=None,
+            masks_root=None,
+            manifest_id="beamrun000000001",
+            extractors=[],
+        )
+        == []
+    )
+    assert executor.run_shards([]) == []
+    assert not parts_dir.exists()
