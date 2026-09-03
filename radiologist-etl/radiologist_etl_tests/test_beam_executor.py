@@ -296,6 +296,41 @@ def test_run_shards_returns_one_outcome_per_job_in_input_order(
     assert all(o.written == 1 for o in outcomes)
 
 
+def test_run_shards_records_the_same_shard_path_as_local_dispatch_for_empty_split(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    from radiologist.etl import write_shard
+
+    records = [
+        ManifestRecord(
+            manifest_id="assignrun0000001",
+            path=str(p),
+            filename=p.name,
+            label=p.parent.name,
+            split="",
+            stats={},
+        )
+        for p in sorted(image_dir.rglob("*.png"))
+    ]
+    beam_root = tmp_path / "beam-shards"
+    local_root = tmp_path / "local-shards"
+
+    executor = _direct_executor(tmp_path / "parts")
+    beam_outcomes = executor.run_shards(
+        plan_shards(records, str(beam_root), shard_size=1)
+    )
+    local_outcomes = [
+        write_shard(job) for job in plan_shards(records, str(local_root), shard_size=1)
+    ]
+
+    assert [o.relative_path for o in beam_outcomes] == [
+        o.relative_path for o in local_outcomes
+    ]
+    assert beam_outcomes
+    for outcome in beam_outcomes:
+        assert (beam_root / outcome.relative_path).is_file()
+
+
 def test_parts_from_an_earlier_run_do_not_affect_a_later_run_over_other_inputs(
     image_dir: Path, tmp_path: Path
 ) -> None:

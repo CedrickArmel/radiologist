@@ -99,8 +99,9 @@ def write_shard(
     """
     opts = storage_options or {}
     shard_filename = f"{job.split}-{job.label.lower()}-{job.index:06d}.tar"
-    relative_path = "/".join([job.split, job.label, shard_filename])
-    shard_path = fst.pathjoin(job.shard_root, job.split, job.label, shard_filename)
+    parts = [p for p in (job.split, job.label, shard_filename) if p]
+    relative_path = "/".join(parts)
+    shard_path = fst.pathjoin(job.shard_root, *parts)
 
     fs_dst, dst_path = fsspec.url_to_fs(shard_path, **opts)
     if hasattr(fs_dst, "makedirs"):
