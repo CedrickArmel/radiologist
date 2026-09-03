@@ -45,9 +45,10 @@ import fsspec  # type: ignore[import-untyped]
 from radiologist.etl.identity import (
     EXTRACT_MANIFEST_PREFIX,
     EXTRACT_MANIFEST_SUFFIX,
+    _matches,
     compute_assign_run_id,
 )
-from radiologist.etl.manifest import JsonlWriter, records_reader
+from radiologist.etl.manifest import JsonlWriter, ManifestRecord, records_reader
 from radiologist.etl.models import AssignSplitResult
 from radiologist.etl.split import SplitRatios, assign_split, normalize_ratios
 
@@ -93,26 +94,25 @@ def assign_splits(
         entries = fs.ls(path, detail=True)
     except FileNotFoundError:
         entries = []
-    # Selects exactly the set compute_assign_run_id fingerprints — the same two
-    # constants, the same basename test. Sorting the full names (not the
-    # basenames) keeps multi-manifest merge order unchanged for existing corpora.
+    # Selects exactly the set compute_assign_run_id fingerprints — the same
+    # shared predicate, applied to the same two constants. Sorting the full
+    # names (not the basenames) keeps multi-manifest merge order unchanged
+    # for existing corpora.
     manifest_files = sorted(
-        name
-        for entry, name in ((entry, str(entry["name"])) for entry in entries)
-        if entry.get("type") == "file"
-        and name.rsplit("/", 1)[-1].startswith(EXTRACT_MANIFEST_PREFIX)
-        and name.endswith(EXTRACT_MANIFEST_SUFFIX)
+        str(entry["name"])
+        for entry in entries
+        if _matches(entry, EXTRACT_MANIFEST_PREFIX, EXTRACT_MANIFEST_SUFFIX)
     )
     if not manifest_files:
         raise FileNotFoundError(
             f"No {EXTRACT_MANIFEST_PREFIX!r} manifest found in {manifests_dir!r}"
         )
 
-    seen_paths: dict = {}
-    seen_filenames: dict = {}
+    seen_paths: dict[str, ManifestRecord] = {}
+    seen_filenames: dict[str, str] = {}
     duplicate_count = 0
-    records: list = []
-    collided_filenames: set = set()
+    records: list[ManifestRecord] = []
+    collided_filenames: set[str] = set()
     for name in manifest_files:
         uri = fs.unstrip_protocol(name)
         for record in records_reader(uri, storage_options=storage_options):
@@ -146,8 +146,8 @@ def assign_splits(
         manifests_dir, config, storage_options=storage_options
     )
 
-    counts_by_split: dict = {name: 0 for name, _ in ordered_ratios}
-    final_records = []
+    counts_by_split: dict[str, int] = {name: 0 for name, _ in ordered_ratios}
+    final_records: list[ManifestRecord] = []
     for record in records:
         split = assign_split(record.filename, ordered_ratios)
         counts_by_split[split] += 1

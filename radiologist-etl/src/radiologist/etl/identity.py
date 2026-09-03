@@ -49,6 +49,19 @@ def _not_found(uri: str) -> FileNotFoundError:
     return FileNotFoundError(f"No such file or directory: {uri!r}")
 
 
+def _matches(entry: Mapping[str, Any], prefix: str, suffix: str) -> bool:
+    """True when a listing entry is a file whose basename matches prefix/suffix.
+
+    The one predicate ``directory_digest`` and the assign-split folder scan
+    both use, so the rule for "what counts as a matching manifest" can never
+    diverge between the run-id fingerprint and the stage that reads the files.
+    """
+    if entry.get("type") != "file":
+        return False
+    basename = str(entry["name"]).rsplit("/", 1)[-1]
+    return basename.startswith(prefix) and basename.endswith(suffix)
+
+
 def content_digest(
     uri: str,
     storage_options: dict | None = None,
@@ -123,13 +136,9 @@ def directory_digest(
         raise _not_found(directory) from exc
 
     pairs = sorted(
-        (basename, entry.get("size"))
-        for entry, basename in (
-            (entry, str(entry["name"]).rsplit("/", 1)[-1]) for entry in entries
-        )
-        if entry.get("type") == "file"
-        and basename.startswith(prefix)
-        and basename.endswith(suffix)
+        (str(entry["name"]).rsplit("/", 1)[-1], entry.get("size"))
+        for entry in entries
+        if _matches(entry, prefix, suffix)
     )
     payload = json.dumps(pairs)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
