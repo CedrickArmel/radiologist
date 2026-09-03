@@ -44,6 +44,7 @@ process-pool one.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -58,6 +59,8 @@ from radiologist.etl.models import BatchOutcome, ShardJob, ShardOutcome
 from radiologist.etl.processors import process_batch
 from radiologist.etl.shards import write_shard
 from radiologist.etl.stats import StatExtractor
+
+logger = logging.getLogger(__name__)
 
 # fsspec reports a bare filesystem path as ``None``; ``file``/``local`` are
 # the explicit spellings of the same thing.
@@ -299,21 +302,22 @@ class BeamExecutor:
             return []
 
         parts_prefix = self._run_prefix("batches")
-        self._run_pipeline(
-            label="Batches",
-            elements=list(enumerate(units)),
-            fn=_beam_process_batch,
-            images_root=images_root,
-            masks_root=masks_root,
-            manifest_id=manifest_id,
-            extractors=extractors,
-            parts_prefix=parts_prefix,
-            storage_options=self.storage_options,
-        )
-        return [
-            _batch_outcome_from_json(payload)
-            for payload in _read_parts(parts_prefix, len(units), self.storage_options)
-        ]
+        try:
+            self._run_pipeline(
+                label="Batches",
+                elements=list(enumerate(units)),
+                fn=_beam_process_batch,
+                images_root=images_root,
+                masks_root=masks_root,
+                manifest_id=manifest_id,
+                extractors=extractors,
+                parts_prefix=parts_prefix,
+                storage_options=self.storage_options,
+            )
+            payloads = _read_parts(parts_prefix, len(units), self.storage_options)
+        finally:
+            self._reclaim(parts_prefix)
+        return [_batch_outcome_from_json(payload) for payload in payloads]
 
     def run_shards(self, jobs: Sequence[ShardJob]) -> list[ShardOutcome]:
         """Run every shard-writing job through one Beam pipeline.
@@ -337,21 +341,43 @@ class BeamExecutor:
             return []
 
         parts_prefix = self._run_prefix("shards")
-        self._run_pipeline(
-            label="Shards",
-            elements=list(enumerate(units)),
-            fn=_beam_write_shard,
-            parts_prefix=parts_prefix,
-            storage_options=self.storage_options,
-        )
-        return [
-            _shard_outcome_from_json(payload)
-            for payload in _read_parts(parts_prefix, len(units), self.storage_options)
-        ]
+        try:
+            self._run_pipeline(
+                label="Shards",
+                elements=list(enumerate(units)),
+                fn=_beam_write_shard,
+                parts_prefix=parts_prefix,
+                storage_options=self.storage_options,
+            )
+            payloads = _read_parts(parts_prefix, len(units), self.storage_options)
+        finally:
+            self._reclaim(parts_prefix)
+        return [_shard_outcome_from_json(payload) for payload in payloads]
 
     def _run_prefix(self, kind: str) -> str:
         """A parts prefix unique to this dispatch, so runs never read each other's."""
         return f"{self.parts_dir.rstrip('/')}/{kind}-{uuid.uuid4().hex}"
+
+    def _reclaim(self, parts_prefix: str) -> None:
+        """Remove this dispatch's scratch prefix, best-effort.
+
+        The prefix is minted per dispatch and nothing outside the dispatch
+        can reference the parts beneath it, so removing it is always safe —
+        and it is removed whether the dispatch succeeded or failed, because
+        a failed remote run is exactly the one that would otherwise strand
+        the most objects. Reclamation is never allowed to fail a dispatch
+        nor to replace an exception already on its way out, so every
+        problem — a permissions refusal, a prefix that has already vanished,
+        a backend without recursive removal — becomes a warning naming the
+        prefix. The configured ``parts_dir`` itself is never touched.
+        """
+        try:
+            fs, path = fsspec.url_to_fs(parts_prefix, **(self.storage_options or {}))
+            fs.rm(path, recursive=True)
+        except Exception as exc:  # noqa: BLE001 - reclamation is best-effort
+            logger.warning(
+                "Could not reclaim Beam scratch prefix %s: %s", parts_prefix, exc
+            )
 
     def _run_pipeline(
         self,
