@@ -35,6 +35,15 @@ from radiologist.etl.models import BatchOutcome
 from radiologist.etl.stats import StatExtractor
 from radiologist.utils import read_image
 
+# Raised verbatim by both the extract stage and the per-batch worker when a
+# masks root is supplied without the images root the mirror path needs. It is
+# package-private: an implementation detail shared by two sibling modules, not
+# a public API, so it is deliberately absent from the package's ``__all__``.
+_MASKS_ROOT_REQUIRES_IMAGES_ROOT = (
+    "masks_root requires images_root to resolve the mask mirror path — "
+    "both are required together"
+)
+
 
 def _resolve_mask(
     image_path: str,
@@ -159,7 +168,16 @@ def process_batch(
         A :class:`~radiologist.etl.models.BatchOutcome`: one record per
         readable image, one ``(path, message)`` entry per unreadable one.
         Never raises for a single bad image.
+
+    Raises:
+        ValueError: if ``masks_root`` is set without ``images_root``. This
+            describes the call rather than any one image — it is identical
+            for every path in the batch and is detectable before any image
+            is opened — so it propagates instead of being collected.
     """
+    if masks_root is not None and images_root is None:
+        raise ValueError(_MASKS_ROOT_REQUIRES_IMAGES_ROOT)
+
     records: list[ManifestRecord] = []
     failures: list[tuple[str, str]] = []
     for path in paths:

@@ -165,7 +165,7 @@ Common ones:
 | Subcommand | Key | Default | Description |
 |---|---|---|---|
 | `extract` | `file_list` | required | Newline-delimited listing of image URIs |
-| `extract` | `masks_root` | `null` | Segmentation mask directory |
+| `extract` | `masks_root` | `null` | Segmentation mask directory; requires `images_root`, which is used to mirror each image's relative path under it. Setting it without `images_root` is rejected immediately with a `ValueError` naming both, before any image is read. |
 | `extract` | `iqr_factor` | `1.5` | IQR multiplier for outlier threshold |
 | `extract` | `max_failure_rate` | `0.0` | Unreadable-image tolerance before the run fails |
 | `extract` | `runner` | `local` | Execution backend (see below) |

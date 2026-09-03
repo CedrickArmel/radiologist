@@ -334,6 +334,33 @@ def test_masks_root_without_images_root_raises_value_error(image_dir, tmp_path):
         extract(listing, destination, masks_root="/some/masks")
 
 
+def test_the_stage_and_the_batch_worker_reject_the_root_pair_identically(
+    image_dir, tmp_path
+):
+    from radiologist.etl import process_batch
+    from radiologist.etl.extract import extract
+    from radiologist.etl.stats import make_haralick
+
+    paths = _all_image_paths(image_dir)
+    listing = _write_listing(tmp_path, paths)
+    destination = str(tmp_path / "dest")
+
+    with pytest.raises(ValueError) as stage_error:
+        extract(listing, destination, masks_root="/some/masks")
+
+    with pytest.raises(ValueError) as worker_error:
+        process_batch(
+            paths,
+            images_root=None,
+            masks_root="/some/masks",
+            manifest_id="run-0000000000000001",
+            extractors=[make_haralick(features=["mean"])],
+        )
+
+    assert str(stage_error.value) == str(worker_error.value)
+    assert "masks_root" in str(stage_error.value)
+
+
 # --- run-id / manifest naming stability -------------------------------------
 
 
