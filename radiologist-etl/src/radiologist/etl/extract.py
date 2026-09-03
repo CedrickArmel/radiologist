@@ -58,6 +58,22 @@ class ExtractionFailureError(RuntimeError):
     """Raised when the share of unreadable images exceeds max_failure_rate."""
 
 
+# A systemic failure (a moved source root, revoked credentials) fails every
+# planned image, so an unbounded rendering of ``failures`` could grow to tens
+# of megabytes for a large corpus and land, unbounded, in an exception
+# message that callers — and Prefect, when running under a flow — persist
+# verbatim. Cap the enumeration; report the remainder as a count.
+_MAX_REPORTED_FAILURES = 20
+
+
+def _describe_failures(failures: list[tuple[str, str]]) -> str:
+    head = failures[:_MAX_REPORTED_FAILURES]
+    desc = "; ".join(f"{p!r} ({msg})" for p, msg in head)
+    if len(failures) > _MAX_REPORTED_FAILURES:
+        desc += f"; ... and {len(failures) - _MAX_REPORTED_FAILURES} more"
+    return desc
+
+
 def read_file_list(
     file_list: str,
     storage_options: dict | None = None,
@@ -220,7 +236,7 @@ def extract(
     failure_rate = failed / total if total else 0.0
 
     if failure_rate > max_failure_rate:
-        failure_desc = "; ".join(f"{p!r} ({msg})" for p, msg in failures)
+        failure_desc = _describe_failures(failures)
         raise ExtractionFailureError(
             f"extract stage failed: {failed}/{total} image(s) unreadable "
             f"(failure rate {failure_rate:.2%} exceeds max_failure_rate "
