@@ -186,18 +186,27 @@ _BACKEND_EXTRAS = {
 
 
 def _cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
-    """Fetch ``key`` from a ``DictConfig``, plain ``dict``, or ``None``."""
+    """Fetch ``key`` from a ``DictConfig``, plain ``dict``, or ``None``.
+
+    A key that is present but explicitly ``null`` falls back to ``default``,
+    exactly as an absent key does: ``runner.batch_size=null`` means "use the
+    documented default", not "use ``None``".
+    """
     if cfg is None:
         return default
     getter = getattr(cfg, "get", None)
     if getter is not None:
-        return getter(key, default)
-    return getattr(cfg, key, default)
+        value = getter(key, default)
+    else:
+        value = getattr(cfg, key, default)
+    return default if value is None else value
 
 
 def _backend_available(family: str) -> bool:
     if family == "local":
-        return bool(optional._PREFECT_AVAILABLE)
+        # The local family needs no extra: without prefect the flows fall back
+        # to plain Python and the plan simply carries no task runner.
+        return True
     if family == "dask":
         return bool(optional._PREFECT_DASK_AVAILABLE)
     if family == "ray":
@@ -248,10 +257,23 @@ def resolve_execution(
     )
 
     if not _backend_available(family):
-        extra = _BACKEND_EXTRAS.get(family, "prefect")
+        # Only dask/ray/beam can be unavailable, and all three are keys here,
+        # so prose and install command always name the same declared extra.
+        extra = _BACKEND_EXTRAS[family]
         raise RuntimeError(
-            f"the {family} extra is required to use the {family} runner family. "
+            f"the {extra} extra is required to use the {extra} runner family. "
             f"Install with: pip install 'radiologist-etl[{extra}]'"
+        )
+
+    if family == "local" and not optional._PREFECT_AVAILABLE:
+        # The shipped local runner targets a prefect task runner. Without
+        # prefect that target cannot be instantiated — and does not need to
+        # be, since the flows only attach a runner when prefect is available.
+        return ExecutionPlan(
+            family="local",
+            task_runner=None,
+            beam=None,
+            batch_size=resolved_batch_size,
         )
 
     if family == "beam":

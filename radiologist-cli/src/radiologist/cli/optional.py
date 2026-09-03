@@ -65,8 +65,7 @@ def require(extra: str) -> ModuleType:
     Raises:
         RuntimeError: When the module is absent, or when its feature-level
             sentinel is unavailable (``registry`` ->
-            ``radiologist.registry.optional._wandb``, ``etl`` ->
-            ``radiologist.etl.optional._PREFECT_AVAILABLE``,
+            ``radiologist.registry.optional._wandb``; ``etl`` and
             ``inference`` -> module importability only), naming
             ``pip install 'radiologist-cli[<extra>]'``.
     """
@@ -75,12 +74,7 @@ def require(extra: str) -> ModuleType:
     if module is None:
         raise RuntimeError(hint)
 
-    if extra == "etl":
-        from radiologist.etl import optional as etl_optional
-
-        if not etl_optional._PREFECT_AVAILABLE:
-            raise RuntimeError(hint)
-    elif extra == "registry":
+    if extra == "registry":
         from radiologist.registry import optional as registry_optional
 
         if registry_optional._wandb is None:

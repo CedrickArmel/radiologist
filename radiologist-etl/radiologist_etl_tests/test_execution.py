@@ -372,3 +372,152 @@ def test_storage_options_from_cfg_returns_plain_dict_for_populated_options():
     cfg = OmegaConf.create({"storage_options": {"key": "abc123"}})
 
     assert storage_options_from_cfg(cfg) == {"key": "abc123"}
+
+
+# --- the shipped default runner works on a plain, no-extras install -------------
+
+
+def test_shipped_default_runner_resolves_without_prefect_installed(monkeypatch):
+    """The ``local`` family is unconditionally available: the shipped default
+    configuration must resolve on an install carrying no optional extras."""
+    from radiologist.etl import optional
+    from radiologist.etl.execution import resolve_execution
+
+    monkeypatch.setattr(optional, "_PREFECT_AVAILABLE", False)
+
+    cfg = _compose("extract")
+    plan = resolve_execution(cfg.runner)
+
+    assert plan.family == "local"
+
+
+def test_shipped_default_runner_carries_no_task_runner_without_prefect(monkeypatch):
+    """``conf/runner/local.yaml`` targets ``prefect.task_runners.
+    ProcessPoolTaskRunner``. Without prefect that target cannot be
+    instantiated, so a plan carrying no task runner is the observable proof
+    that it was never evaluated."""
+    from radiologist.etl import optional
+    from radiologist.etl.execution import resolve_execution
+
+    monkeypatch.setattr(optional, "_PREFECT_AVAILABLE", False)
+
+    cfg = _compose("extract")
+    plan = resolve_execution(cfg.runner)
+
+    assert plan.task_runner is None
+
+
+def test_shipped_build_default_runner_also_resolves_without_prefect(monkeypatch):
+    from radiologist.etl import optional
+    from radiologist.etl.execution import resolve_execution
+
+    monkeypatch.setattr(optional, "_PREFECT_AVAILABLE", False)
+
+    plan = resolve_execution(_compose("build").runner)
+
+    assert (plan.family, plan.task_runner) == ("local", None)
+
+
+@pytest.mark.parametrize(
+    ("runner_choice", "sentinel", "expected_extra"),
+    [
+        ("dask_local", "_PREFECT_DASK_AVAILABLE", "dask"),
+        ("ray_local", "_PREFECT_RAY_AVAILABLE", "ray"),
+        ("beam_direct", "_BEAM_AVAILABLE", "beam"),
+    ],
+)
+def test_unavailable_backend_names_a_declared_extra_in_prose_and_command(
+    monkeypatch, runner_choice, sentinel, expected_extra
+):
+    """Every family that can still be unavailable must offer a remedy the
+    user can actually follow: the extra named in the prose, the extra named
+    in the install command and an extra the package really declares must all
+    be the same string."""
+    from importlib.metadata import metadata
+
+    from radiologist.etl import optional
+    from radiologist.etl.execution import resolve_execution
+
+    monkeypatch.setattr(optional, sentinel, False)
+
+    overrides = [f"runner={runner_choice}"]
+    if runner_choice == "beam_direct":
+        overrides.append("runner.beam.parts_dir=/tmp/beam-parts")
+    cfg = _compose("extract", overrides=overrides)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        resolve_execution(cfg.runner)
+
+    message = str(excinfo.value)
+    declared = set(metadata("radiologist-etl").get_all("Provides-Extra") or [])
+    assert expected_extra in declared
+    assert f"the {expected_extra} extra is required" in message
+    assert f"pip install 'radiologist-etl[{expected_extra}]'" in message
+
+
+def test_explicitly_null_batch_size_falls_back_to_the_documented_default():
+    from radiologist.etl.execution import resolve_execution
+
+    cfg = _compose("extract", overrides=["runner.batch_size=null"])
+    plan = resolve_execution(cfg.runner)
+
+    assert plan.batch_size == 64
+
+
+def _constant_stat(image, metadata, mask=None):
+    """A trivial StatExtractor: this test is about batch sizing, not features."""
+    return {"stat": 1.0}
+
+
+def test_extract_stage_runs_under_a_plan_built_from_a_null_batch_size(
+    tmp_path, image_dir
+):
+    """A null ``batch_size`` used to reach ``chunked()`` as ``None`` and blow
+    up with a TypeError once a stage actually ran under the plan.
+
+    The mapper is injected so the real ``process_batch`` runs in this process:
+    ``chunked(paths, batch_size)`` is evaluated before any dispatch, so a
+    process pool would add nothing to the assertion.
+    """
+    import functools
+
+    from radiologist.etl.execution import resolve_execution
+    from radiologist.etl.extract import extract
+    from radiologist.etl.processors import process_batch
+
+    plan = resolve_execution(
+        _compose("extract", overrides=["runner.batch_size=null"]).runner
+    )
+
+    images = [str(p) for p in sorted(image_dir.rglob("*.png"))]
+    listing = tmp_path / "listing.txt"
+    listing.write_text("\n".join(images) + "\n")
+
+    worker = functools.partial(
+        process_batch,
+        images_root=None,
+        masks_root=None,
+        manifest_id="placeholder",
+        extractors=[_constant_stat],
+    )
+
+    result = extract(
+        file_list=str(listing),
+        destination=str(tmp_path / "manifests"),
+        extractors=[_constant_stat],
+        iqr_columns=["stat"],
+        batch_size=plan.batch_size,
+        mapper=lambda batches: [worker(batch) for batch in batches],
+    )
+
+    assert result.total == len(images)
+
+
+def test_explicitly_null_family_still_yields_a_local_plan():
+    """Regression pin on existing behaviour, unchanged by this fix."""
+    from radiologist.etl.execution import resolve_execution
+
+    cfg = _compose("extract", overrides=["runner.family=null"])
+    plan = resolve_execution(cfg.runner)
+
+    assert plan.family == "local"

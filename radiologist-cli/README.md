@@ -22,7 +22,7 @@ pip install radiologist-cli
 
 | Extra | Installs | Enables |
 |---|---|---|
-| `etl` | `radiologist-etl[all]` | `radiologist etl ...` |
+| `etl` | `radiologist-etl[all]` | the optional execution backends (prefect/dask/ray/beam) for `radiologist etl ...`; the group itself starts on a plain install |
 | `registry` | `radiologist-registry[all]` | `radiologist registry ...` |
 | `inference` | `radiologist-inference[all]` | `radiologist infer ...` |
 | `all` | all of the above | every command group |
