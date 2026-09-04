@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Generator, List, Optional, Tuple, Union
 
 import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
@@ -160,10 +161,8 @@ class BasePredictor:
         """
         _validate_mean_std(mean, std)
         reg = registry if registry is not None else WandbRegistry()
-        try:
+        with _translate_wandb_missing():
             model_path = reg.pull(artifact_path=artifact_path, local_dir=local_dir)
-        except RuntimeError as exc:
-            raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
         return cls.from_path(
             model_path=model_path, mean=mean, std=std, input_shape=input_shape
         )
@@ -213,10 +212,17 @@ def _resolve_and_pull(
 ) -> Tuple[str, ArtifactRef]:
     """Resolve a selector to an artifact ref, then pull its ONNX file."""
     reg = registry if registry is not None else WandbRegistry()
-    try:
+    with _translate_wandb_missing():
         ref = resolve_selector(selector, reg)
         local_path = reg.pull(artifact_path=ref.qualified_name, local_dir=local_dir)
-        return local_path, ref
+    return local_path, ref
+
+
+@contextmanager
+def _translate_wandb_missing() -> Generator[None, None, None]:
+    """Translate a missing-wandb RuntimeError into the inference-extra message."""
+    try:
+        yield
     except RuntimeError as exc:
         raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
 
