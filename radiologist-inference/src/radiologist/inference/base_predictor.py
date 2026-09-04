@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
@@ -198,22 +198,25 @@ class BasePredictor:
             ValueError: If exactly one of mean/std is provided.
         """
         _validate_mean_std(mean, std)
-        model_path = _resolve_and_pull(selector, local_dir, registry)
-        return cls.from_path(
+        model_path, resolved_ref = _resolve_and_pull(selector, local_dir, registry)
+        instance = cls.from_path(
             model_path=model_path, mean=mean, std=std, input_shape=input_shape
         )
+        instance._state.provenance = resolved_ref
+        return instance
 
 
 def _resolve_and_pull(
     selector: "RegistrySelector",
     local_dir: str,
     registry: Optional["ModelRegistry"] = None,
-) -> str:
+) -> Tuple[str, ArtifactRef]:
     """Resolve a selector to an artifact ref, then pull its ONNX file."""
     reg = registry if registry is not None else WandbRegistry()
     try:
         ref = resolve_selector(selector, reg)
-        return reg.pull(artifact_path=ref.qualified_name, local_dir=local_dir)
+        local_path = reg.pull(artifact_path=ref.qualified_name, local_dir=local_dir)
+        return local_path, ref
     except RuntimeError as exc:
         raise RuntimeError(_INFERENCE_WANDB_MISSING_MSG) from exc
 
