@@ -62,18 +62,21 @@ def _parse_int_list(value: Optional[str]) -> Optional[List[int]]:
     return [int(part) for part in value.split(",")]
 
 
-def _provenance_record(predictor: "BasePredictor") -> Dict[str, Optional[str]]:
+def _provenance_record(
+    predictor: Optional["BasePredictor"],
+) -> Dict[str, Optional[str]]:
     """Build the reportable provenance record for a loaded predictor.
 
     Args:
-        predictor: Loaded predictor instance.
+        predictor: Loaded predictor instance, or ``None`` when no predictor
+            was loaded (e.g. ``serve`` started without a source).
 
     Returns:
         A dict with keys ``model_qualified_name`` and ``model_version``, both
         ``None`` when the predictor carries no provenance (i.e. it was loaded
-        from a local file path rather than a registry selector).
+        from a local file path rather than a registry selector) or is absent.
     """
-    ref = predictor.provenance
+    ref = predictor.provenance if predictor is not None else None
     if ref is None:
         return {"model_qualified_name": None, "model_version": None}
     return {"model_qualified_name": ref.qualified_name, "model_version": ref.version}
@@ -84,7 +87,10 @@ def _provenance_record(predictor: "BasePredictor") -> Dict[str, Optional[str]]:
 def predict(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
-        None, "--path", help="Path to the deterministic ONNX model."
+        None,
+        "--path",
+        help="Path to the deterministic ONNX model, or (with a registry "
+        "selector flag) the entity/project prefix to resolve against.",
     ),
     run_id: Optional[str] = typer.Option(
         None,
@@ -156,7 +162,10 @@ def predict(
 def explain(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
-        None, "--path", help="Path to the deterministic ONNX model."
+        None,
+        "--path",
+        help="Path to the deterministic ONNX model, or (with a registry "
+        "selector flag) the entity/project prefix to resolve against.",
     ),
     run_id: Optional[str] = typer.Option(
         None,
@@ -236,7 +245,10 @@ def explain(
 def uncertainty(
     image_path: str = typer.Argument(..., help="Path to the input chest X-ray image."),
     path: Optional[str] = typer.Option(
-        None, "--path", help="Path to the MC-Dropout ONNX model."
+        None,
+        "--path",
+        help="Path to the MC-Dropout ONNX model, or (with a registry "
+        "selector flag) the entity/project prefix to resolve against.",
     ),
     run_id: Optional[str] = typer.Option(
         None,
@@ -315,7 +327,10 @@ def uncertainty(
 @exit_on_error
 def serve(
     path: Optional[str] = typer.Option(
-        None, "--path", help="Path to the deterministic ONNX model."
+        None,
+        "--path",
+        help="Path to the deterministic ONNX model, or (with a registry "
+        "selector flag) the entity/project prefix to resolve against.",
     ),
     run_id: Optional[str] = typer.Option(
         None,
@@ -386,11 +401,6 @@ def serve(
         else None
     )
     fastapi_app = create_app(predictor)
-    provenance = (
-        _provenance_record(predictor)
-        if predictor is not None
-        else {"model_qualified_name": None, "model_version": None}
-    )
     emit(
         {
             "host": host,
@@ -398,7 +408,7 @@ def serve(
             "verb": verb_name,
             "model_path": path,
             "model_run_id": run_id,
-            **provenance,
+            **_provenance_record(predictor),
         }
     )
     _inference_optional._uvicorn.run(fastapi_app, host=host, port=port)
