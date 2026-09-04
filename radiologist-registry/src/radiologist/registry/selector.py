@@ -103,6 +103,11 @@ def selector_from_flags(
     )
 
 
+_PATH_REQUIRED_MSG = (
+    "A base path (entity/project) is required to resolve a registry selector."
+)
+
+
 def resolve_selector(
     selector: RegistrySelector, registry: ModelRegistry
 ) -> ArtifactRef:
@@ -116,10 +121,13 @@ def resolve_selector(
         The resolved artifact pointer.
 
     Raises:
-        ValueError: If both `run_id` and `tags` are set on the selector.
+        ValueError: If both `run_id` and `tags` are set on the selector, or
+            if the selector is registry-backed but carries a blank `path`.
     """
     if selector.run_id and selector.tags:
         raise ValueError("Provide either --run-id or --tags, not both.")
+    if selector.is_registry_backed() and not selector.path.strip():
+        raise ValueError(_PATH_REQUIRED_MSG)
     return registry.resolve(
         path=selector.path,
         run_id=selector.run_id,

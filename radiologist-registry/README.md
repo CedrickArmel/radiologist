@@ -42,8 +42,10 @@ Exported from `radiologist.registry`:
   framework-neutral description of which artifact to resolve
   (`path`, `run_id`, `groups`, `tags`, `metric`, `version`,
   `include_sweeps`). `resolve_selector(selector, registry)` validates that
-  `run_id` and `tags` are not both set, then delegates to
-  `registry.resolve(...)`.
+  `run_id` and `tags` are not both set, and that a registry-backed selector
+  (any of `run_id`/`tags`/`groups`/`metric`/`version` set) carries a
+  non-blank `path` — the entity/project to resolve against — then delegates
+  to `registry.resolve(...)`.
 - **`ArtifactRef`** — resolved artifact pointer (`qualified_name`, `run_id`,
   `artifact_name`, `version`).
 - **`ExportResult`** — paths and metadata for a freshly exported model pair
