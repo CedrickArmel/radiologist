@@ -147,7 +147,9 @@ class TestLoadPredictorFromLocalPath:
 
 
 class TestLoadPredictorFromRegistry:
-    def test_predict_verb_with_run_id_resolves_classifier_from_registry(self, tmp_path):
+    def test_predict_verb_with_path_and_run_id_resolves_classifier_from_registry(
+        self, tmp_path
+    ):
         build_det_onnx(tmp_path, filename="det.onnx")
         verb = get_verb("predict")
         mock_wandb, pulled_art = _make_registry_wandb_mock()
@@ -158,7 +160,7 @@ class TestLoadPredictorFromRegistry:
         with patch.object(resolver_mod, "_wandb", mock_wandb):
             predictor = load_predictor(
                 verb,
-                path=None,
+                path="entity/project",
                 run_id="run1",
                 tags=None,
                 groups=None,
@@ -167,8 +169,14 @@ class TestLoadPredictorFromRegistry:
             )
 
         assert isinstance(predictor, Classifier)
+        api_instance = mock_wandb.Api.return_value
+        resolve_calls = [
+            call for call in api_instance.artifact.call_args_list if call.kwargs
+        ]
+        assert len(resolve_calls) == 1
+        assert resolve_calls[0].kwargs["name"].startswith("entity/project/")
 
-    def test_uncertainty_verb_with_run_id_resolves_against_mcd_suffixed_run_id(
+    def test_uncertainty_verb_with_path_and_run_id_resolves_against_mcd_suffixed_run_id(
         self, tmp_path
     ):
         build_mcd_onnx(tmp_path, filename="mcd.onnx")
@@ -183,7 +191,7 @@ class TestLoadPredictorFromRegistry:
         with patch.object(resolver_mod, "_wandb", mock_wandb):
             predictor = load_predictor(
                 verb,
-                path=None,
+                path="entity/project",
                 run_id="run1",
                 tags=None,
                 groups=None,
@@ -198,6 +206,7 @@ class TestLoadPredictorFromRegistry:
         ]
         assert len(resolve_calls) == 1
         assert "run1-mcd" in resolve_calls[0].kwargs["name"]
+        assert resolve_calls[0].kwargs["name"].startswith("entity/project/")
 
 
 class TestLoadPredictorRaisesWhenNoSourceGiven:
@@ -223,15 +232,74 @@ class TestLoadPredictorRaisesWhenNoSourceGiven:
         assert "--metric" in message
 
 
-class TestLoadPredictorGuardsAgainstBothSourcesGiven:
-    def test_path_and_run_id_together_raises_value_error(self, tmp_path):
-        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+class TestLoadPredictorUsesPathAsRegistryOverride:
+    def test_path_and_run_id_together_resolves_from_registry_under_path_entity_project(
+        self, tmp_path
+    ):
+        build_det_onnx(tmp_path, filename="det.onnx")
+        verb = get_verb("predict")
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.return_value = str(tmp_path)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            predictor = load_predictor(
+                verb,
+                path="entity/project",
+                run_id="run1",
+                tags=None,
+                groups=None,
+                metric=None,
+                local_dir=str(tmp_path),
+            )
+
+        assert isinstance(predictor, Classifier)
+        api_instance = mock_wandb.Api.return_value
+        resolve_calls = [
+            call for call in api_instance.artifact.call_args_list if call.kwargs
+        ]
+        assert len(resolve_calls) == 1
+        assert resolve_calls[0].kwargs["name"].startswith("entity/project/")
+
+    def test_path_and_tags_together_resolves_from_registry_under_path_entity_project(
+        self, tmp_path
+    ):
+        build_det_onnx(tmp_path, filename="det.onnx")
+        verb = get_verb("predict")
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.return_value = str(tmp_path)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            predictor = load_predictor(
+                verb,
+                path="entity/project",
+                run_id=None,
+                tags=["a"],
+                groups=None,
+                metric=None,
+                local_dir=str(tmp_path),
+            )
+
+        assert isinstance(predictor, Classifier)
+        api_instance = mock_wandb.Api.return_value
+        resolve_calls = [
+            call for call in api_instance.artifact.call_args_list if call.kwargs
+        ]
+        assert len(resolve_calls) == 1
+        assert resolve_calls[0].kwargs["name"].startswith("entity/project/")
+
+
+class TestLoadPredictorRequiresPathWithSelector:
+    def test_run_id_without_path_raises_value_error_naming_path(self, tmp_path):
         verb = get_verb("predict")
 
         with pytest.raises(ValueError) as exc_info:
             load_predictor(
                 verb,
-                path=det_path,
+                path=None,
                 run_id="run1",
                 tags=None,
                 groups=None,
@@ -241,16 +309,14 @@ class TestLoadPredictorGuardsAgainstBothSourcesGiven:
 
         message = str(exc_info.value)
         assert "--path" in message
-        assert "--run-id" in message
 
-    def test_path_and_tags_together_raises_value_error(self, tmp_path):
-        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+    def test_tags_without_path_raises_value_error_naming_path(self, tmp_path):
         verb = get_verb("predict")
 
         with pytest.raises(ValueError) as exc_info:
             load_predictor(
                 verb,
-                path=det_path,
+                path=None,
                 run_id=None,
                 tags=["a"],
                 groups=None,
@@ -260,4 +326,37 @@ class TestLoadPredictorGuardsAgainstBothSourcesGiven:
 
         message = str(exc_info.value)
         assert "--path" in message
-        assert "--tags" in message
+
+    def test_groups_without_path_raises_value_error_naming_path(self, tmp_path):
+        verb = get_verb("predict")
+
+        with pytest.raises(ValueError) as exc_info:
+            load_predictor(
+                verb,
+                path=None,
+                run_id=None,
+                tags=None,
+                groups=["g"],
+                metric=None,
+                local_dir=str(tmp_path),
+            )
+
+        message = str(exc_info.value)
+        assert "--path" in message
+
+    def test_metric_without_path_raises_value_error_naming_path(self, tmp_path):
+        verb = get_verb("predict")
+
+        with pytest.raises(ValueError) as exc_info:
+            load_predictor(
+                verb,
+                path=None,
+                run_id=None,
+                tags=None,
+                groups=None,
+                metric="f1",
+                local_dir=str(tmp_path),
+            )
+
+        message = str(exc_info.value)
+        assert "--path" in message

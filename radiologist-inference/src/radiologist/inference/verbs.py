@@ -35,10 +35,6 @@ _SELECTOR_REQUIRED_MSG = (
     "Provide either --path or a registry selector "
     "(--run-id/--tags/--groups/--metric)."
 )
-_MUTUALLY_EXCLUSIVE_MSG = (
-    "Provide either --path or a registry selector "
-    "(--run-id/--tags/--groups/--metric), not both."
-)
 _PATH_REQUIRED_WITH_SELECTOR_MSG = (
     "--path is required when using a registry selector "
     "(--run-id/--tags/--groups/--metric); it supplies the entity/project "
@@ -114,20 +110,22 @@ def load_predictor(
 ) -> BasePredictor:
     """Single loading path for every verb.
 
-    When the (verb-adjusted) flags are registry-backed, resolves via
-    ``verb.predictor_cls.from_selector(...)``; else when ``path`` is a local
-    path, ``verb.predictor_cls.from_path(model_path=path)``; else raises
-    ``ValueError`` naming ``--path`` and the registry selector flags.
-    ``path`` and any registry selector flag are mutually exclusive: passing
-    both raises ``ValueError`` rather than silently favoring one. When
-    ``verb.mcd_convention`` is ``True``, ``run_id`` is rewritten via
-    ``apply_mcd_convention`` before building the selector.
+    When the (verb-adjusted) flags are registry-backed, ``--path`` is
+    required — it supplies the entity/project ``selector_from_flags``
+    resolves against — and resolution proceeds via
+    ``verb.predictor_cls.from_selector(...)``. When only ``path`` is given
+    (no registry selector flag), it is treated as a local ONNX file and
+    loaded via ``verb.predictor_cls.from_path(model_path=path)``. When
+    neither is given, raises ``ValueError`` naming ``--path`` and the
+    registry selector flags. When ``verb.mcd_convention`` is ``True``,
+    ``run_id`` is rewritten via ``apply_mcd_convention`` before building the
+    selector.
 
     Args:
         verb: Registered verb descriptor naming the predictor class to
             construct and whether the ``{run_id}-mcd`` convention applies.
-        path: Local ONNX file path. Mutually exclusive with the registry
-            selector flags (``run_id``/``tags``/``groups``/``metric``).
+        path: Local ONNX file path, or (when combined with a registry
+            selector flag) the entity/project prefix to resolve against.
         run_id: Registry selector run id. Rewritten via
             ``apply_mcd_convention`` when ``verb.mcd_convention`` is ``True``.
         tags: Registry selector tags.
@@ -146,9 +144,9 @@ def load_predictor(
         Loaded predictor instance of ``verb.predictor_cls``.
 
     Raises:
-        ValueError: If neither ``path`` nor a registry selector flag
-            (``run_id``/``tags``/``groups``/``metric``) is provided, or if
-            both ``path`` and a registry selector flag are provided.
+        ValueError: If a registry selector flag (``run_id``/``tags``/
+            ``groups``/``metric``) is provided without ``path``, or if
+            neither ``path`` nor a registry selector flag is provided.
     """
     effective_run_id = apply_mcd_convention(run_id) if verb.mcd_convention else run_id
     selector = selector_from_flags(
@@ -160,9 +158,9 @@ def load_predictor(
     )
     has_path = path is not None
     registry_backed = selector.is_registry_backed()
-    if has_path and registry_backed:
-        raise ValueError(_MUTUALLY_EXCLUSIVE_MSG)
-    if registry_backed:
+    if registry_backed and not has_path:
+        raise ValueError(_PATH_REQUIRED_WITH_SELECTOR_MSG)
+    if registry_backed and has_path:
         return verb.predictor_cls.from_selector(
             selector,
             local_dir=local_dir,
