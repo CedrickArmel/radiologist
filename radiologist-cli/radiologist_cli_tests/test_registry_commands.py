@@ -63,6 +63,15 @@ class TestResolveCommand:
         assert result.exit_code != 0
         assert "Error:" in result.output
 
+    def test_without_base_path_argument_exits_non_zero_without_contacting_registry(
+        self,
+    ):
+        with patch("radiologist.registry.resolver._wandb") as resolver_wandb:
+            result = runner.invoke(app, ["resolve", "--run-id", "R"])
+
+        assert result.exit_code != 0
+        resolver_wandb.Api.assert_not_called()
+
 
 class TestPullCommand:
     def test_registry_backed_selector_resolves_then_downloads(self, tmp_path):
@@ -136,6 +145,25 @@ class TestPullCommand:
             )
 
         assert result.exit_code == 2
+
+    def test_registry_backed_selector_with_blank_path_exits_non_zero(self, tmp_path):
+        local_dir = tmp_path / "out"
+
+        with patch("radiologist.registry.resolver._wandb") as mock_wandb:
+            result = runner.invoke(
+                app,
+                [
+                    "pull",
+                    "   ",
+                    "--local-dir",
+                    str(local_dir),
+                    "--run-id",
+                    "R",
+                ],
+            )
+
+        assert result.exit_code != 0
+        mock_wandb.Api.assert_not_called()
 
 
 class TestPushCommand:
@@ -256,6 +284,27 @@ class TestPromoteCommand:
         assert "production" in result.output
         assert "model-R:best" in result.output
         assert "model-R-mcd:best" in result.output
+
+    def test_without_base_path_argument_exits_non_zero_without_contacting_registry(
+        self,
+    ):
+        with patch("radiologist.registry.resolver._wandb") as resolver_wandb:
+            result = runner.invoke(
+                app,
+                [
+                    "promote",
+                    "--run-id",
+                    "R",
+                    "--det-collection",
+                    "DC",
+                    "--mcd-collection",
+                    "MC",
+                    "--force",
+                ],
+            )
+
+        assert result.exit_code != 0
+        resolver_wandb.Api.assert_not_called()
 
 
 class TestTransitionToProductionCommand:

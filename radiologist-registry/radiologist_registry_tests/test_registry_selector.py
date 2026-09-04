@@ -206,3 +206,56 @@ def test_resolve_selector_raises_valueerror_when_run_id_and_tags_both_set(
         resolve_selector(selector, registry)
 
     assert registry.calls == []
+
+
+def test_resolve_selector_raises_valueerror_when_registry_backed_and_path_empty(
+    registry: FakeModelRegistry,
+) -> None:
+    selector = RegistrySelector(path="", run_id="run-123")
+
+    with pytest.raises(ValueError, match="base path"):
+        resolve_selector(selector, registry)
+
+    assert registry.calls == []
+
+
+def test_resolve_selector_raises_valueerror_when_registry_backed_and_path_blank(
+    registry: FakeModelRegistry,
+) -> None:
+    selector = RegistrySelector(path="   ", tags=["prod"])
+
+    with pytest.raises(ValueError, match="base path"):
+        resolve_selector(selector, registry)
+
+    assert registry.calls == []
+
+
+def test_resolve_selector_prefers_run_id_tags_error_over_path_error(
+    registry: FakeModelRegistry,
+) -> None:
+    selector = RegistrySelector(path="", run_id="run-123", tags=["prod"])
+
+    with pytest.raises(ValueError, match="either --run-id or --tags"):
+        resolve_selector(selector, registry)
+
+    assert registry.calls == []
+
+
+def test_resolve_selector_with_path_and_search_criteria_still_resolves(
+    registry: FakeModelRegistry, canned_ref: ArtifactRef
+) -> None:
+    selector = RegistrySelector(path="entity/project", run_id="run-123")
+
+    result = resolve_selector(selector, registry)
+
+    assert result == canned_ref
+
+
+def test_resolve_selector_with_path_and_no_search_criteria_is_unaffected(
+    registry: FakeModelRegistry, canned_ref: ArtifactRef
+) -> None:
+    selector = RegistrySelector(path="models/local.onnx")
+
+    result = resolve_selector(selector, registry)
+
+    assert result == canned_ref

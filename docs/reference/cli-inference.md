@@ -19,17 +19,23 @@ Every command prints a single keyed record to stdout via
 Every command that loads a model shares the same dispatch rule, implemented
 via `verbs.load_predictor`/`verbs.get_verb`:
 
-- **Local path** — pass `--path` to load an ONNX file directly from disk via
-  `BasePredictor.from_path`.
+- **Local path only** — pass `--path` with no selector flag to load an ONNX
+  file directly from disk via `BasePredictor.from_path`.
 - **Registry selector** — pass any of `--run-id`, `--tags`, `--groups`, or
-  `--metric` (without `--path`) to resolve and download an artifact from the
-  W&B Model Registry via `BasePredictor.from_selector`. The resolved file is
-  saved into `--local-dir` (defaults to `.`).
-- Exactly one of the two strategies must be usable: providing neither
-  `--path` nor any selector flag raises an error (except for `serve`, where
-  omitting both starts the server with no model loaded — see below), and
-  providing both `--path` and a selector flag also raises an error rather
-  than silently favoring one.
+  `--metric` *together with* `--path` to resolve and download an artifact
+  from the W&B Model Registry via `BasePredictor.from_selector`. `--path`
+  supplies the entity/project (e.g. `entity/project`) the selector resolves
+  against; the resolved file is saved into `--local-dir` (defaults to `.`).
+  A registry selector given without `--path` raises an error rather than
+  silently falling back to W&B's ambient default entity/project.
+- Providing neither `--path` nor any selector flag raises an error (except
+  for `serve`, where omitting both starts the server with no model loaded —
+  see below).
+
+The resolved artifact's provenance — its fully qualified registry name and
+version — is surfaced in every command's output record as
+`model_qualified_name` and `model_version`. Both are `null` when the
+predictor was loaded via `--path` alone (no registry lookup took place).
 
 `uncertainty` loads a single-session `MCDropoutPredictor`: the same ONNX
 model serves both the deterministic and the stochastic MC-Dropout forward
@@ -54,24 +60,27 @@ carrying the predicted class label and per-class probabilities.
 radiologist infer predict chest_xray.png --path model.onnx
 
 # Registry-backed resolution
-radiologist infer predict chest_xray.png --run-id abc123 --local-dir ./models
+radiologist infer predict chest_xray.png --path entity/project \
+    --run-id abc123 --local-dir ./models
 
 # With explicit normalization and input shape
 radiologist infer predict chest_xray.png --path model.onnx \
     --mean 128 --std 65 --input-shape 1,3,224,224
 ```
 
-Emitted keys: `predicted_class`, `probabilities` (nested `Dict[str, float]`).
+Emitted keys: `predicted_class`, `probabilities` (nested `Dict[str, float]`),
+`model_qualified_name`, `model_version` (both `null` unless a registry
+selector was used).
 
 | Option | Description |
 |---|---|
 | `image_path` (argument) | Path to the input chest X-ray image. |
 | `--path` | Path to the deterministic ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Requires `--path` (supplies the entity/project). |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used with no registry selector. Defaults to `.`. |
 | `--mean` | Normalization mean (requires `--std`). |
 | `--std` | Normalization std (requires `--mean`). |
 | `--input-shape` | Fallback `[N,C,H,W]` as comma-separated ints, e.g. `1,3,224,224`. |
@@ -91,17 +100,18 @@ radiologist infer explain chest_xray.png --path model.onnx
 ```
 
 Emitted keys: `predicted_class`, `saliency_shape` (list of ints),
-`saliency_path` (`null` unless `--out` was given).
+`saliency_path` (`null` unless `--out` was given), `model_qualified_name`,
+`model_version` (both `null` unless a registry selector was used).
 
 | Option | Description |
 |---|---|
 | `image_path` (argument) | Path to the input chest X-ray image. |
 | `--path` | Path to the deterministic ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Requires `--path` (supplies the entity/project). |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used with no registry selector. Defaults to `.`. |
 | `--out` | Path to save the saliency map as a `.npy` file. When omitted, only the shape is printed. |
 | `--mean` | Normalization mean (requires `--std`). |
 | `--std` | Normalization std (requires `--mean`). |
@@ -119,24 +129,27 @@ predictive entropy.
 radiologist infer uncertainty chest_xray.png --path model.onnx
 
 # Registry-backed resolution
-radiologist infer uncertainty chest_xray.png --run-id abc123 --local-dir ./models
+radiologist infer uncertainty chest_xray.png --path entity/project \
+    --run-id abc123 --local-dir ./models
 
 # More stochastic passes for a tighter estimate
 radiologist infer uncertainty chest_xray.png --path model.onnx --n-passes 100
 ```
 
 Emitted keys: `predicted_class`, `n_passes`, `predictive_entropy`,
-`mean_probabilities`, `std_probabilities` (both nested `Dict[str, float]`).
+`mean_probabilities`, `std_probabilities` (both nested `Dict[str, float]`),
+`model_qualified_name`, `model_version` (both `null` unless a registry
+selector was used).
 
 | Option | Description |
 |---|---|
 | `image_path` (argument) | Path to the input chest X-ray image. |
 | `--path` | Path to the MC-Dropout ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Requires `--path` (supplies the entity/project). |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used with no registry selector. Defaults to `.`. |
 | `--n-passes` | Number of stochastic forward passes. Defaults to `30`. |
 | `--mean` | Normalization mean (requires `--std`). |
 | `--std` | Normalization std (requires `--mean`). |
@@ -155,7 +168,8 @@ record before the server starts accepting connections.
 radiologist infer serve --path model.onnx --host 0.0.0.0 --port 8000
 
 # Serve a registry-resolved model as a Classifier
-radiologist infer serve --run-id abc123 --local-dir ./models --predict
+radiologist infer serve --path entity/project \
+    --run-id abc123 --local-dir ./models --predict
 
 # Start with no model loaded (routes return 503 until one is available)
 radiologist infer serve
@@ -168,16 +182,18 @@ available. `/healthz` (liveness) and `/readyz` (readiness) are always
 available regardless of predictor state.
 
 Emitted keys: `host`, `port`, `verb`, `model_path` (`null` unless `--path`
-was given), `model_run_id` (`null` unless `--run-id` was given).
+was given), `model_run_id` (`null` unless `--run-id` was given),
+`model_qualified_name`, `model_version` (both `null` unless a registry
+selector was used).
 
 | Option | Description |
 |---|---|
 | `--path` | Path to the deterministic ONNX model. |
-| `--run-id` | W&B run ID identifying the registry artifact to resolve. Mutually exclusive with `--path`. |
+| `--run-id` | W&B run ID identifying the registry artifact to resolve. Requires `--path` (supplies the entity/project). |
 | `--tags` | Registry artifact tag(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--groups` | Registry artifact group(s) to filter by when `--run-id` is not used. Repeatable. |
 | `--metric` | Metric name used to pick the best-scoring artifact among candidates matching `--tags`/`--groups`. |
-| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used. Defaults to `.`. |
+| `--local-dir` | Local directory the resolved registry artifact is downloaded into. Ignored when `--path` is used with no registry selector. Defaults to `.`. |
 | `--host` | Host interface to bind the HTTP server to. Defaults to `127.0.0.1`. |
 | `--port` | TCP port to bind the HTTP server to. Defaults to `8000`. |
 | `--predict` | Serve a `Classifier` (predict verb). |
