@@ -96,6 +96,8 @@ class TestServeCommand:
         assert record["verb"] == "explain"
         assert record["model_path"] == det_path
         assert record["model_run_id"] is None
+        assert record["model_qualified_name"] is None
+        assert record["model_version"] is None
 
     def test_serve_with_registry_run_id_emits_record_with_model_run_id(
         self, tmp_path, build_mcd_onnx, monkeypatch
@@ -120,6 +122,8 @@ class TestServeCommand:
                     [
                         "serve",
                         "--uncertainty",
+                        "--path",
+                        "entity/project",
                         "--run-id",
                         "run1",
                         "--local-dir",
@@ -131,8 +135,24 @@ class TestServeCommand:
         mock_uvicorn.run.assert_called_once()
         record = json.loads(result.output)
         assert record["model_run_id"] == "run1"
-        assert record["model_path"] is None
+        assert record["model_path"] == "entity/project"
         assert record["verb"] == "uncertainty"
+        assert record["model_qualified_name"] == "entity/project/model-run1:best"
+        assert record["model_version"] == "best"
+
+    def test_serve_with_registry_selector_and_no_path_exits_nonzero_without_serving(
+        self, tmp_path, monkeypatch
+    ):
+        import radiologist.inference.optional as optional_mod
+        from radiologist.cli.groups.inference import app
+
+        mock_uvicorn = MagicMock()
+        with patch.object(optional_mod, "_uvicorn", mock_uvicorn):
+            result = runner.invoke(app, ["serve", "--run-id", "run1"])
+
+        assert result.exit_code != 0
+        assert "--path" in result.output
+        mock_uvicorn.run.assert_not_called()
 
     def test_serve_with_no_model_source_starts_with_no_predictor_and_null_record(
         self, tmp_path, make_png_path, monkeypatch
@@ -152,6 +172,8 @@ class TestServeCommand:
         record = json.loads(result.output)
         assert record["model_path"] is None
         assert record["model_run_id"] is None
+        assert record["model_qualified_name"] is None
+        assert record["model_version"] is None
 
         (fastapi_app,), _ = mock_uvicorn.run.call_args
         client = TestClient(fastapi_app)

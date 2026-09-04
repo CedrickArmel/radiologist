@@ -103,6 +103,8 @@ class TestPredictCommand:
                 [
                     "predict",
                     image_path,
+                    "--path",
+                    "entity/project",
                     "--run-id",
                     "run1",
                     "--local-dir",
@@ -115,6 +117,8 @@ class TestPredictCommand:
         assert "predicted_class" in record
         assert set(record["probabilities"].keys()) == {"NORMAL", "ABNORMAL"}
         assert pulled_art.download.call_count == 1
+        assert record["model_qualified_name"] == "entity/project/model-run1:best"
+        assert record["model_version"] == "best"
 
     def test_predict_missing_model_file_exits_2(self, tmp_path, make_png_path):
         from radiologist.cli.groups.inference import app
@@ -125,6 +129,45 @@ class TestPredictCommand:
         result = runner.invoke(app, ["predict", image_path, "--path", missing_path])
 
         assert result.exit_code == 2, result.output
+
+    def test_predict_with_local_path_emits_null_provenance_entries(
+        self, tmp_path, build_det_onnx, make_png_path, monkeypatch
+    ):
+        from radiologist.cli.groups.inference import app
+
+        monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
+        det_path = build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["predict", image_path, "--path", det_path])
+
+        assert result.exit_code == 0, result.output
+        record = json.loads(result.output)
+        assert record["model_qualified_name"] is None
+        assert record["model_version"] is None
+
+    def test_predict_with_registry_selector_and_no_path_exits_nonzero(
+        self, tmp_path, make_png_path
+    ):
+        from radiologist.cli.groups.inference import app
+
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["predict", image_path, "--run-id", "run1"])
+
+        assert result.exit_code != 0
+        assert "--path" in result.output
+
+    def test_predict_with_neither_path_nor_selector_exits_nonzero(
+        self, tmp_path, make_png_path
+    ):
+        from radiologist.cli.groups.inference import app
+
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["predict", image_path])
+
+        assert result.exit_code != 0
 
 
 class TestExplainCommand:
@@ -167,6 +210,64 @@ class TestExplainCommand:
         assert record["saliency_path"] is None
         assert isinstance(record["saliency_shape"], list)
         assert len(list(tmp_path.glob("*.npy"))) == 0
+        assert record["model_qualified_name"] is None
+        assert record["model_version"] is None
+
+    def test_explain_with_registry_selector_emits_provenance(
+        self, tmp_path, build_det_onnx, make_png_path, monkeypatch
+    ):
+        from radiologist.cli.groups.inference import app
+
+        monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
+        build_det_onnx(tmp_path, filename="det.onnx")
+        image_path = make_png_path(tmp_path)
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.return_value = str(tmp_path)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            result = runner.invoke(
+                app,
+                [
+                    "explain",
+                    image_path,
+                    "--path",
+                    "entity/project",
+                    "--run-id",
+                    "run1",
+                    "--local-dir",
+                    str(tmp_path),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        record = json.loads(result.output)
+        assert record["model_qualified_name"] == "entity/project/model-run1:best"
+        assert record["model_version"] == "best"
+
+    def test_explain_with_registry_selector_and_no_path_exits_nonzero(
+        self, tmp_path, make_png_path
+    ):
+        from radiologist.cli.groups.inference import app
+
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["explain", image_path, "--run-id", "run1"])
+
+        assert result.exit_code != 0
+        assert "--path" in result.output
+
+    def test_explain_with_neither_path_nor_selector_exits_nonzero(
+        self, tmp_path, make_png_path
+    ):
+        from radiologist.cli.groups.inference import app
+
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["explain", image_path])
+
+        assert result.exit_code != 0
 
 
 class TestUncertaintyCommand:
@@ -209,6 +310,80 @@ class TestUncertaintyCommand:
         assert result.exit_code == 0, result.output
         record = json.loads(result.output)
         assert record["n_passes"] == 13
+
+    def test_uncertainty_with_local_path_emits_null_provenance_entries(
+        self, tmp_path, build_mcd_onnx, make_png_path, monkeypatch
+    ):
+        from radiologist.cli.groups.inference import app
+
+        monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
+        mcd_path = build_mcd_onnx(tmp_path, filename="mcd.onnx")
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["uncertainty", image_path, "--path", mcd_path])
+
+        assert result.exit_code == 0, result.output
+        record = json.loads(result.output)
+        assert record["model_qualified_name"] is None
+        assert record["model_version"] is None
+
+    def test_uncertainty_with_registry_selector_emits_provenance(
+        self, tmp_path, build_mcd_onnx, make_png_path, monkeypatch
+    ):
+        from radiologist.cli.groups.inference import app
+
+        monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
+        mcd_dir = tmp_path / "mcd"
+        mcd_dir.mkdir()
+        build_mcd_onnx(mcd_dir, filename="mcd.onnx")
+        image_path = make_png_path(tmp_path)
+        mock_wandb, pulled_art = _make_registry_wandb_mock()
+        pulled_art.download.return_value = str(mcd_dir)
+
+        import radiologist.registry.resolver as resolver_mod
+
+        with patch.object(resolver_mod, "_wandb", mock_wandb):
+            result = runner.invoke(
+                app,
+                [
+                    "uncertainty",
+                    image_path,
+                    "--path",
+                    "entity/project",
+                    "--run-id",
+                    "run1",
+                    "--local-dir",
+                    str(tmp_path),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        record = json.loads(result.output)
+        assert record["model_qualified_name"] == "entity/project/model-run1:best"
+        assert record["model_version"] == "best"
+
+    def test_uncertainty_with_registry_selector_and_no_path_exits_nonzero(
+        self, tmp_path, make_png_path
+    ):
+        from radiologist.cli.groups.inference import app
+
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["uncertainty", image_path, "--run-id", "run1"])
+
+        assert result.exit_code != 0
+        assert "--path" in result.output
+
+    def test_uncertainty_with_neither_path_nor_selector_exits_nonzero(
+        self, tmp_path, make_png_path
+    ):
+        from radiologist.cli.groups.inference import app
+
+        image_path = make_png_path(tmp_path)
+
+        result = runner.invoke(app, ["uncertainty", image_path])
+
+        assert result.exit_code != 0
 
 
 class TestOutputFormat:

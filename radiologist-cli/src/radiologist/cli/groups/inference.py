@@ -73,7 +73,10 @@ def _provenance_record(predictor: "BasePredictor") -> Dict[str, Optional[str]]:
         ``None`` when the predictor carries no provenance (i.e. it was loaded
         from a local file path rather than a registry selector).
     """
-    raise NotImplementedError
+    ref = predictor.provenance
+    if ref is None:
+        return {"model_qualified_name": None, "model_version": None}
+    return {"model_qualified_name": ref.qualified_name, "model_version": ref.version}
 
 
 @app.command()
@@ -87,7 +90,7 @@ def predict(
         None,
         "--run-id",
         help="W&B run ID identifying the registry artifact to resolve. "
-        "Mutually exclusive with --path.",
+        "Requires --path (supplies the entity/project to resolve against).",
     ),
     tags: Optional[List[str]] = typer.Option(
         None,
@@ -111,7 +114,7 @@ def predict(
         ".",
         "--local-dir",
         help="Local directory the resolved registry artifact is downloaded "
-        "into. Ignored when --path is used.",
+        "into. Ignored when no registry selector is given.",
     ),
     mean: Optional[float] = typer.Option(
         None, "--mean", help="Normalization mean (requires --std)."
@@ -143,6 +146,7 @@ def predict(
         {
             "predicted_class": result.predicted_class,
             "probabilities": result.probabilities,
+            **_provenance_record(classifier),
         }
     )
 
@@ -158,7 +162,7 @@ def explain(
         None,
         "--run-id",
         help="W&B run ID identifying the registry artifact to resolve. "
-        "Mutually exclusive with --path.",
+        "Requires --path (supplies the entity/project to resolve against).",
     ),
     tags: Optional[List[str]] = typer.Option(
         None,
@@ -182,7 +186,7 @@ def explain(
         ".",
         "--local-dir",
         help="Local directory the resolved registry artifact is downloaded "
-        "into. Ignored when --path is used.",
+        "into. Ignored when no registry selector is given.",
     ),
     out: Optional[str] = typer.Option(
         None, "--out", help="Path to save the saliency map as a .npy file."
@@ -222,6 +226,7 @@ def explain(
             "predicted_class": result.predicted_class,
             "saliency_shape": list(result.saliency_map.shape),
             "saliency_path": saliency_path,
+            **_provenance_record(explainer),
         }
     )
 
@@ -237,7 +242,7 @@ def uncertainty(
         None,
         "--run-id",
         help="W&B run ID identifying the registry artifact to resolve. "
-        "Mutually exclusive with --path.",
+        "Requires --path (supplies the entity/project to resolve against).",
     ),
     tags: Optional[List[str]] = typer.Option(
         None,
@@ -261,7 +266,7 @@ def uncertainty(
         ".",
         "--local-dir",
         help="Local directory the resolved registry artifact is downloaded "
-        "into. Ignored when --path is used.",
+        "into. Ignored when no registry selector is given.",
     ),
     n_passes: int = typer.Option(
         30, "--n-passes", help="Number of stochastic forward passes."
@@ -301,6 +306,7 @@ def uncertainty(
             "predictive_entropy": result.predictive_entropy,
             "mean_probabilities": result.mean_probabilities,
             "std_probabilities": result.std_per_class,
+            **_provenance_record(predictor),
         }
     )
 
@@ -315,7 +321,7 @@ def serve(
         None,
         "--run-id",
         help="W&B run ID identifying the registry artifact to resolve. "
-        "Mutually exclusive with --path.",
+        "Requires --path (supplies the entity/project to resolve against).",
     ),
     tags: Optional[List[str]] = typer.Option(
         None,
@@ -339,7 +345,7 @@ def serve(
         ".",
         "--local-dir",
         help="Local directory the resolved registry artifact is downloaded "
-        "into. Ignored when --path is used.",
+        "into. Ignored when no registry selector is given.",
     ),
     host: str = typer.Option(
         "127.0.0.1", "--host", help="Host interface to bind the HTTP server to."
@@ -380,6 +386,11 @@ def serve(
         else None
     )
     fastapi_app = create_app(predictor)
+    provenance = (
+        _provenance_record(predictor)
+        if predictor is not None
+        else {"model_qualified_name": None, "model_version": None}
+    )
     emit(
         {
             "host": host,
@@ -387,6 +398,7 @@ def serve(
             "verb": verb_name,
             "model_path": path,
             "model_run_id": run_id,
+            **provenance,
         }
     )
     _inference_optional._uvicorn.run(fastapi_app, host=host, port=port)
