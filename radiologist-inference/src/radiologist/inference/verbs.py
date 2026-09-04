@@ -39,6 +39,11 @@ _MUTUALLY_EXCLUSIVE_MSG = (
     "Provide either --path or a registry selector "
     "(--run-id/--tags/--groups/--metric), not both."
 )
+_PATH_REQUIRED_WITH_SELECTOR_MSG = (
+    "--path is required when using a registry selector "
+    "(--run-id/--tags/--groups/--metric); it supplies the entity/project "
+    "to resolve against."
+)
 
 
 @dataclass(frozen=True)

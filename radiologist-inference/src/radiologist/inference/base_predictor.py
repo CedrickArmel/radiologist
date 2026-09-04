@@ -38,6 +38,7 @@ import onnxruntime as ort  # type: ignore[import-untyped]
 from PIL import Image as PILImage  # type: ignore[import-untyped]
 
 from radiologist.inference.models import ModelMetadata
+from radiologist.registry.models import ArtifactRef
 from radiologist.registry.selector import resolve_selector
 from radiologist.registry.wandb_registry import WandbRegistry
 
@@ -58,12 +59,24 @@ class _PredictorState:
     model_metadata: ModelMetadata
     mean: Optional[float] = field(default=None)
     std: Optional[float] = field(default=None)
+    provenance: Optional[ArtifactRef] = field(default=None)
+    # contract: set only by from_selector; None for from_path-loaded predictors
 
 
 class BasePredictor:
     """Common loading and preprocessing surface for all predictor classes."""
 
     _state: _PredictorState
+
+    @property
+    def provenance(self) -> Optional[ArtifactRef]:
+        """The ArtifactRef this predictor was resolved from.
+
+        Returns:
+            The resolved ``ArtifactRef``, or ``None`` when this predictor was
+            loaded from a local file path rather than a registry selector.
+        """
+        return self._state.provenance
 
     @classmethod
     def from_path(

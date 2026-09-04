@@ -30,7 +30,7 @@ repo-wide :func:`radiologist.cli.errors.exit_on_error` decorator and
 :func:`radiologist.cli.errors.run_typer_app` runner.
 """
 
-from typing import List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import numpy as np
 import typer
@@ -40,6 +40,9 @@ from radiologist.inference import optional as _inference_optional
 from radiologist.inference import verbs
 from radiologist.inference.app import create_app
 from radiologist.utils.cli import emit
+
+if TYPE_CHECKING:
+    from radiologist.inference.base_predictor import BasePredictor
 
 app = typer.Typer(name="infer", add_completion=False)
 
@@ -57,6 +60,20 @@ def _parse_int_list(value: Optional[str]) -> Optional[List[int]]:
     if value is None:
         return None
     return [int(part) for part in value.split(",")]
+
+
+def _provenance_record(predictor: "BasePredictor") -> Dict[str, Optional[str]]:
+    """Build the reportable provenance record for a loaded predictor.
+
+    Args:
+        predictor: Loaded predictor instance.
+
+    Returns:
+        A dict with keys ``model_qualified_name`` and ``model_version``, both
+        ``None`` when the predictor carries no provenance (i.e. it was loaded
+        from a local file path rather than a registry selector).
+    """
+    raise NotImplementedError
 
 
 @app.command()
