@@ -37,11 +37,13 @@ prefect = ["prefect>=3.7.0"]
 dask = ["prefect-dask>=0.3.0"]
 ray = ["prefect-ray>=0.4.0"]
 beam = ["apache-beam>=2.60.0"]
+# ``all`` bundles every production-ready extra. ``ray`` is deliberately
+# excluded while the Ray execution family is still under development
+# (see issue #188); install it explicitly with ``radiologist-etl[ray]``.
 all = [
     "gcsfs>=2026.4.0",
     "prefect>=3.7.0",
     "prefect-dask>=0.3.0",
-    "prefect-ray>=0.4.0",
     "apache-beam>=2.60.0"
 ]
 
