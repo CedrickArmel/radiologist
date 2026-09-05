@@ -29,7 +29,9 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-      - run: uv sync --active --all-groups --all-packages --all-extras
+      # ray is excluded on purpose: the Ray execution family is still under
+      # development (#188) and no test requires it.
+      - run: uv sync --active --all-groups --all-packages --all-extras --no-extra ray
       - run: make test PYTEST_FLAGS="-q --cov-report=xml"
       - uses: codecov/codecov-action@v5
         with:
