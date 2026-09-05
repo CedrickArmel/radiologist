@@ -181,14 +181,49 @@ Common ones:
 `extract` and `build` accept `runner=<family>`, selecting the Prefect task
 runner the stage's batches/shards are dispatched through:
 
-| Family | Config | Extra |
-|---|---|---|
-| `local` (default) | `runner=local` | none |
-| Dask | `runner=dask_local` / `runner=dask_cluster` / `runner=dask_address` | `radiologist-etl[dask]` |
-| Ray | `runner=ray_local` / `runner=ray_cluster` | `radiologist-etl[ray]` |
-| Beam | `runner=beam_direct` / `runner=beam_dataflow` | `radiologist-etl[beam]` |
+| Family | Config | Extra | In `all`? |
+|---|---|---|---|
+| `local` (default) | `runner=local` | none | — |
+| Dask | `runner=dask_local` / `runner=dask_cluster` / `runner=dask_address` | `radiologist-etl[dask]` | Yes |
+| Ray | `runner=ray_local` / `runner=ray_cluster` | `radiologist-etl[ray]` | No — opt-in only |
+| Beam | `runner=beam_direct` / `runner=beam_dataflow` | `radiologist-etl[beam]` | Yes |
 
 `assign-split` always runs locally and accepts no `runner=` override.
+
+#### What `all` installs (and why Ray is not in it)
+
+`radiologist-etl[all]` is a curated aggregate: it installs `gcs`, `prefect`,
+`dask`, and `beam`, but **deliberately excludes `ray`**. The Ray execution
+family (`runner=ray_local` / `runner=ray_cluster`) is still under
+development (see #188) — Beam, by contrast, is *not* deferred: it shipped
+(see #189) and is part of `all` like the other production-ready backends.
+
+If you installed `radiologist-etl[all]`, selected `runner=ray_local` or
+`runner=ray_cluster`, and hit an "install the ray extra" error, that is
+expected, not a bug. Opt in explicitly:
+
+```bash
+# in-repo contributor, from a workspace checkout
+uv sync --active --extra ray
+
+# external consumer
+pip install 'radiologist-etl[ray]'
+```
+
+The repo's own dev-setup (`make dev-install`) and both CI test jobs also
+exclude the Ray extra, but through a **separate mechanism**: they install
+with `--all-extras --no-extra ray`. `--all-extras` installs every extra
+named in `pyproject.toml` directly, bypassing the `all` extra's own
+composition entirely — so scoping `all` to leave Ray out is not, by itself,
+enough to keep Ray out of those installs, and `--no-extra ray` is required
+in addition. Removing `--no-extra ray` from the Makefile or CI workflows
+would silently reintroduce Ray into those installs even though `all` still
+excludes it.
+
+The documentation build (`make docs-install` / `docs-build`) is the one
+install path that still pulls in every extra, Ray included — `mkdocstrings`
+needs every optional module importable to render its API reference, so that
+target intentionally uses plain `--all-extras` with no exclusion.
 
 #### Beam
 
