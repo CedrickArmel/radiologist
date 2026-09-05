@@ -41,8 +41,12 @@ runner = CliRunner()
 
 
 def _make_registry_wandb_mock(qualified_name: str = "entity/project/model-run1:best"):
-    """A wandb mock distinguishing resolve()'s kwargs artifact() call from
-    pull()'s positional artifact() call, per _WandbResolver's two call shapes.
+    """A wandb mock covering resolve()'s kwargs-style artifact() call.
+
+    pull() no longer issues its own artifact() call when it immediately
+    follows a resolve() of the same qualified name (see _WandbResolver's
+    resolved-artifact cache) — the resolved artifact is reused for the
+    download, so no separate "pulled" mock is needed.
     """
     mock_wandb = MagicMock()
 
@@ -50,20 +54,14 @@ def _make_registry_wandb_mock(qualified_name: str = "entity/project/model-run1:b
     resolved_art.qualified_name = qualified_name
     resolved_art.version = "best"
 
-    pulled_art = MagicMock()
-
     best_run = MagicMock()
     best_run.id = "run1"
 
     api_instance = MagicMock()
     api_instance.runs.return_value = [best_run]
-
-    def _artifact(*args, **kwargs):
-        return resolved_art if kwargs else pulled_art
-
-    api_instance.artifact.side_effect = _artifact
+    api_instance.artifact.return_value = resolved_art
     mock_wandb.Api.return_value = api_instance
-    return mock_wandb, pulled_art
+    return mock_wandb, resolved_art
 
 
 class TestPredictCommand:
@@ -92,8 +90,8 @@ class TestPredictCommand:
         monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
         build_det_onnx(tmp_path, filename="det.onnx")
         image_path = make_png_path(tmp_path)
-        mock_wandb, pulled_art = _make_registry_wandb_mock()
-        pulled_art.download.return_value = str(tmp_path)
+        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        resolved_art.download.return_value = str(tmp_path)
 
         import radiologist.registry.resolver as resolver_mod
 
@@ -116,7 +114,7 @@ class TestPredictCommand:
         record = json.loads(result.output)
         assert "predicted_class" in record
         assert set(record["probabilities"].keys()) == {"NORMAL", "ABNORMAL"}
-        assert pulled_art.download.call_count == 1
+        assert resolved_art.download.call_count == 1
         assert record["model_qualified_name"] == "entity/project/model-run1:best"
         assert record["model_version"] == "best"
 
@@ -221,8 +219,8 @@ class TestExplainCommand:
         monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
         build_det_onnx(tmp_path, filename="det.onnx")
         image_path = make_png_path(tmp_path)
-        mock_wandb, pulled_art = _make_registry_wandb_mock()
-        pulled_art.download.return_value = str(tmp_path)
+        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        resolved_art.download.return_value = str(tmp_path)
 
         import radiologist.registry.resolver as resolver_mod
 
@@ -337,8 +335,8 @@ class TestUncertaintyCommand:
         mcd_dir.mkdir()
         build_mcd_onnx(mcd_dir, filename="mcd.onnx")
         image_path = make_png_path(tmp_path)
-        mock_wandb, pulled_art = _make_registry_wandb_mock()
-        pulled_art.download.return_value = str(mcd_dir)
+        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        resolved_art.download.return_value = str(mcd_dir)
 
         import radiologist.registry.resolver as resolver_mod
 
