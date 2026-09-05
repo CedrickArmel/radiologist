@@ -39,6 +39,8 @@ import re
 from pathlib import Path
 from typing import List
 
+import pytest
+
 _WORKFLOWS_DIR = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 
 _JOB_HEADER_RE = re.compile(r"^  (\S+):\s*$")
@@ -85,14 +87,9 @@ def _install_step_line(job_lines: List[str]) -> str:
     return job_lines[_install_step_index(job_lines)].strip()
 
 
-def test_ci_test_job_install_step_excludes_ray() -> None:
-    lines = _job_lines(_read_workflow("ci.yml"), "test")
-    install_line = _install_step_line(lines)
-    assert "--no-extra ray" in install_line
-
-
-def test_publish_test_job_install_step_excludes_ray() -> None:
-    lines = _job_lines(_read_workflow("publish.yml"), "test")
+@pytest.mark.parametrize("workflow", ["ci.yml", "publish.yml"])
+def test_test_job_install_step_excludes_ray(workflow: str) -> None:
+    lines = _job_lines(_read_workflow(workflow), "test")
     install_line = _install_step_line(lines)
     assert "--no-extra ray" in install_line
 
@@ -105,17 +102,26 @@ def test_ci_and_publish_test_jobs_install_the_same_dependency_set() -> None:
     assert ci_install == publish_install
 
 
-def test_ray_exclusion_reason_is_documented_next_to_the_install_step() -> None:
-    for workflow in ("ci.yml", "publish.yml"):
-        lines = _job_lines(_read_workflow(workflow), "test")
-        install_index = _install_step_index(lines)
-        preceding = "\n".join(lines[max(0, install_index - 3) : install_index]).lower()
-        assert (
-            "ray" in preceding
-        ), f"{workflow}: no comment mentions ray above the install step"
-        assert (
-            "188" in preceding
-        ), f"{workflow}: no comment references issue #188 above the install step"
+def _preceding_comment_block(job_lines: List[str], step_index: int) -> str:
+    """Return the contiguous run of ``#``-comment lines directly above a step."""
+    start = step_index
+    while start > 0 and job_lines[start - 1].strip().startswith("#"):
+        start -= 1
+    return "\n".join(job_lines[start:step_index]).lower()
+
+
+@pytest.mark.parametrize("workflow", ["ci.yml", "publish.yml"])
+def test_ray_exclusion_reason_is_documented_next_to_the_install_step(
+    workflow: str,
+) -> None:
+    lines = _job_lines(_read_workflow(workflow), "test")
+    preceding = _preceding_comment_block(lines, _install_step_index(lines))
+    assert (
+        "ray" in preceding
+    ), f"{workflow}: no comment mentions ray above the install step"
+    assert (
+        "188" in preceding
+    ), f"{workflow}: no comment references issue #188 above the install step"
 
 
 def test_publish_build_job_still_gates_on_the_test_job() -> None:
