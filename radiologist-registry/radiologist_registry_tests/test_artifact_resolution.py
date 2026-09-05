@@ -297,6 +297,48 @@ class TestPull:
                 registry.pull("entity/project/model-run1:v1", str(tmp_path))
 
 
+class TestResolveThenPullDedup:
+    def test_pull_reuses_artifact_resolved_by_a_prior_resolve_call(
+        self, tmp_path: Any
+    ) -> None:
+        onnx = tmp_path / "model.onnx"
+        onnx.write_text("fake")
+        art = _make_artifact("entity/project/model-run123:best", "v5", "run123")
+        art.download.return_value = str(tmp_path)
+
+        with patch("radiologist.registry.resolver._wandb") as mock_wandb:
+            mock_api = MagicMock()
+            mock_wandb.Api.return_value = mock_api
+            mock_api.artifact.return_value = art
+
+            registry = WandbRegistry()
+            ref = registry.resolve("entity/project", run_id="run123")
+            registry.pull(artifact_path=ref.qualified_name, local_dir=str(tmp_path))
+
+        assert mock_api.artifact.call_count == 1
+
+    def test_pull_still_fetches_when_no_prior_resolve_matches_the_path(
+        self, tmp_path: Any
+    ) -> None:
+        onnx = tmp_path / "model.onnx"
+        onnx.write_text("fake")
+        art = _make_artifact("entity/project/model-run123:best", "v5", "run123")
+        art.download.return_value = str(tmp_path)
+
+        with patch("radiologist.registry.resolver._wandb") as mock_wandb:
+            mock_api = MagicMock()
+            mock_wandb.Api.return_value = mock_api
+            mock_api.artifact.return_value = art
+
+            registry = WandbRegistry()
+            registry.pull(
+                artifact_path="entity/project/model-run123:best",
+                local_dir=str(tmp_path),
+            )
+
+        assert mock_api.artifact.call_count == 1
+
+
 class TestWandbNotInstalled:
     def test_resolve_raises_runtime_error_when_wandb_missing(self) -> None:
         with patch("radiologist.registry.optional._wandb", None):

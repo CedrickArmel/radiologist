@@ -44,20 +44,14 @@ def _make_registry_wandb_mock(qualified_name: str = "entity/project/model-run1:b
     resolved_art.qualified_name = qualified_name
     resolved_art.version = "best"
 
-    pulled_art = MagicMock()
-
     best_run = MagicMock()
     best_run.id = "run1"
 
     api_instance = MagicMock()
     api_instance.runs.return_value = [best_run]
-
-    def _artifact(*args, **kwargs):
-        return resolved_art if kwargs else pulled_art
-
-    api_instance.artifact.side_effect = _artifact
+    api_instance.artifact.return_value = resolved_art
     mock_wandb.Api.return_value = api_instance
-    return mock_wandb, pulled_art
+    return mock_wandb, resolved_art
 
 
 class TestServeCommand:
@@ -111,8 +105,8 @@ class TestServeCommand:
         mcd_dir.mkdir()
         build_mcd_onnx(mcd_dir, filename="mcd.onnx")
 
-        mock_wandb, pulled_art = _make_registry_wandb_mock()
-        pulled_art.download.return_value = str(mcd_dir)
+        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        resolved_art.download.return_value = str(mcd_dir)
 
         mock_uvicorn = MagicMock()
         with patch.object(resolver_mod, "_wandb", mock_wandb):

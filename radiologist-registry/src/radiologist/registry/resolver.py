@@ -24,7 +24,7 @@
 
 import glob
 import os
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from radiologist.registry.models import ArtifactRef
 from radiologist.registry.optional import _guard_wandb, _wandb
@@ -44,6 +44,13 @@ def _artifact_ref(art: object, run_id: str) -> ArtifactRef:
 
 class _WandbResolver:
     """W&B seam for artifact resolution and download operations."""
+
+    def __init__(self) -> None:
+        """Set up the per-instance cache of freshly resolved W&B artifacts."""
+        # Populated by resolve(); consumed (and popped) by pull() so a
+        # pull() immediately following a resolve() of the same qualified
+        # name skips its own redundant api.artifact() round-trip.
+        self._resolved_cache: Dict[str, object] = {}
 
     def resolve(
         self,
@@ -80,7 +87,7 @@ class _WandbResolver:
                 type="model",
                 name=f"{path}/model-{run_id}:{version or 'best'}",
             )
-            return _artifact_ref(art, run_id)
+            return self._cache_and_ref(art, run_id)
 
         if tags:
             if isinstance(tags, str):
@@ -103,12 +110,18 @@ class _WandbResolver:
                 type="model",
                 name=f"{path}/model-{best_run.id}:{version or 'best'}",
             )
-            return _artifact_ref(art, best_run.id)
+            return self._cache_and_ref(art, best_run.id)
 
         art = api.artifact(path)
         run = art.logged_by()
         run_id = run.id if run is not None else ""
-        return _artifact_ref(art, run_id)
+        return self._cache_and_ref(art, run_id)
+
+    def _cache_and_ref(self, art: object, run_id: str) -> ArtifactRef:
+        """Build the ArtifactRef and stash the raw artifact for a later pull()."""
+        ref = _artifact_ref(art, run_id)
+        self._resolved_cache[ref.qualified_name] = art
+        return ref
 
     def download(self, ref: ArtifactRef, local_dir: str) -> str:
         """Download the checkpoint file (``*.ckpt``) for an artifact.
@@ -152,9 +165,11 @@ class _WandbResolver:
                 downloaded artifact contents.
         """
         _guard_wandb()
-        api = _wandb.Api()  # type: ignore[union-attr]
-        art = api.artifact(artifact_path)
-        download_dir = art.download(local_dir)
+        art = self._resolved_cache.pop(artifact_path, None)
+        if art is None:
+            api = _wandb.Api()  # type: ignore[union-attr]
+            art = api.artifact(artifact_path)
+        download_dir = art.download(local_dir)  # type: ignore[attr-defined]
         onnx_files = [
             os.path.join(download_dir, f)
             for f in os.listdir(download_dir)
