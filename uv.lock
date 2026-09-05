@@ -5710,6 +5710,7 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-mock" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 typing = [
     { name = "mypy" },
@@ -5751,6 +5752,7 @@ test = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "pytest-mock", specifier = ">=3.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.1" },
 ]
 typing = [{ name = "mypy", specifier = ">=1.19.1" }]
 
@@ -5896,7 +5898,6 @@ all = [
     { name = "gcsfs" },
     { name = "prefect" },
     { name = "prefect-dask" },
-    { name = "prefect-ray" },
 ]
 beam = [
     { name = "apache-beam" },
@@ -5929,7 +5930,6 @@ requires-dist = [
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.7.0" },
     { name = "prefect-dask", marker = "extra == 'all'", specifier = ">=0.3.0" },
     { name = "prefect-dask", marker = "extra == 'dask'", specifier = ">=0.3.0" },
-    { name = "prefect-ray", marker = "extra == 'all'", specifier = ">=0.4.0" },
     { name = "prefect-ray", marker = "extra == 'ray'", specifier = ">=0.4.0" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "radiologist-utils", editable = "radiologist-utils" },

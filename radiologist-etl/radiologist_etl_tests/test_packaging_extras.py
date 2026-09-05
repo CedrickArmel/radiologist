@@ -112,3 +112,14 @@ def test_all_extra_is_superset_of_each_production_ready_extra(
         "the aggregate 'all' extra is missing distributions required by "
         f"extra {extra!r}: {missing!r}"
     )
+
+
+def test_all_extra_excludes_the_deferred_ray_backend() -> None:
+    data = _load_etl_pyproject()
+    all_names = _extra_distribution_names(data, "all")
+    ray_names = _extra_distribution_names(data, "ray")
+    offending = all_names & ray_names
+    assert not offending, (
+        "the aggregate 'all' extra must not bundle the deferred Ray "
+        f"execution backend (see #188), found {offending!r}"
+    )
