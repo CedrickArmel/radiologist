@@ -245,8 +245,8 @@ reload:  ## remind to reload shell
 sync:  ## sync all dep-groups + all workspace packages (no optional extras)
 	@uv sync --active --all-groups --all-packages
 
-sync-all:  ## sync all dep-groups + all workspace packages + all optional extras
-	@uv sync --active --all-groups --all-packages --all-extras
+sync-all:  ## sync all dep-groups + all workspace packages + all optional extras except ray (deferred backend, see #188)
+	@uv sync --active --all-groups --all-packages --all-extras --no-extra ray
 
 dev-install: sync-all  ## sync deps + install pre-commit hooks (run once after clone)
 	@uv run --active pre-commit install
