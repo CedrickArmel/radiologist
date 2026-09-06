@@ -51,6 +51,7 @@ nav:
       - etl: pkg/etl.md
       - inference: pkg/inference.md
       - registry: pkg/registry.md
+      - cli: pkg/cli.md
   - CLI & Config:
       - Training (Hydra): reference/config-core.md
       - ETL (Hydra): reference/config-etl.md
