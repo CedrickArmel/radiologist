@@ -83,43 +83,35 @@ uv run --active python -m radiologist.core.train \
 
 ### `LModule`
 
-A backbone-agnostic `LightningModule`. Pass any `nn.Module` as `net`.
+A backbone-agnostic `LightningModule`, instantiated from a single Hydra `DictConfig` (see `module/resnet50.yaml`). The `net`, `loss`, `metric`, `optimizer`, and `scheduler` keys are each Hydra-instantiated (`metric`/`optimizer`/`scheduler` as `_partial_` factories):
 
 ```python
+from hydra.utils import instantiate
 from radiologist.core import LModule
-from torchvision.models import resnet50
 
-module = LModule(
-    net=resnet50(num_classes=3),
-    loss=FocalLoss(gamma=2, alpha=1),
-    metric=MulticlassFBetaScore(num_classes=3, beta=1.0, average="macro"),
-    optimizer=partial(AdamW, lr=1e-3, weight_decay=1e-2),
-    scheduler=partial(sequential_scheduler, ...),
-    trainable_layers=None,   # None = full re-init; list of dot-paths = fine-tune
-    priors=None,             # overridden from datamodule at setup time
-)
+module = LModule(cfg=instantiate(module_cfg))
 ```
+
+`cfg` also carries:
+
+- `trainable_layers` — `None` for full re-init, or a mapping of dot-paths to parameter-index lists (e.g. `{"layer4": None, "fc": None}`) to freeze everything else and fine-tune those submodules.
+- `priors` — optional class prior probabilities for bias initialisation; falls back to the datamodule's `priors` attribute when unset.
 
 On `setup('fit')`, `LModule` does one of two things depending on `trainable_layers`:
 
 - **`None`** — reinitialise all weights (Kaiming normal on Conv, Xavier on Linear). Use when training from scratch.
-- **`["layer4", "fc"]`** — freeze all parameters, then selectively unfreeze by dot-path. Use when fine-tuning a pretrained backbone.
+- **a mapping** — freeze all parameters, then selectively unfreeze the named dot-paths. Use when fine-tuning a pretrained backbone.
 
-In both cases, if class priors are available (from the datamodule), the final `nn.Linear` bias is initialised to `−log(priors)`, giving calibrated starting logits.
+In both cases, if class priors are available (from `cfg` or the datamodule), the final `nn.Linear` bias is initialised to `−log(priors)`, giving calibrated starting logits.
 
 ### `WebDatasetDataModule`
 
-Streams images from WebDataset tar shards. Handles class-balanced sampling automatically.
+Streams images from WebDataset tar shards. Handles class-balanced sampling automatically. Instantiated by Hydra from `datamodule/default.yaml`, which also supplies `train_transform`, `eval_transform`, `train_loader`, and `eval_loader` (see that file for the full transform/loader pipeline):
 
 ```python
-from radiologist.core import WebDatasetDataModule
+from hydra.utils import instantiate
 
-dm = WebDatasetDataModule(
-    shard_root="gs://bucket/shards/",
-    split_manifest_uri="gs://bucket/manifests/manifest-abc123.jsonl",
-    label_map={"normal": "healthy", "pneumonia": "viral", "COVID": "viral"},
-    batch_size=32,
-)
+dm = instantiate(datamodule_cfg)  # datamodule_cfg == cfg.datamodule from train.yaml
 ```
 
 The `label_map` collapses raw ETL folder names (e.g. `normal`, `COVID`) into model class names (e.g. `healthy`, `viral`). This decouples the dataset's folder structure from the model's output space.

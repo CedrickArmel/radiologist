@@ -18,7 +18,8 @@ Each active package has a README that is the primary reference for its responsib
 - `radiologist-utils/README.md` — filesystem helpers, logging, ML utilities
 - `radiologist-etl/README.md` — ETL pipeline stages, Haralick GLCM, sharding
 - `radiologist-core/README.md` — training loop, datamodule, callbacks, ONNX registry
-- `radiologist-inference/README.md` — ONNX inference, W&B Registry pull, Score-CAM, MC-Dropout, FastAPI serving, CLI
+- `radiologist-inference/README.md` — ONNX inference, W&B Registry pull, Score-CAM, MC-Dropout, FastAPI serving
+- `radiologist-cli/README.md` — unified `radiologist` CLI dispatcher fronting the `etl`, `core`, `registry`, and `infer` command groups
 
 ### Repository layout
 
@@ -26,12 +27,12 @@ This project adopts a mono-repo layout managed by `UV`.
 
 | Path | Contents |
 |---|---|
-| `radiologist-app/` | UI |
 | `radiologist-core/` | Modeling library — datamodule, configurable backbone (`module` Hydra group, defaults to ResNet-50), focal loss, training loop |
 | `radiologist-etl/` | Data preparation — outlier removal (Haralick GLCM), ImageFolder builder |
-| `radiologist-inference/` | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server, Typer CLI |
+| `radiologist-inference/` | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server |
 | `radiologist-utils/` | Useful helpers |
 | `radiologist-registry/` | W&B model registry — promote, resolve, download ONNX artifacts |
+| `radiologist-cli/` | Unified `radiologist` Typer CLI — dispatches the `etl`, `core`, `registry`, and `infer` command groups; the other packages are pure libraries |
 
 ```text
 ├── data.dvc
@@ -40,11 +41,11 @@ This project adopts a mono-repo layout managed by `UV`.
 ├── models
 ├── mypy.ini
 ├── pyproject.toml
-├── radiologist-app
+├── radiologist-cli
 │   ├── pyproject.toml
 │   ├── src
 │   │   └── radiologist
-│   │       └── app
+│   │       └── cli
 │   │           ├── __init__.py
 │   │           └── ...
 │   └── tests/
@@ -88,11 +89,11 @@ This project adopts a mono-repo layout managed by `UV`.
 
 ### uv workspace
 
-Five active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`, `radiologist-inference`, `radiologist-registry`. `radiologist-app` is **planned but not yet implemented** — its directory does not exist.
+Six active members: `radiologist-utils`, `radiologist-core`, `radiologist-etl`, `radiologist-inference`, `radiologist-registry`, `radiologist-cli`.
 
 Each package uses `namespace = true` (no `__init__.py` at the `radiologist/` level). Add new members to `[tool.uv.workspace] members` and `[tool.uv.sources]` in the root `pyproject.toml`.
 
-Each package sets `module-name = "radiologist.*"` in its `pyproject.toml` (intentional — do not change). Sources live under `src/radiologist/`; tests import via a `sys.path.insert(0, src/)` shim in each package's `tests/conftest.py`. Mirror this pattern when adding new packages.
+Each package sets `module-name = "radiologist.*"` in its `pyproject.toml` (intentional — do not change). Sources live under `src/radiologist/`; tests import via a `sys.path.insert(0, src/)` shim from the root `conftest.py`, with each package's test directory named `radiologist_<pkg>_tests/` (e.g. `radiologist-cli/radiologist_cli_tests/`). Mirror this pattern when adding new packages.
 
 ### Requirements
 
@@ -161,6 +162,7 @@ make test-etl        # radiologist-etl only
 make test-utils      # radiologist-utils only
 make test-inference  # radiologist-inference only
 make test-registry   # radiologist-registry only
+make test-cli        # radiologist-cli only
 ```
 
 ### Code style — PEP 8
@@ -181,7 +183,7 @@ Import public APIs in the `__init__.py` of their module and add them to `__all__
 
 ### Use `conftest.py` to share fixtures
 
-Fixtures defined in a `conftest.py` can be used by any test in that package without needing to import them (pytest will automatically discover them). A root-level `conftest.py` handles the `sys.path` shim for all 5 packages — do not re-add it per-package.
+Fixtures defined in a `conftest.py` can be used by any test in that package without needing to import them (pytest will automatically discover them). A root-level `conftest.py` handles the `sys.path` shim for all 6 packages — do not re-add it per-package.
 
 ### Testing philosophy — classist outside-in TDD
 
@@ -204,7 +206,6 @@ Fixtures defined in a `conftest.py` can be used by any test in that package with
 
 ## Gotchas
 
-- **[Packages]** `radiologist-app/` does not exist on disk — it is a planned package. Do not attempt to read or import from it.
 - **[LICENSE]** You MUST NOT add the license header in your code yourself. `pre-commit` we do that.
 - **[MEMORY]** Generalise before saving: a gotcha observed on one instance (a class, function, OS, or library) should be written at the level of the broader behavior it exemplifies — not pinned to the specific case that triggered it. When writing a memory or gotcha, ask: is this specific to X, or is X just one case of a wider rule? Write the wider rule; mention X only as an example if it aids clarity.
 - **[Extra]** For optional extra deps, write their imports (e.g. `from prefect import ...`) wrapped in `try/except ImportError` with stub no-ops so modules import cleanly without the extra installed.
