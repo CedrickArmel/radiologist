@@ -42,7 +42,10 @@ jobs:
           fetch-depth: 0 # cz needs tags to compute the increment
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v3
+        uses: ./.github/actions/setup-uv
+        with:
+          setup-python: "false"
+          locked: "false" # removed by issue #228
 
       - name: Install commitizen
         run: uv sync --group release # commitizen only, no torch here

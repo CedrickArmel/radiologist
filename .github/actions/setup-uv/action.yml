@@ -39,14 +39,16 @@ runs:
   using: composite
   steps:
     # The versions of the two third-party actions duplicated across this
-    # repository's jobs are declared here. Issue #226 replaces these tags with
-    # commit SHAs when the action goes live; they are left as tags here so this
-    # skeleton is a byte-for-byte-equivalent copy of what the jobs do today.
+    # repository's jobs are pinned here, by commit SHA rather than a mutable
+    # tag -- this is the one file a privileged job (publish.yml's `publish`
+    # job holds `id-token: write`) transitively depends on, so its actions
+    # must not be swappable by a tag re-push. Each SHA's trailing comment
+    # names the release tag it was resolved from.
     - if: inputs.setup-python == 'true'
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
       with:
         python-version: ${{ inputs.python-version }}
-    - uses: astral-sh/setup-uv@v3
+    - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
       with:
         enable-cache: ${{ inputs.enable-cache }}
     - shell: bash

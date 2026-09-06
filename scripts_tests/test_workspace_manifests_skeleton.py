@@ -39,17 +39,11 @@ pattern already used by ``test_ci_workflows_exclude_ray.py`` -- no
 
 import inspect
 from pathlib import Path
-from typing import List
 
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 _SETUP_UV_ACTION = _REPO_ROOT / ".github" / "actions" / "setup-uv" / "action.yml"
-
-
-def _workflow_texts() -> List[str]:
-    return [path.read_text() for path in _WORKFLOWS_DIR.glob("*.yml")]
 
 
 class TestWorkspaceManifestsModuleShape:
@@ -152,10 +146,6 @@ class TestSetupUvCompositeActionShape:
         text = _SETUP_UV_ACTION.read_text()
         assert "UV_LOCKED" in text
         assert "UV_FROZEN" in text  # documented as deliberately NOT used
-
-    def test_action_is_referenced_by_no_workflow(self) -> None:
-        for text in _workflow_texts():
-            assert "uses: ./.github/actions/setup-uv" not in text
 
     def test_existing_setup_and_test_action_is_untouched(self) -> None:
         setup_and_test = (
