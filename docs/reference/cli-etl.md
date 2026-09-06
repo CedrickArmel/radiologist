@@ -148,7 +148,7 @@ Emitted keys: `run_id`, `output_dir`, `manifest_path`, `report_path`,
 | Key | Default | Description |
 |---|---|---|
 | `split_manifest` | `???` (required) | Path to the `assign-split` stage's output manifest. |
-| `shard_root` | `???` (required) | Directory where `{split}/{label}/{split}-{label}-{idx:06d}.tar` shards are written. |
+| `shard_root` | `???` (required) | Root directory; shards land under `{shard_root}/{run_id}/{split}/{label}/{split}-{label}-{idx:06d}.tar`. |
 | `shard_size` | `1000` | Max samples per tar shard. |
 | `split_ratios` | `[["train",0.70],["val",0.15],["test",0.15]]` | Report-only echo of the configured ratios — never used for assignment at this stage. |
 | `workers` | `null` | Number of worker processes; `null` resolves automatically. |

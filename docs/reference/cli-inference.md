@@ -199,3 +199,22 @@ selector was used).
 | `--predict` | Serve a `Classifier` (predict verb). |
 | `--explain` | Serve an `Explainer` (explain verb, default). |
 | `--uncertainty` | Serve an `MCDropoutPredictor` (uncertainty verb). |
+
+## Python API equivalent
+
+Every command is a thin wrapper over `radiologist-inference`'s predictor
+classes, so any workflow above can also be scripted directly:
+
+```python
+from radiologist.inference import Classifier, Explainer, MCDropoutPredictor
+
+predictor = Classifier.from_path("model.onnx")
+result = predictor.predict(image)
+
+explainer = Explainer.from_selector(path="entity/project", tags=["prod"])
+explanation = explainer.explain(image)
+```
+
+`create_app(...)` builds the same FastAPI app `serve` runs under uvicorn. See
+[radiologist-inference/README.md § Using the public API](../pkg/inference.md#using-the-public-api)
+for the full constructor/method reference.

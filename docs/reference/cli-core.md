@@ -31,7 +31,7 @@ radiologist core
 radiologist core trainer.max_epochs=30 module/optimizer=adamw datamodule.batch_size=16
 
 # Evaluate a checkpoint instead of training
-radiologist core --config-name eval +ckpt_path=/path/to/best.ckpt
+radiologist core --config-name eval ckpt_path=/path/to/best.ckpt
 ```
 
 `--config-name eval` is the only way to reach `eval.yaml` (`train: false`,
@@ -98,7 +98,7 @@ with initialize_config_module(config_module="radiologist.core.configs", version_
 metric_dict, object_dict = train(cfg)
 ```
 
-Pass `config_name="eval"` (plus `overrides=["+ckpt_path=..."]`) to run the
+Pass `config_name="eval"` (plus `overrides=["ckpt_path=..."]`) to run the
 evaluation-only variant instead. See the [API Reference](api-core.md) and
 [`config-core.md`](config-core.md) for the full config schema `train()`
 expects.
