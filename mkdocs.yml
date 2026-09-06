@@ -55,6 +55,8 @@ nav:
   - CLI & Config:
       - Training (Hydra): reference/config-core.md
       - ETL (Hydra): reference/config-etl.md
+      - Core CLI: reference/cli-core.md
+      - ETL CLI: reference/cli-etl.md
       - Inference CLI: reference/cli-inference.md
       - Registry CLI: reference/cli-registry.md
       - Environment Variables: reference/environment.md
