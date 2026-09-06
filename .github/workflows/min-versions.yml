@@ -1,0 +1,49 @@
+name: min-versions
+
+# Resolves the workspace DOWN to each direct dependency's declared lower bound
+# and runs the full suite against it, proving the floors in every pyproject.toml
+# are real rather than aspirational.
+#
+# NOTE: GitHub disables `schedule` triggers after 60 days without repository
+# activity, and `schedule` only ever fires on the default branch. Validate
+# changes to this file via `workflow_dispatch` before merging.
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # nightly, off the hour to dodge scheduler congestion
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to test. Empty uses actions/checkout's own default.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  lowest-direct:
+    runs-on: ubuntu-latest
+    env:
+      VIRTUAL_ENV: ${{ github.workspace }}/.venv
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: ./.github/actions/setup-uv
+        with:
+          # The lockfile assertion must stay OFF here: the entire point of this
+          # job is to resolve *away* from uv.lock, down to each declared floor.
+          locked: "false"
+      - name: Install the lowest permitted direct dependency versions
+        run: |
+          uv sync --active --all-groups --all-packages --all-extras \
+            --no-extra ray --resolution lowest-direct
+      # `uv run` locks and syncs before running, which would re-resolve the
+      # environment straight back up to the locked versions. Everything needed
+      # was installed by the step above, so skip the sync entirely.
+      - run: make test
+        env:
+          UV_NO_SYNC: "true"

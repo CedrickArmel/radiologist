@@ -129,8 +129,14 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
 
+  min-versions:
+    needs: resolve
+    uses: ./.github/workflows/min-versions.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+
   build:
-    needs: [resolve, test]
+    needs: [resolve, test, min-versions]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
