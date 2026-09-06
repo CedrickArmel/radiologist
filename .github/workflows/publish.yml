@@ -171,7 +171,6 @@ jobs:
       - uses: ./.github/actions/setup-uv
         with:
           setup-python: "false" # this job only shells out to uv
-          locked: "false" # removed by issue #228
       - name: Rehearse the upload on TestPyPI
         # `--check-url` makes a re-run of an already-uploaded version a no-op
         # instead of a 400, so retrying the workflow after a *later* job
