@@ -138,6 +138,10 @@ jobs:
   build:
     needs: [resolve, test, min-versions]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # attestation signing — this job only
+      attestations: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -149,6 +153,13 @@ jobs:
       # which uv would first have to materialise -- the entire workspace,
       # torch included -- just to lint distribution metadata.
       - run: uvx twine check dist/*
+      # Emits a signed SLSA-style provenance statement naming this repo,
+      # workflow and commit for the exact bytes about to be uploaded — run
+      # before the artifact upload so no downstream job can consume an
+      # unattested artifact.
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
