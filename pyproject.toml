@@ -35,15 +35,15 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
-dependencies = ["radiologist-core[all]", "radiologist-cli"]
+dependencies = ["radiologist-core[all]>=0.1.0", "radiologist-cli>=0.1.0"]
 
 [project.optional-dependencies]
-all = ["radiologist-cli[all]", "radiologist-utils[all]"]
-core = ["radiologist-core[all]"]
-etl = ["radiologist-cli[etl]"]
-inference = ["radiologist-cli[inference]"]
-registry = ["radiologist-cli[registry]"]
-utils = ["radiologist-utils[all]"]
+all = ["radiologist-cli[all]>=0.1.0", "radiologist-utils[all]>=0.1.0"]
+core = ["radiologist-core[all]>=0.1.0"]
+etl = ["radiologist-cli[etl]>=0.1.0"]
+inference = ["radiologist-cli[inference]>=0.1.0"]
+registry = ["radiologist-cli[registry]>=0.1.0"]
+utils = ["radiologist-utils[all]>=0.1.0"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"

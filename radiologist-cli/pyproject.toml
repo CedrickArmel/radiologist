@@ -19,7 +19,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "radiologist-core[all]",
+    "radiologist-core[all]>=0.1.0",
     "radiologist-utils>=0.1.0",
     "typer>=0.9.0",
     "hydra-core>=1.3.0",
@@ -27,10 +27,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-etl       = ["radiologist-etl[all]"]
-registry  = ["radiologist-registry[all]"]
-inference = ["radiologist-inference[all]"]
-all       = ["radiologist-etl[all]", "radiologist-registry[all]", "radiologist-inference[all]"]
+etl       = ["radiologist-etl[all]>=0.1.0"]
+registry  = ["radiologist-registry[all]>=0.1.0"]
+inference = ["radiologist-inference[all]>=0.1.0"]
+all       = [
+    "radiologist-etl[all]>=0.1.0",
+    "radiologist-registry[all]>=0.1.0",
+    "radiologist-inference[all]>=0.1.0",
+]
 
 [project.scripts]
 radiologist = "radiologist.cli.main:main"

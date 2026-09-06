@@ -30,10 +30,11 @@ resolver would see for a given distribution. Consumed by
 ``scripts_tests/``, and by ``publish.yml``'s resolution guard.
 """
 
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 try:
     import tomllib  # Python 3.11+  # noqa: F401
@@ -99,12 +100,49 @@ def package_manifest_path(repo_root: Path, package: str) -> Path:
     return Path(repo_root) / package_dir(repo_root, package) / "pyproject.toml"
 
 
-def declared_version(repo_root: Path, package: str) -> str:
-    """Return ``[project].version`` from ``package``'s manifest."""
+def _load_manifest(repo_root: Path, package: str) -> Dict:
     manifest_path = package_manifest_path(repo_root, package)
     with manifest_path.open("rb") as handle:
-        data = tomllib.load(handle)
-    return str(data["project"]["version"])
+        return tomllib.load(handle)
+
+
+def declared_version(repo_root: Path, package: str) -> str:
+    """Return ``[project].version`` from ``package``'s manifest."""
+    return str(_load_manifest(repo_root, package)["project"]["version"])
+
+
+_REQUIREMENT_RE = re.compile(r"^([A-Za-z0-9._-]+)(\[[^\]]*\])?\s*(.*)$")
+_FLOOR_RE = re.compile(r">=\s*([0-9][0-9A-Za-z.]*)")
+
+
+def _normalize(name: str) -> str:
+    """Normalise a distribution name per PEP 503 for comparison."""
+    return name.lower().replace("_", "-")
+
+
+def _parse_requirement(raw: str) -> Tuple[str, Tuple[str, ...], str]:
+    """Split a PEP 508 requirement string into name, extras and specifier."""
+    match = _REQUIREMENT_RE.match(raw.strip())
+    if not match:
+        raise ValueError(f"Cannot parse requirement: {raw!r}")
+    name, extras_group, specifier = match.groups()
+    extras = (
+        tuple(e.strip() for e in extras_group[1:-1].split(",") if e.strip())
+        if extras_group
+        else ()
+    )
+    return name, extras, specifier.strip()
+
+
+def _iter_manifest_requirement_entries(manifest: Dict) -> Iterable[Tuple[str, str]]:
+    """Yield ``(origin, raw_requirement)`` for every declared requirement."""
+    project = manifest.get("project", {})
+    for raw in project.get("dependencies", []):
+        yield "dependencies", raw
+    optional_dependencies = project.get("optional-dependencies", {})
+    for extra, requirements in optional_dependencies.items():
+        for raw in requirements:
+            yield f"optional-dependencies.{extra}", raw
 
 
 def intra_workspace_requirements(
@@ -117,7 +155,23 @@ def intra_workspace_requirements(
     dependencies first, then extras in declaration order, each in
     declaration order.
     """
-    raise NotImplementedError
+    manifest = _load_manifest(repo_root, package)
+    normalized_members = {_normalize(name) for name in workspace_packages(repo_root)}
+    result = []
+    for origin, raw in _iter_manifest_requirement_entries(manifest):
+        name, extras, specifier = _parse_requirement(raw)
+        if _normalize(name) in normalized_members:
+            result.append(
+                IntraWorkspaceRequirement(
+                    consumer=package,
+                    target=name,
+                    extras=extras,
+                    specifier=specifier,
+                    origin=origin,
+                    raw=raw,
+                )
+            )
+    return result
 
 
 def unpinned_requirements(repo_root: Path) -> List[IntraWorkspaceRequirement]:
@@ -125,7 +179,21 @@ def unpinned_requirements(repo_root: Path) -> List[IntraWorkspaceRequirement]:
 
     Empty list when every edge is pinned.
     """
-    raise NotImplementedError
+    result = []
+    for package in workspace_packages(repo_root):
+        for requirement in intra_workspace_requirements(repo_root, package):
+            if not requirement.specifier:
+                result.append(requirement)
+    return result
+
+
+def _floor_version(specifier: str) -> Optional[str]:
+    match = _FLOOR_RE.match(specifier)
+    return match.group(1) if match else None
+
+
+def _version_tuple(version: str) -> Tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
 
 
 def stale_pin_floors(repo_root: Path) -> List[IntraWorkspaceRequirement]:
@@ -135,7 +203,16 @@ def stale_pin_floors(repo_root: Path) -> List[IntraWorkspaceRequirement]:
     Requirements with no lower bound at all are not reported here
     (:func:`unpinned_requirements` owns them).
     """
-    raise NotImplementedError
+    result = []
+    for package in workspace_packages(repo_root):
+        for requirement in intra_workspace_requirements(repo_root, package):
+            floor = _floor_version(requirement.specifier)
+            if floor is None:
+                continue
+            target_version = declared_version(repo_root, requirement.target)
+            if _version_tuple(floor) < _version_tuple(target_version):
+                result.append(requirement)
+    return result
 
 
 def publishable_requirement_lines(repo_root: Path, package: str) -> List[str]:
@@ -145,7 +222,9 @@ def publishable_requirement_lines(repo_root: Path, package: str) -> List[str]:
     deduplicated and sorted. ``[tool.uv.sources]`` is NOT applied. Returns
     ``[]`` when the distribution declares no dependency at all.
     """
-    raise NotImplementedError
+    manifest = _load_manifest(repo_root, package)
+    lines = {raw for _, raw in _iter_manifest_requirement_entries(manifest)}
+    return sorted(lines)
 
 
 def render_stale_pin_markdown(

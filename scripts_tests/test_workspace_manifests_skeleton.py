@@ -35,10 +35,12 @@ Issue #227 has since implemented ``workspace_packages``, ``package_dir``,
 ``package_manifest_path`` and ``declared_version`` (see
 ``test_workspace_manifests.py`` for their behavioral coverage) so the roster
 ``scripts/release_bump.py`` exposes can be derived from the workspace
-manifest instead of hand-maintained. The remaining functions --
+manifest instead of hand-maintained. Issue #229 has since implemented
 ``intra_workspace_requirements``, ``unpinned_requirements``,
-``stale_pin_floors``, ``publishable_requirement_lines`` and
-``render_stale_pin_markdown`` -- are issue #229's scope and stay
+``stale_pin_floors`` and ``publishable_requirement_lines`` (see
+``test_workspace_manifests.py`` and
+``test_workspace_manifest_consistency.py`` for their behavioral coverage).
+Only ``render_stale_pin_markdown`` -- issue #233's scope -- stays
 unimplemented here.
 
 ``.github/actions/setup-uv/action.yml`` is a plain composite action file, no
@@ -105,19 +107,16 @@ class TestWorkspaceManifestsModuleShape:
         self,
     ) -> None:
         """``workspace_packages``/``package_dir``/``package_manifest_path``/
-        ``declared_version`` are implemented (issue #227) and covered
-        behaviorally in ``test_workspace_manifests.py`` instead.
+        ``declared_version`` are implemented (issue #227), and
+        ``intra_workspace_requirements``/``unpinned_requirements``/
+        ``stale_pin_floors``/``publishable_requirement_lines`` are implemented
+        (issue #229) -- all covered behaviorally in
+        ``test_workspace_manifests.py`` and
+        ``test_workspace_manifest_consistency.py`` instead. Only
+        ``render_stale_pin_markdown`` (issue #233) remains a stub.
         """
         import workspace_manifests
 
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.intra_workspace_requirements(_REPO_ROOT, "radiologist")
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.unpinned_requirements(_REPO_ROOT)
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.stale_pin_floors(_REPO_ROOT)
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.publishable_requirement_lines(_REPO_ROOT, "radiologist")
         with pytest.raises(NotImplementedError):
             workspace_manifests.render_stale_pin_markdown([], {})
 
