@@ -1,5 +1,7 @@
 # Memory Index — tdd-developer agent
 
+- [Dedupe fix ripples across test doubles #221](feedback_dedupe_fix_ripples_across_test_doubles.md) — a shared-seam dedup fix breaks every consuming package's copy-pasted mock, not just the owning package's tests
+- [CI dedupe #167 explicit AC override](project_provenance_ci_dedupe_167.md) — user twice overrode the issue's own "won't-do" bar and "no test changes" AC after concrete blockers were surfaced; composite action + relocated test assertions
 - [ETL retire legacy flow #190](project_etl_retire_legacy_flow_190.md) — final epic refactor: ops.py/etl_flow/*_task/EtlResult were all dead, deletion-only, zero test changes
 - [ETL runner selection #182](project_etl_runner_selection_182.md) — ExecutionPlan/resolve_execution contract, conf/runner/*.yaml shape, mock-the-SDK-not-owned-code pattern for absent dask/ray/beam
 - [Numpy bool assertions](feedback_numpy_bool_assertions.md) — use `== True/False` not `is True/False` for pandas/numpy cells from Parquet/DataFrame
