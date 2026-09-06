@@ -129,15 +129,20 @@ configuration.
 ```python
 from radiologist.etl import build_shards
 
-updated_manifest_path = build_shards(
-    manifest_path="gs://bucket/manifest-abc123.jsonl",
+result = build_shards(
+    split_manifest_path="gs://bucket/manifest-abc123.jsonl",
     shard_root="gs://bucket/shards/",
-    ratios={"train": 0.70, "val": 0.15, "test": 0.15},
+    # ORDERED pairs, never a mapping — see the split-stability contract above.
+    # A mapping is rejected with ValueError rather than silently coerced.
+    ratios=[("train", 0.70), ("val", 0.15), ("test", 0.15)],
     shard_size=1000,
 )
+result.run_id, result.manifest_path, result.shard_count, result.record_count
 ```
 
-Writes `{shard_root}/{split}/{label}/{split}-{label}-{idx:06d}.tar` files. The manifest is rewritten in place with the `shard` field set on every included record.
+Writes `{shard_root}/{split}/{label}/{split}-{label}-{idx:06d}.tar` files and
+returns a `BuildResult`. Here `ratios` is **report-only** — splits were already
+assigned by the assign-split stage and are read off the manifest.
 
 ## Running the pipeline
 
@@ -257,17 +262,220 @@ further Beam runner (Flink, Spark, …) is a new `conf/runner/*.yaml` with a
 different `pipeline_options` mapping and no code change. Provisioning the
 project, bucket, or cluster a non-direct runner needs is the operator's.
 
-### Programmatic use
+## Using the public API
+
+The three stages are plain functions over plain arguments. Nothing in this
+package requires Hydra, Prefect, or the CLI — those are layers *on top* of the
+functions below, and the CLI does not do anything you cannot do here.
+
+There are two distinct entry levels:
+
+| Level | Symbols | Takes |
+|---|---|---|
+| Library | `extract`, `assign_splits`, `build_shards` | ordinary Python arguments |
+| Hydra flow | `run_extract`, `run_assign_split`, `run_build`, `extract_flow`, `assign_split_flow`, `build_flow` | a composed `DictConfig` |
+
+Use the library level for embedding; use the flow level only if you already have
+a `DictConfig` and want the Prefect artifacts and runner resolution too.
+
+### The three stages end to end
+
+```python
+from radiologist.etl import assign_splits, build_shards, extract
+
+extracted = extract(
+    file_list="gs://bucket/listings/images.txt",
+    destination="gs://bucket/pipelines/manifests",
+    images_root=None,
+    masks_root=None,
+    iqr_columns=["haralick_mean"],
+    iqr_factor=1.5,
+    workers=8,
+    batch_size=64,
+)
+
+assigned = assign_splits(
+    manifests_dir="gs://bucket/pipelines/manifests",
+    destination="gs://bucket/pipelines/manifests",
+    ratios=[("train", 0.70), ("val", 0.15), ("test", 0.15)],
+)
+
+built = build_shards(
+    split_manifest_path=assigned.split_manifest_path,
+    shard_root="gs://bucket/shards/",
+    shard_size=1000,
+)
+```
+
+Each stage returns a frozen result dataclass — `ExtractResult`
+(`run_id`, `manifest_path`, `total`, `succeeded`, `failed`, `failure_rate`,
+`excluded`), `AssignSplitResult` (`run_id`, `split_manifest_path`,
+`source_manifest_count`, `record_count`, `duplicate_count`, `counts_by_split`),
+`BuildResult` (`run_id`, `output_dir`, `manifest_path`, `report_path`,
+`shard_count`, `record_count`, `failed`, `failure_rate`).
+
+Every `run_id` is content-addressed: it hashes the stage's **input digest**
+(the file listing's contents, the set of `extract-*.jsonl` files in the folder,
+or the split manifest's contents) together with a digest of the
+output-affecting config. Same input plus same config ⇒ same `run_id` and the
+same output path. That is the mechanism that replaced the old
+`resume_from_*` flags: re-running is idempotent by construction, and
+`run_label` exists to force a *new* id when you deliberately want one.
+
+### Individual helpers
 
 ```python
 from radiologist.etl import (
-    make_haralick,
-    filter_iqr, filter_lung_out_of_frame,
-    assign_split, build_shards,
-    run_extract, run_assign_split, run_build,
-    JsonlWriter,
+    assign_split, filter_iqr, filter_lung_out_of_frame,
+    JsonlWriter, ManifestRecord, ParquetWriter,
+    plan_shards, process_batch, records_reader, write_shard,
+)
+
+# deterministic, stateless split assignment
+assign_split("patient_001_ap.png", [("train", 0.70), ("val", 0.15), ("test", 0.15)])
+
+# read a manifest back into ManifestRecord objects
+records = records_reader("gs://bucket/pipelines/manifests/extract-<run_id>.jsonl")
+```
+
+The full exported surface is `radiologist.etl.__all__`.
+
+## Extending via Hydra
+
+This package has exactly one user-extensible config group: `runner/`. Everything
+else in `extract.yaml` / `assign_split.yaml` / `build.yaml` is a flat value you
+override with `key=value`.
+
+### Adding an execution runner
+
+The stage configs are packaged inside the wheel
+(`config_path="pkg://radiologist.etl.conf"`), so you add group members through
+an extra search path:
+
+```
+myconfigs/
+└── runner/
+    └── my_dask.yaml
+```
+
+```yaml
+# myconfigs/runner/my_dask.yaml
+# @package runner
+family: dask
+batch_size: 128
+task_runner:
+  _target_: prefect_dask.DaskTaskRunner
+  cluster_class: dask_kubernetes.operator.KubeCluster
+  cluster_kwargs:
+    name: radiologist-etl
+  adapt_kwargs:
+    minimum: 2
+    maximum: 40
+```
+
+```bash
+radiologist etl extract \
+    hydra.searchpath=[file:///abs/path/to/myconfigs] \
+    runner=my_dask \
+    file_list=gs://bucket/listings/images.txt \
+    destination=gs://bucket/pipelines/manifests
+```
+
+`--config-dir /abs/path/to/myconfigs` is the equivalent Hydra flag.
+
+The `# @package runner` header is required — every shipped `runner/*.yaml` has
+it, and without it your keys land at `runner.runner` and the stage falls back to
+the default plan.
+
+The contract a runner config must satisfy:
+
+| Key | Meaning |
+|---|---|
+| `family` | one of `local`, `dask`, `ray`, `beam`. This is what the availability check keys off — an unknown family is rejected, and `dask`/`ray`/`beam` report the extra to install when it is missing |
+| `batch_size` | fallback dispatch/wave size, used by stages that have no top-level `batch_size` of their own (i.e. `build`) |
+| `task_runner` | for `local`/`dask`/`ray`: a `_target_` for a Prefect `TaskRunner`, instantiated by Hydra |
+| `beam` | for `family: beam` only: a `_target_` for `radiologist.etl.beam_executor.BeamExecutor` (Beam owns its own parallelism, so it is not a Prefect task runner) |
+
+Because `pipeline_options` is handed to Beam verbatim, supporting a further Beam
+runner (Flink, Spark, …) really is *just* a new `runner/*.yaml` with a different
+`pipeline_options` mapping — no code change.
+
+`assign-split` always runs locally and ignores `runner=` entirely.
+
+### Custom feature extractors — use the Python API
+
+`extract` accepts an `extractors` list of `StatExtractor` callables, but the
+CLI/Hydra path does **not** expose that list as a config group today: the
+extract flow builds `[make_haralick(...), lung_asymmetry]` in code, and only the
+Haralick knobs (`haralick.features`, `haralick.distances`, `haralick.angles`)
+are reachable as overrides. There is no `radiologist etl extract extractors=...`.
+
+To run your own extractor, drive the stage through the public API — this is a
+first-class supported path, not a workaround:
+
+```python
+# my_package/extractors.py  — must be importable at module level (see note below)
+import numpy as np
+
+
+def mean_intensity(image, metadata, mask=None):
+    """Any callable matching StatExtractor: (image, metadata, mask=None) -> dict[str, float]."""
+    return {"mean_intensity": float(np.asarray(image).mean())}
+```
+
+```python
+from radiologist.etl import extract, make_haralick
+from my_package.extractors import mean_intensity
+
+result = extract(
+    file_list="gs://bucket/listings/images.txt",
+    destination="gs://bucket/pipelines/manifests",
+    extractors=[make_haralick(features=["contrast"]), mean_intensity],
+    iqr_columns=["mean_intensity"],   # your feature can drive the IQR filter
+    workers=8,
+    batch_size=64,
 )
 ```
+
+The `StatExtractor` protocol (`radiologist.etl.stats`):
+
+```python
+def __call__(
+    self,
+    image: np.ndarray,                 # H x W or H x W x C
+    metadata: dict[str, str],
+    mask: np.ndarray | None = None,    # None when no mask is available
+) -> dict[str, float]: ...
+```
+
+It is a structural `Protocol` — a plain function or a `functools.partial`
+qualifies, no inheritance and no registration.
+
+Three constraints that are easy to miss:
+
+- **Your extractor must be picklable.** The default mapper is a local process
+  pool, so a module-level function or a `functools.partial` over one works; a
+  lambda or a closure does not. This is exactly why `make_haralick` returns a
+  `partial` rather than a nested function.
+- **Returned keys become manifest columns**, so they are what you name in
+  `iqr_columns`. Return `{}` when a required input (e.g. `mask`) is absent —
+  that is what `lung_asymmetry` does.
+- **Your extractor changes the `run_id`.** The extract run id folds in each
+  extractor's identity (module-qualified name plus its partial args/kwargs), so
+  swapping extractors produces a new content-addressed run rather than silently
+  overwriting an existing manifest.
+
+If you want the custom extractor *and* the Hydra/Prefect wrapper, the idiomatic
+combination today is your own thin `@hydra.main` script that composes your own
+config and calls `extract(...)` with `hydra.utils.instantiate` on an
+extractors list you define. That is your script, not this package's config tree.
+
+> **Known gap.** Making `extractors` a real Hydra config group
+> (`conf/extractors/*.yaml` with `_target_` entries, instantiated in
+> `extract_flow` instead of the hardcoded list) would be a small, contained
+> change and would remove the need for the workaround above. It is not
+> implemented — this section deliberately documents only what exists (see
+> [#248](https://github.com/CedrickArmel/radiologist/issues/248)).
 
 ## Configuration reference
 
@@ -275,6 +483,9 @@ Each stage has its own Hydra config root under `src/radiologist/etl/conf/`:
 `extract.yaml`, `assign_split.yaml`, `build.yaml` (plus `runner/*.yaml` for
 the execution backends above). The CLI entry points live in
 `radiologist-cli`, at `radiologist.cli.groups.etl`.
+
+See [docs/reference/config-etl.md](../docs/reference/config-etl.md) for the
+full per-key reference for all three stages.
 
 ## Dependencies
 
