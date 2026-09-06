@@ -129,6 +129,29 @@ def test_test_job_delegates_to_the_shared_setup_and_test_action(
     )
 
 
+@pytest.mark.parametrize("workflow", ["ci.yml", "publish.yml"])
+def test_test_job_checks_out_before_calling_the_local_composite_action(
+    workflow: str,
+) -> None:
+    """A local `uses: ./...` action can't be resolved before a checkout.
+
+    GitHub loads a same-repo composite action off the runner's local
+    filesystem, which is empty until something checks the repository out --
+    the composite action's own internal checkout runs too late to bootstrap
+    itself. Each `test` job must therefore run `actions/checkout` before
+    invoking `setup-and-test`.
+    """
+    lines = _job_lines(_read_workflow(workflow), "test")
+    composite_index = next(
+        index for index, line in enumerate(lines) if "uses: ./.github/actions" in line
+    )
+    preceding = "\n".join(lines[:composite_index])
+    assert "uses: actions/checkout" in preceding, (
+        f"{workflow}: the test job must check out the repo before invoking "
+        "the local setup-and-test composite action"
+    )
+
+
 def test_ci_and_publish_test_jobs_call_the_identical_composite_action() -> None:
     """The two `test` jobs reference the exact same action, byte-for-byte.
 

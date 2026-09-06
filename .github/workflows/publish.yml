@@ -118,6 +118,10 @@ jobs:
     env:
       VIRTUAL_ENV: ${{ github.workspace }}/.venv
     steps:
+      # A local composite action can't be resolved until the repo containing
+      # it is checked out — this bootstraps that; setup-and-test then does
+      # its own checkout at the resolved sha.
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-and-test
         with:
           ref: ${{ needs.resolve.outputs.sha }}
