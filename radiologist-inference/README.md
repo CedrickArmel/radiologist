@@ -198,6 +198,8 @@ Common loading surface shared by every predictor class.
 |---|---|---|
 | `from_path` | `(model_path: str, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Load from a local ONNX file |
 | `from_registry` | `(artifact_path: str, local_dir: str, registry=None, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Download from W&B Registry and load; requires `registry` extra |
+| `from_selector` | `(selector, local_dir: str, registry=None, mean: Optional[float] = None, std: Optional[float] = None, input_shape: Optional[List[int]] = None) -> BasePredictor` | Resolve a `RegistrySelector` against a registry, download, and load; requires `registry` extra — the path the CLI takes |
+| `provenance` | `-> Optional[ArtifactRef]` (property) | The registry artifact this predictor was resolved from; `None` for a predictor built with `from_path` |
 
 ### `Classifier(BasePredictor)`
 
@@ -209,7 +211,7 @@ Common loading surface shared by every predictor class.
 
 | Method | Signature | Description |
 |---|---|---|
-| `explain` | `(image) -> Explanation` | Score-CAM saliency map for the given image; `predict` is inherited from `Classifier` |
+| `explain` | `(image, deployment_prior=None) -> Explanation` | Score-CAM saliency map for the given image; `predict` is inherited from `Classifier` |
 
 ### `MCDropoutPredictor(BasePredictor)`
 
@@ -223,7 +225,7 @@ Common loading surface shared by every predictor class.
 score_cam(feature_maps: np.ndarray, logits: np.ndarray) -> np.ndarray
 ```
 
-Compute a Score-CAM saliency map from feature maps `(C, H, W)` and logits `(num_classes,)`. Returns a `(H, W)` array with values in `[0, 1]`.
+Compute a Score-CAM saliency map from feature maps `(C, H, W)` and logits `(num_classes,)`. `logits` is accepted for interface symmetry and is not read. Returns a `(H, W)` array with values in `[0, 1]`.
 
 ### `mc_dropout_predict`
 
@@ -255,6 +257,65 @@ above). Requires the `serve` extra.
 | `Explanation` | `saliency_map: np.ndarray`, `predicted_class: str` |
 | `UncertaintyResult` | `mean_probabilities: Dict[str, float]`, `std_per_class: Dict[str, float]`, `predictive_entropy: float`, `n_passes: int` |
 | `ModelMetadata` | `classes: List[str]`, `input_shape: List[int]`, `cam_target_layer: str`, `output_names: List[str]` |
+
+## Extending this package
+
+**There are no user-swappable Hydra config groups here.** Unlike
+`radiologist-core` and `radiologist-etl`, this package ships no config tree and
+does not depend on Hydra at all — the `radiologist infer` commands are plain
+Typer flags, not `key=value` config overrides. There is nothing to point a
+`hydra.searchpath` at.
+
+Two real extension seams exist instead.
+
+### Swapping the model registry backend
+
+Every registry-backed loader takes an optional `registry` argument and defaults
+to `WandbRegistry()`. Pass anything satisfying the
+[`ModelRegistry`](../radiologist-registry/README.md#extending-the-registry-backend)
+protocol — it is a structural `typing.Protocol`, so no inheritance or
+registration is needed:
+
+```python
+from radiologist.inference import Classifier
+
+predictor = Classifier.from_registry(
+    artifact_path="entity/project/model-abc123:best",
+    local_dir="/tmp/models",
+    registry=MyRegistry(),   # any object matching radiologist.registry.ModelRegistry
+)
+```
+
+This is the seam to use for an on-prem artifact store, a test double, or a
+caching layer in front of W&B.
+
+### Adding a verb by subclassing
+
+`BasePredictor` owns loading, provenance, and preprocessing; each subclass adds
+one verb (`Classifier.predict`, `Explainer.explain`,
+`MCDropoutPredictor.predict_with_uncertainty`). Construction goes through
+`cls.__new__(cls)` inside the three classmethods, so a subclass inherits
+`from_path` / `from_registry` / `from_selector` for free:
+
+```python
+from radiologist.inference import Classifier
+
+
+class TopKClassifier(Classifier):
+    def predict_top_k(self, image, k: int = 3):
+        prediction = self.predict(image)
+        ranked = sorted(prediction.probabilities.items(), key=lambda kv: -kv[1])
+        return ranked[:k]
+
+
+predictor = TopKClassifier.from_path("/tmp/models/model.onnx")
+```
+
+The HTTP layer is not currently extensible in the same way: `create_app`
+dispatches routes by `isinstance` over the three shipped predictor classes, so a
+subclass gets its parent's routes, not a new one. The internal verb table in
+`radiologist.inference.verbs` is module-private with no registration function —
+it is not a supported extension point today.
 
 ## Development setup
 
