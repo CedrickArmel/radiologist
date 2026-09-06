@@ -278,6 +278,6 @@ the execution backends above). The CLI entry points live in
 
 ## Dependencies
 
-Core: `radiologist-utils`, `fsspec`, `gcsfs`, `numpy`, `Pillow`, `scikit-image`, `pandas`, `pyarrow`, `webdataset`.
+Core: `radiologist-utils`, `fsspec`, `numpy`, `scikit-image`, `pandas`, `pyarrow`, `webdataset`, `hydra-core`, `omegaconf`, `rich`.
 
-Optional: `prefect` (orchestration, install via `--extra prefect`). When not installed, `@flow` and `@task` are identity decorators and the pipeline runs as plain Python. The default `local` runner requires no extra: without prefect it resolves to an execution plan carrying no task runner, so all three stages run on a plain, no-extras install. `dask`/`ray`/`beam` extras add the corresponding execution runner backend; only those three families can be reported unavailable, and the error names the extra to install.
+Optional: `gcsfs` (GCS filesystem support, install via `--extra gcs`). `prefect` (orchestration, install via `--extra prefect`). When not installed, `@flow` and `@task` are identity decorators and the pipeline runs as plain Python. The default `local` runner requires no extra: without prefect it resolves to an execution plan carrying no task runner, so all three stages run on a plain, no-extras install. `dask`/`ray`/`beam` extras add the corresponding execution runner backend; only those three families can be reported unavailable, and the error names the extra to install.

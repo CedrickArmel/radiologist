@@ -73,6 +73,6 @@ for image, meta in reader.iterate():
 
 ## Dependencies
 
-Core: `fsspec`, `gcsfs`, `numpy`, `Pillow`, `rich`.
+Core: `fsspec`, `numpy`, `Pillow`, `rich`.
 
-Optional (installed via extras): `omegaconf`, `hydra-core`, `torch`, `lightning`, `wandb`, `lightning_utilities`.
+Optional (installed via extras): `gcsfs`, `PyYAML`, `omegaconf`, `hydra-core`, `torch`, `lightning`, `wandb`.

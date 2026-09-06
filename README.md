@@ -36,9 +36,9 @@ Raw X-rays (GCS or local)
 └────────┬──────────┘
          │  ONNX artefacts (W&B Registry)
          ▼
-┌───────────────────┐
-│  radiologist-app  │  FastAPI / Streamlit serving  (planned)
-└───────────────────┘
+┌─────────────────────────┐
+│  radiologist-inference  │  ONNX Runtime inference & FastAPI serving
+└─────────────────────────┘
 ```
 
 The shared foundation (`radiologist-utils`) sits below all layers.
@@ -52,7 +52,6 @@ This is a UV workspace mono-repo. Each package is independently installable and 
 | [`radiologist-utils`](radiologist-utils/README.md) | Filesystem-agnostic I/O, logging, ML training utilities |
 | [`radiologist-etl`](radiologist-etl/README.md) | Data preparation — Haralick GLCM, IQR filtering, sharding |
 | [`radiologist-core`](radiologist-core/README.md) | Model training, evaluation, attribution, registry promotion |
-| `radiologist-app` | Streamlit / FastAPI serving UI *(planned)* |
 | [`radiologist-inference`](radiologist-inference/README.md) | ONNX inference & serving — pull models from W&B Registry, serve via ONNX Runtime, FastAPI HTTP server |
 | [`radiologist-registry`](radiologist-registry/README.md) | W&B model registry — promote, resolve, download ONNX artifacts |
 | [`radiologist-cli`](radiologist-cli/README.md) | Unified `radiologist` CLI — single dispatcher fronting the `etl`/`core`/`registry`/`infer` command groups |
@@ -67,7 +66,7 @@ This is a UV workspace mono-repo. Each package is independently installable and 
 
 **ETL:** Prefect · scikit-image (Haralick GLCM) · Parquet · pyarrow
 
-**Serving (planned):** FastAPI · Streamlit · ONNX Runtime
+**Serving:** FastAPI · ONNX Runtime
 
 **Tooling:** UV · PyEnv · pre-commit · tox · mypy · black · isort
 
