@@ -2,18 +2,27 @@
 
 `radiologist-core` composes its training/evaluation run entirely from a
 [Hydra](https://hydra.cc) config tree at `radiologist-core/src/radiologist/core/configs/`.
-The Hydra entry point is `radiologist.core.train:main`
-(`python -m radiologist.core.train`); it loads `configs/train.yaml` by
-default, or another top-level config via `--config-name` (e.g. `eval`).
+The Hydra entry point is `radiologist.cli.groups.core:train_main`, shipped in the
+`radiologist-cli` package and reached as the `core` group of the unified
+`radiologist` command. It loads `configs/train.yaml` by default, or another
+top-level config via `--config-name` (e.g. `eval`).
 
-Every group below can be overridden on the command line, e.g.:
+Everything after `core` is forwarded to Hydra verbatim, so every group below can
+be overridden on the command line:
 
 ```bash
-uv run --active python -m radiologist.core.train \
+radiologist core \
     trainer.max_epochs=30 \
     module/optimizer=adamw \
     datamodule.batch_size=16
 ```
+
+```bash
+radiologist core --config-name eval ckpt_path=/path/to/checkpoint.ckpt
+```
+
+The `core` group backs onto a hard dependency, so plain `pip install radiologist-cli`
+is enough — unlike `etl`, `registry`, and `infer`, it needs no extra.
 
 ## Top-level singletons
 
@@ -31,19 +40,19 @@ namespace — not selectable groups, just always-present pieces of the tree.
 ## `callbacks/`
 
 Selected as a group (default: `callbacks: default`), which itself is a
-`defaults` list composing five named callback configs together (all under
+`defaults` list composing six named callback configs together (all under
 `# @package callbacks`, keyed by name so they merge into one dict Hydra
 instantiates as a callback list).
 
 | File | Purpose |
 |---|---|
-| `default.yaml` | Composes `best_metric`, `wandb_summary`, `attribution`, `model_checkpoint`, `lr_monitor` into the callback list used by `train.yaml`/`eval.yaml`. |
+| `default.yaml` | Composes `best_metric`, `wandb_summary`, `attribution`, `model_checkpoint`, `lr_monitor`, `onnx_export` into the callback list used by `train.yaml`/`eval.yaml`. |
 | `best_metric.yaml` | `radiologist.core.BestMetricCallback` — `monitor: val_score`, `mode: max`. Tracks the best validation score across epochs (see [`BestMetricCallback`][radiologist.core.BestMetricCallback]). |
 | `wandb_summary.yaml` | `radiologist.core.WandbDefineSummaryCallback` — `monitor: val_score`, `mode: max`. Configures the W&B run-summary panel (see [`WandbDefineSummaryCallback`][radiologist.core.WandbDefineSummaryCallback]). |
 | `attribution.yaml` | `radiologist.core.AttributionCallback` — `target_layer: layer4`, runs every validation epoch (`every_n_val_epochs: 1`) on 1-in-10 batches (`every_n_batches: 10`), `save_to_file: false` (W&B-only logging), Integrated Gradients disabled (`ig_n_steps: null`). See [`AttributionCallback`][radiologist.core.AttributionCallback]. |
 | `model_checkpoint.yaml` | `lightning.pytorch.callbacks.ModelCheckpoint` — writes to `${paths.output_dir}/checkpoints`, filename pattern `epoch={epoch}-step={step}`, monitors `val_score` in `max` mode, keeps only the best (`save_top_k: 1`) plus `save_last: true`. |
 | `lr_monitor.yaml` | `lightning.pytorch.callbacks.LearningRateMonitor` — logs the LR at `step` granularity. |
-| `onnx_export.yaml` | `radiologist.core.OnnxExportCallback` — opt-in, not part of `default.yaml`'s composition; must be added explicitly (e.g. `+callbacks.onnx_export=...` or by adding it to a custom `callbacks` group). `input_shape: [1, 3, 224, 224]`, `classes: ["normal", "abnormal"]` (placeholder values — override to match the actual class list), `cam_target_layer: layer4`, `opset: 18`. Exports ONNX artifacts at fit end (see [`OnnxExportCallback`][radiologist.core.OnnxExportCallback]). |
+| `onnx_export.yaml` | `radiologist.core.OnnxExportCallback` — part of `default.yaml`'s composition. It is a silent no-op without an active W&B run and a best checkpoint, which is why it is safe to leave in the default list. `input_shape: [1, 3, 224, 224]`, `classes: ["normal", "viral", "opacity"]` (placeholder values — override to match the actual class list), `cam_target_layer: layer4`, `opset: 18`. Exports ONNX artifacts at fit end (see [`OnnxExportCallback`][radiologist.core.OnnxExportCallback]). |
 
 ## `module/`
 
@@ -95,3 +104,66 @@ with e.g. `+debug=fast_dev_run`. All are `# @package _global_` overlays.
 | File | Purpose |
 |---|---|
 | `default.yaml` | Selected by default (`hydra: default`). Configures Hydra's own run/sweep output layout: single runs go to `outputs/<date>/<time>/`, multirun (sweep) jobs go to `multirun/<date>/<time>/<job-num>/`. Sets `hydra.job.chdir: true`, so `train()`/`main()` execute with the process CWD already inside that per-run output directory — this is what `paths.root_dir: ${hydra:runtime.cwd}` and `paths.output_dir: ${hydra:runtime.output_dir}` resolve against. |
+
+## Bring your own Hydra config
+
+The config tree above ships **inside the installed wheel** — `train_main` is
+declared with `config_path="pkg://radiologist.core.configs"`, not a filesystem
+path. You extend it by giving Hydra an additional search path rather than by
+editing the installed package.
+
+```bash
+# as a config override
+radiologist core hydra.searchpath=[file:///abs/path/to/myconfigs] module/loss=my_loss
+
+# as the equivalent Hydra CLI flag
+radiologist core --config-dir /abs/path/to/myconfigs module/loss=my_loss
+```
+
+Mirror the packaged group layout inside your directory:
+
+```
+myconfigs/
+├── module/
+│   ├── my_net.yaml            # -> module=my_net
+│   ├── loss/my_loss.yaml      # -> module/loss=my_loss
+│   ├── metric/my_metric.yaml  # -> module/metric=my_metric
+│   ├── optimizer/my_opt.yaml  # -> module/optimizer=my_opt
+│   └── scheduler/my_sched.yaml
+├── callbacks/my_callbacks.yaml
+└── datamodule/my_datamodule.yaml
+```
+
+Each file needs the same `# @package` header its packaged siblings use:
+
+| Group | Required header |
+|---|---|
+| `module`, `module/loss`, `module/metric`, `module/optimizer`, `module/scheduler` | `# @package module` |
+| `callbacks/*` | `# @package callbacks` |
+| `datamodule/*`, `trainer.yaml`, `debug/*` | `# @package _global_` |
+
+Omitting the header is the most common failure: Hydra infers the package from
+the directory name, your `loss:` key lands at `module.loss.loss`, and `LModule`
+— which reads `cfg.loss` — never sees it. The symptom is an instantiation error
+deep in the run, not a config error at compose time. Check with
+`radiologist core --cfg job` before launching anything expensive; it prints the
+fully composed config and exits.
+
+A minimal custom loss:
+
+```yaml
+# myconfigs/module/loss/my_loss.yaml
+# @package module
+loss:
+  _target_: my_package.losses.LabelSmoothedCE
+  smoothing: 0.05
+```
+
+`_target_` may point at any importable class — your package does not have to be
+part of this workspace, it only has to be on `sys.path` of the interpreter
+running `radiologist`.
+
+See [radiologist-core/README.md](../pkg/core.md) for the per-key contract each
+group member must satisfy (which entries need `_partial_: true`, what `LModule`
+calls each collaborator with, and the `${module.net.num_classes}` interpolation
+you must keep intact when swapping the backbone).
