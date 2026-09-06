@@ -21,27 +21,28 @@ A fully reproducible machine-learning pipeline for chest X-ray classification. T
 ## Architecture overview
 
 ```
-Raw X-rays (GCS or local)
-        │
-        ▼
-┌───────────────────┐
-│  radiologist-etl  │  Feature extraction → quality filtering → deterministic split
-│                   │  → JSONL manifest → WebDataset tar shards
-└────────┬──────────┘
-         │  shards + manifest (GCS)
-         ▼
-┌───────────────────┐
-│  radiologist-core │  Lightning training loop (ResNet-50 + Focal Loss + AdamW)
-│                   │  → W&B checkpoint → ONNX export → Model Registry
-└────────┬──────────┘
-         │  ONNX artefacts (W&B Registry)
-         ▼
-┌─────────────────────────┐
-│  radiologist-inference  │  ONNX Runtime inference & FastAPI serving
-└─────────────────────────┘
+                     Raw X-rays (GCS or local)
+                              │
+                              ▼
+                   ┌────────────────────┐
+                   │   radiologist-cli   │  Unified `radiologist` CLI — operator-facing
+                   │  (etl/core/registry │  entry point fronting every command group
+                   │       /infer)       │
+                   └──────────┬──────────┘
+                              │
+      ┌───────────────────────┼───────────────────────┬─────────────────────────┐
+      ▼                       ▼                       ▼                         ▼
+┌───────────────┐   ┌───────────────────┐   ┌───────────────────┐   ┌─────────────────────┐
+│ radiologist-  │   │  radiologist-core  │   │   radiologist-     │   │    radiologist-      │
+│     etl       │──▶│  Lightning train   │──▶│    registry        │──▶│    inference          │
+│ extract →     │   │  loop → ONNX       │   │  Promote/resolve   │   │  ONNX Runtime + FastAPI│
+│ assign-split  │   │  export            │   │  W&B Registry      │   │  serving               │
+│ → build       │   │                    │   │  artefacts         │   │                        │
+└───────────────┘   └───────────────────┘   └───────────────────┘   └─────────────────────┘
 ```
 
 The shared foundation (`radiologist-utils`) sits below all layers.
+`radiologist-app` (UI) is planned but does not yet exist on disk.
 
 ## Repository layout
 
@@ -81,24 +82,41 @@ make dev-install
 
 ### 2 — Prepare the data
 
+The ETL pipeline is three independent stages, each its own subcommand of the
+unified CLI. Each writes a content-addressed run id you feed to the next:
+
 ```bash
-cd radiologist-etl
-uv run --active python -m radiologist.etl.prefect_pipelines \
-    source=gs://my-bucket/raw_chest_xray/ \
-    destination=gs://my-bucket/manifests/ \
+pip install 'radiologist-cli[etl]'
+
+radiologist etl extract \
+    file_list=gs://my-bucket/listings/images.txt \
+    destination=gs://my-bucket/manifests/
+
+radiologist etl assign-split \
+    manifests_dir=gs://my-bucket/manifests/ \
+    destination=gs://my-bucket/manifests/
+
+radiologist etl build \
+    split_manifest=gs://my-bucket/manifests/manifest-<run_id>.jsonl \
     shard_root=gs://my-bucket/shards/
 ```
 
-See [`radiologist-etl/README.md`](radiologist-etl/README.md) for the full configuration reference and resume flags.
+See [`docs/reference/config-etl.md`](docs/reference/config-etl.md) for every
+key, the execution-runner options, and how run ids make re-runs idempotent.
 
 ### 3 — Train
 
 ```bash
-cd radiologist-core
-uv run --active python -m radiologist.core.train \
+radiologist core \
     datamodule.shard_root=gs://my-bucket/shards/ \
-    datamodule.split_manifest_uri=gs://my-bucket/manifests/manifest-abc123.jsonl
+    datamodule.split_manifest_uri=gs://my-bucket/manifests/manifest-abc123.jsonl \
+    tags=[baseline]
 ```
+
+`tags` is effectively required: `extras.enforce_tags: true` fails the run fast
+when it is unset, so W&B runs stay searchable. See
+[`docs/reference/config-core.md`](docs/reference/config-core.md) for the full
+config tree and how to plug in your own loss, metric, or backbone.
 
 ### 4 — Promote to the model registry
 
