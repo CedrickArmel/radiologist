@@ -82,7 +82,7 @@ Emitted keys: `run_id`, `manifest_path`, `total`, `succeeded`, `failed`,
 | `masks_root` | `null` | Root folder for segmentation masks, mirrored path-for-path under `images_root`. |
 | `iqr_columns` | `["haralick_mean"]` | Stat columns tested for IQR outliers. |
 | `iqr_factor` | `1.5` | IQR multiplier defining the outlier fence. |
-| `haralick.features` / `.distances` / `.angles` | `["mean"]` / `[1]` / `null` | Haralick GLCM feature-extraction params — see [`config-etl.md`](config-etl.md#haralick-glcm-features). |
+| `haralick.features` / `.distances` / `.angles` | `["mean"]` / `[1]` / `null` | Haralick GLCM feature-extraction params — see [`config-etl.md`](config-etl.md#stage-1-extract). |
 | `workers` | `null` | Number of worker processes; `null` resolves to `default_workers()`. |
 | `batch_size` | `64` | Batch size for stat extraction. |
 | `max_failure_rate` | `0.0` | Tolerance for per-image extraction failures before the run fails. |
