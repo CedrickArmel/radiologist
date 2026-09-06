@@ -46,7 +46,6 @@ jobs:
         uses: ./.github/actions/setup-uv
         with:
           setup-python: "false"
-          locked: "false" # removed by issue #228
 
       - name: Install commitizen
         run: uv sync --group release # commitizen only, no torch here
@@ -93,6 +92,14 @@ jobs:
         # Non-zero exit (e.g. NO_COMMITS_FOUND) must propagate: that is the
         # mechanism behind "no releasable commits creates nothing" — the
         # release branch is only created after this step succeeds.
+        #
+        # The ONLY place in this repository where uv may rewrite uv.lock.
+        # The `uv` commitizen version provider refreshes the lockfile as
+        # part of the bump, and that refreshed lockfile is one of the three
+        # files landed in the release commit. Everywhere else UV_LOCKED is
+        # enforced (setup-uv's "true" default).
+        env:
+          UV_LOCKED: "false"
         run: |
           cd "${{ steps.dir.outputs.dir }}"
           if [ "${{ inputs.increment }}" = "auto" ]; then

@@ -59,7 +59,6 @@ jobs:
         uses: ./.github/actions/setup-uv
         with:
           setup-python: "false"
-          locked: "false" # removed by issue #228
 
       - name: Install commitizen (only needed for its tomli dependency)
         run: uv sync --group release
@@ -138,10 +137,12 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
       - uses: ./.github/actions/setup-uv
-        with:
-          locked: "false" # removed by issue #228
       - run: make build PKG=${{ needs.resolve.outputs.package }}
-      - run: uv run --with twine twine check dist/*
+      # `uvx` runs twine from an isolated, ephemeral environment. `uv run
+      # --with` layers twine on top of this job's *project* environment,
+      # which uv would first have to materialise -- the entire workspace,
+      # torch included -- just to lint distribution metadata.
+      - run: uvx twine check dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
@@ -170,7 +171,6 @@ jobs:
       - uses: ./.github/actions/setup-uv
         with:
           setup-python: "false" # this job only shells out to uv
-          locked: "false" # removed by issue #228
       - name: Publish to PyPI over OIDC trusted publishing
         # `always` (rather than the default `automatic`) fails loudly if the
         # OIDC token cannot be minted, instead of silently falling back to a
@@ -189,7 +189,6 @@ jobs:
       - uses: ./.github/actions/setup-uv
         with:
           setup-python: "false"
-          locked: "false" # removed by issue #228
       - name: Install commitizen (only needed for its tomli dependency)
         run: uv sync --group release
       - name: Compute the release tag

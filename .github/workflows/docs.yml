@@ -21,8 +21,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-uv
-        with:
-          locked: "false" # removed by issue #228
       - run: uv sync --group docs --all-packages --all-extras
       - run: uv run mkdocs build --strict
       - uses: actions/upload-pages-artifact@v3

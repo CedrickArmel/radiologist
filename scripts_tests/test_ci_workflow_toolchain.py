@@ -31,11 +31,12 @@ for the two `test` jobs). Before this issue, every *other* job across
 version tag -- a supply-chain risk given `publish.yml`'s `publish` job holds
 `id-token: write`.
 
-This issue is a pure substitution: same toolchain, same Python/uv versions,
-same commands run afterwards. It does not change `UV_LOCKED` enforcement
-(every call site here passes `locked: "false"`; issue #228 flips that) and
-does not fold `setup-and-test` onto `setup-uv` (a documented, deliberate,
-temporary two-line duplication).
+This issue was a pure substitution: same toolchain, same Python/uv versions,
+same commands run afterwards. It did not change `UV_LOCKED` enforcement
+(every call site passed `locked: "false"`) and does not fold `setup-and-test`
+onto `setup-uv` (a documented, deliberate, temporary two-line duplication).
+Issue #228 later flipped every `locked: "false"` override off -- see
+`scripts_tests/test_ci_workflow_lockfile_policy.py` for that contract.
 
 These tests parse the workflow/action YAML as text (no `pyyaml` dependency),
 mirroring `scripts_tests/test_ci_workflows_exclude_ray.py`.
@@ -124,10 +125,17 @@ def test_target_job_checks_out_before_the_local_composite_action(
 
 
 @pytest.mark.parametrize("workflow, job", _TARGET_JOBS)
-def test_target_job_keeps_this_slice_behaviourless(workflow: str, job: str) -> None:
-    """`UV_LOCKED` enforcement is issue #228's job, not this one's."""
+def test_target_job_no_longer_overrides_the_locked_default(
+    workflow: str, job: str
+) -> None:
+    """Issue #228 flipped every `locked: "false"` override -- see its own
+    `scripts_tests/test_ci_workflow_lockfile_policy.py` for the full
+    lockfile-drift contract this now leaves in force (`setup-uv`'s
+    enforcing `"true"` default applies at every one of these call sites,
+    except release.yml's single documented `cz bump` step-level
+    override)."""
     block = "\n".join(_job_lines(_read_workflow(workflow), job))
-    assert 'locked: "false"' in block
+    assert 'locked: "false"' not in block
 
 
 def test_no_workflow_references_the_third_party_actions_directly() -> None:
