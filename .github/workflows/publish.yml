@@ -118,19 +118,9 @@ jobs:
     env:
       VIRTUAL_ENV: ${{ github.workspace }}/.venv
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-and-test
         with:
           ref: ${{ needs.resolve.outputs.sha }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-      # ray is excluded on purpose: the Ray execution family is still under
-      # development (#188) and no test requires it.
-      - run: uv sync --active --all-groups --all-packages --all-extras --no-extra ray
-      - run: make test
 
   build:
     needs: [resolve, test]
