@@ -14,6 +14,7 @@ on:
           - radiologist-core
           - radiologist-inference
           - radiologist-registry
+          - radiologist-cli
       increment:
         description: Force an increment (leave as `auto` to let commitizen decide)
         required: false

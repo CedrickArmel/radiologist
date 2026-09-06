@@ -22,13 +22,13 @@
 
 """Helper logic for ``.github/workflows/release.yml``.
 
-The workflow triggers a ``cz bump --files-only`` for one of the six
-``radiologist`` distributions and then lands the resulting file changes as a
-single GitHub-signed commit via the GraphQL ``createCommitOnBranch``
-mutation. That mutation requires every changed file's contents to be
-base64-encoded and bundled into one payload — easy to get subtly wrong in
-bash. This module isolates that logic so it can be unit tested, and exposes
-a small CLI so workflow steps can call it directly.
+The workflow triggers a ``cz bump --files-only`` for one of the
+``radiologist`` distributions declared by the workspace and then lands the
+resulting file changes as a single GitHub-signed commit via the GraphQL
+``createCommitOnBranch`` mutation. That mutation requires every changed
+file's contents to be base64-encoded and bundled into one payload — easy to
+get subtly wrong in bash. This module isolates that logic so it can be unit
+tested, and exposes a small CLI so workflow steps can call it directly.
 
 Only pure, testable logic lives here: mapping a distribution name to its
 ``cz`` working directory, naming the release branch, listing the files a
@@ -46,25 +46,26 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import workspace_manifests
+
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - this repo pins Python 3.10
     import tomli as tomllib  # type: ignore[import-untyped,no-redef]
 
-PACKAGES = (
-    "radiologist",
-    "radiologist-utils",
-    "radiologist-etl",
-    "radiologist-core",
-    "radiologist-inference",
-    "radiologist-registry",
-)
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Single source of truth: the root manifest's [tool.uv.workspace] members,
+# prefixed by the root distribution itself. Never hand-maintain this list --
+# adding a member to the workspace makes it releasable with no further edit
+# here.
+PACKAGES: Tuple[str, ...] = workspace_manifests.workspace_packages(_REPO_ROOT)
 
 _ROOT_PACKAGE = "radiologist"
 
 
 def _validate_package(package: str) -> None:
-    """Raise ``ValueError`` unless ``package`` is one of the six distributions."""
+    """Raise ``ValueError`` unless ``package`` is a declared workspace distribution."""
     if package not in PACKAGES:
         raise ValueError(
             f"Unknown distribution {package!r}; expected one of {PACKAGES}"
@@ -100,8 +101,8 @@ def parse_release_branch_name(branch: str) -> Tuple[str, str]:
     distribution names (e.g. ``radiologist-core``) parse correctly.
 
     Raises ``ValueError`` if the branch lacks the ``release/`` prefix, does
-    not contain a ``-v`` marker, names a distribution outside the six known
-    ones, or carries a version that is not ``X.Y.Z``.
+    not contain a ``-v`` marker, names a distribution outside the workspace's
+    declared distributions, or carries a version that is not ``X.Y.Z``.
     """
     prefix = "release/"
     if not branch.startswith(prefix):
@@ -133,7 +134,8 @@ def release_tag(package: str, version: str) -> str:
 
     The root meta-package's ``tag_format`` is the bare version. Every
     workspace member's ``tag_format`` suffixes the version with its own
-    distribution name to keep six independent tag namespaces on one repo.
+    distribution name to keep one independent tag namespace per workspace
+    member on one repo.
     """
     _validate_package(package)
     if package == _ROOT_PACKAGE:

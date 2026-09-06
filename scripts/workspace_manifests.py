@@ -56,6 +56,11 @@ class IntraWorkspaceRequirement:
     raw: str  # the requirement string exactly as written
 
 
+def _root_manifest(repo_root: Path) -> Dict:
+    with (Path(repo_root) / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)
+
+
 def workspace_packages(repo_root: Path) -> Tuple[str, ...]:
     """Return every distribution name declared by this uv workspace.
 
@@ -64,7 +69,9 @@ def workspace_packages(repo_root: Path) -> Tuple[str, ...]:
     returned exactly as declared. Raises ``KeyError`` if the root manifest
     declares no ``[tool.uv.workspace] members`` key.
     """
-    raise NotImplementedError
+    data = _root_manifest(repo_root)
+    members = data["tool"]["uv"]["workspace"]["members"]
+    return (ROOT_PACKAGE, *members)
 
 
 def package_dir(repo_root: Path, package: str) -> str:
@@ -74,7 +81,12 @@ def package_dir(repo_root: Path, package: str) -> str:
     (which equals its distribution name). Raises ``ValueError`` for a name
     not in :func:`workspace_packages`.
     """
-    raise NotImplementedError
+    packages = workspace_packages(repo_root)
+    if package not in packages:
+        raise ValueError(
+            f"Unknown distribution {package!r}; expected one of {packages}"
+        )
+    return "." if package == ROOT_PACKAGE else package
 
 
 def package_manifest_path(repo_root: Path, package: str) -> Path:
@@ -84,12 +96,15 @@ def package_manifest_path(repo_root: Path, package: str) -> Path:
     ``repo_root/<package>/pyproject.toml``. Raises ``ValueError`` for a name
     not in :func:`workspace_packages`.
     """
-    raise NotImplementedError
+    return Path(repo_root) / package_dir(repo_root, package) / "pyproject.toml"
 
 
 def declared_version(repo_root: Path, package: str) -> str:
     """Return ``[project].version`` from ``package``'s manifest."""
-    raise NotImplementedError
+    manifest_path = package_manifest_path(repo_root, package)
+    with manifest_path.open("rb") as handle:
+        data = tomllib.load(handle)
+    return str(data["project"]["version"])
 
 
 def intra_workspace_requirements(

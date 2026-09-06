@@ -31,6 +31,16 @@ epic's slice issues will call -- not what those functions compute. See the
 epic spec's "Configuration/interface contract" section for the frozen
 contract these tests pin down.
 
+Issue #227 has since implemented ``workspace_packages``, ``package_dir``,
+``package_manifest_path`` and ``declared_version`` (see
+``test_workspace_manifests.py`` for their behavioral coverage) so the roster
+``scripts/release_bump.py`` exposes can be derived from the workspace
+manifest instead of hand-maintained. The remaining functions --
+``intra_workspace_requirements``, ``unpinned_requirements``,
+``stale_pin_floors``, ``publishable_requirement_lines`` and
+``render_stale_pin_markdown`` -- are issue #229's scope and stay
+unimplemented here.
+
 ``.github/actions/setup-uv/action.yml`` is a plain composite action file, no
 Python involved, so its own shape is asserted with the workflow-as-text
 pattern already used by ``test_ci_workflows_exclude_ray.py`` -- no
@@ -91,17 +101,15 @@ class TestWorkspaceManifestsModuleShape:
             func = getattr(workspace_manifests, name)
             assert list(inspect.signature(func).parameters) == params, name
 
-    def test_every_public_function_body_raises_not_implemented_error(self) -> None:
+    def test_every_still_unimplemented_public_function_raises_not_implemented_error(
+        self,
+    ) -> None:
+        """``workspace_packages``/``package_dir``/``package_manifest_path``/
+        ``declared_version`` are implemented (issue #227) and covered
+        behaviorally in ``test_workspace_manifests.py`` instead.
+        """
         import workspace_manifests
 
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.workspace_packages(_REPO_ROOT)
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.package_dir(_REPO_ROOT, "radiologist")
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.package_manifest_path(_REPO_ROOT, "radiologist")
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.declared_version(_REPO_ROOT, "radiologist")
         with pytest.raises(NotImplementedError):
             workspace_manifests.intra_workspace_requirements(_REPO_ROOT, "radiologist")
         with pytest.raises(NotImplementedError):

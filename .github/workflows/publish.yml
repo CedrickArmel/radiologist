@@ -16,6 +16,7 @@ on:
           - radiologist-core
           - radiologist-inference
           - radiologist-registry
+          - radiologist-cli
       version:
         description: Version to publish (X.Y.Z) — must already be on main
         required: true
@@ -86,8 +87,8 @@ jobs:
             VERSION="$(echo "$PARSED" | jq -r .version)"
           fi
 
-          # `parse-branch` already restricts PACKAGE to the six known
-          # distributions and VERSION to X.Y.Z on the pull_request path;
+          # `parse-branch` already restricts PACKAGE to the workspace's
+          # declared distributions and VERSION to X.Y.Z on the pull_request path;
           # workflow_dispatch's `version` input is free text, so validate it
           # explicitly here too.
           if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
