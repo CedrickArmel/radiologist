@@ -22,17 +22,9 @@ jobs:
     env:
       VIRTUAL_ENV: ${{ github.workspace }}/.venv
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-and-test
         with:
-          python-version: "3.10"
-      - uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-      # ray is excluded on purpose: the Ray execution family is still under
-      # development (#188) and no test requires it.
-      - run: uv sync --active --all-groups --all-packages --all-extras --no-extra ray
-      - run: make test PYTEST_FLAGS="-q --cov-report=xml"
+          pytest-flags: "-q --cov-report=xml"
       - uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
