@@ -433,3 +433,82 @@ class TestPublishableRequirementLines:
         result = publishable_requirement_lines(REPO_ROOT, "radiologist")
 
         assert any(line.startswith("radiologist-core[all]") for line in result)
+
+
+class TestRequirementLinesCli:
+    """The ``requirement-lines`` CLI subcommand (issue #232's resolution guard)."""
+
+    def test_prints_one_requirement_per_line(self, tmp_path, capsys):
+        from workspace_manifests import _main
+
+        _write_workspace(
+            tmp_path,
+            ["radiologist-core"],
+            root_extra_body=('dependencies = ["radiologist-core[all]>=0.1.0"]\n'),
+        )
+
+        exit_code = _main(
+            [
+                "requirement-lines",
+                "--repo-root",
+                str(tmp_path),
+                "--package",
+                "radiologist",
+            ]
+        )
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert captured.out.splitlines() == ["radiologist-core[all]>=0.1.0"]
+
+    def test_prints_nothing_for_a_distribution_with_no_dependency(
+        self, tmp_path, capsys
+    ):
+        from workspace_manifests import _main
+
+        _write_workspace(tmp_path, ["radiologist-core"])
+
+        exit_code = _main(
+            [
+                "requirement-lines",
+                "--repo-root",
+                str(tmp_path),
+                "--package",
+                "radiologist-core",
+            ]
+        )
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert captured.out == ""
+
+    def test_prints_every_extra_alongside_default_dependencies(self, tmp_path, capsys):
+        from workspace_manifests import _main
+
+        _write_workspace(
+            tmp_path,
+            ["radiologist-core"],
+            root_extra_body=(
+                'dependencies = ["radiologist-core[all]>=0.1.0"]\n'
+                "\n"
+                "[project.optional-dependencies]\n"
+                'extra-a = ["requests>=2.0.0"]\n'
+            ),
+        )
+
+        exit_code = _main(
+            [
+                "requirement-lines",
+                "--repo-root",
+                str(tmp_path),
+                "--package",
+                "radiologist",
+            ]
+        )
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert captured.out.splitlines() == [
+            "radiologist-core[all]>=0.1.0",
+            "requests>=2.0.0",
+        ]

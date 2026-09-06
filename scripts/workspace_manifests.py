@@ -30,6 +30,7 @@ resolver would see for a given distribution. Consumed by
 ``scripts_tests/``, and by ``publish.yml``'s resolution guard.
 """
 
+import argparse
 import re
 import sys
 from dataclasses import dataclass
@@ -242,7 +243,19 @@ def render_stale_pin_markdown(
 
 
 def _main(argv: List[str]) -> int:
-    raise NotImplementedError
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    requirement_lines_parser = subparsers.add_parser("requirement-lines")
+    requirement_lines_parser.add_argument("--repo-root", required=True)
+    requirement_lines_parser.add_argument("--package", required=True)
+
+    args = parser.parse_args(argv)
+
+    if args.command == "requirement-lines":
+        for line in publishable_requirement_lines(Path(args.repo_root), args.package):
+            print(line)
+    return 0
 
 
 if __name__ == "__main__":

@@ -154,8 +154,35 @@ jobs:
           name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
           path: dist/
 
-  publish-testpypi:
+  resolution-guard:
     needs: [resolve, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: ./.github/actions/setup-uv
+      - name: Install the release tooling
+        run: uv sync --group release
+      - name: Resolve the declared requirements against the public index
+        env:
+          PACKAGE: ${{ needs.resolve.outputs.package }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/workspace_manifests.py requirement-lines \
+            --repo-root . --package "$PACKAGE" > requirements.in
+          if [ ! -s requirements.in ]; then
+            echo "::notice::${PACKAGE} declares no dependencies — nothing to resolve."
+            exit 0
+          fi
+          echo "Resolving:"; cat requirements.in
+          # --no-sources disables [tool.uv.sources], so an intra-workspace
+          # requirement must be satisfiable from PyPI like any other.
+          uv pip compile --no-sources --python-version 3.10 \
+            requirements.in --output-file /dev/null
+
+  publish-testpypi:
+    needs: [resolve, build, resolution-guard]
     runs-on: ubuntu-latest
     environment:
       name: testpypi-${{ needs.resolve.outputs.package }}
