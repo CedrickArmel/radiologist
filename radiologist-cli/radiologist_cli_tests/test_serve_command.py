@@ -51,7 +51,7 @@ def _make_registry_wandb_mock(qualified_name: str = "entity/project/model-run1:b
     api_instance.runs.return_value = [best_run]
     api_instance.artifact.return_value = resolved_art
     mock_wandb.Api.return_value = api_instance
-    return mock_wandb, resolved_art
+    return mock_wandb, resolved_art, api_instance
 
 
 class TestServeCommand:
@@ -105,7 +105,7 @@ class TestServeCommand:
         mcd_dir.mkdir()
         build_mcd_onnx(mcd_dir, filename="mcd.onnx")
 
-        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        mock_wandb, resolved_art, api_instance = _make_registry_wandb_mock()
         resolved_art.download.return_value = str(mcd_dir)
 
         mock_uvicorn = MagicMock()
@@ -133,6 +133,8 @@ class TestServeCommand:
         assert record["verb"] == "uncertainty"
         assert record["model_qualified_name"] == "entity/project/model-run1:best"
         assert record["model_version"] == "best"
+        assert resolved_art.download.call_count == 1
+        assert api_instance.artifact.call_count == 1
 
     def test_serve_with_registry_selector_and_no_path_exits_nonzero_without_serving(
         self, tmp_path, monkeypatch
