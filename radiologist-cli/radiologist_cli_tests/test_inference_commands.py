@@ -61,7 +61,7 @@ def _make_registry_wandb_mock(qualified_name: str = "entity/project/model-run1:b
     api_instance.runs.return_value = [best_run]
     api_instance.artifact.return_value = resolved_art
     mock_wandb.Api.return_value = api_instance
-    return mock_wandb, resolved_art
+    return mock_wandb, resolved_art, api_instance
 
 
 class TestPredictCommand:
@@ -90,7 +90,7 @@ class TestPredictCommand:
         monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
         build_det_onnx(tmp_path, filename="det.onnx")
         image_path = make_png_path(tmp_path)
-        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        mock_wandb, resolved_art, api_instance = _make_registry_wandb_mock()
         resolved_art.download.return_value = str(tmp_path)
 
         import radiologist.registry.resolver as resolver_mod
@@ -115,6 +115,7 @@ class TestPredictCommand:
         assert "predicted_class" in record
         assert set(record["probabilities"].keys()) == {"NORMAL", "ABNORMAL"}
         assert resolved_art.download.call_count == 1
+        assert api_instance.artifact.call_count == 1
         assert record["model_qualified_name"] == "entity/project/model-run1:best"
         assert record["model_version"] == "best"
 
@@ -219,7 +220,7 @@ class TestExplainCommand:
         monkeypatch.setenv("RADIOLOGIST_OUTPUT", "json")
         build_det_onnx(tmp_path, filename="det.onnx")
         image_path = make_png_path(tmp_path)
-        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        mock_wandb, resolved_art, api_instance = _make_registry_wandb_mock()
         resolved_art.download.return_value = str(tmp_path)
 
         import radiologist.registry.resolver as resolver_mod
@@ -243,6 +244,8 @@ class TestExplainCommand:
         record = json.loads(result.output)
         assert record["model_qualified_name"] == "entity/project/model-run1:best"
         assert record["model_version"] == "best"
+        assert resolved_art.download.call_count == 1
+        assert api_instance.artifact.call_count == 1
 
     def test_explain_with_registry_selector_and_no_path_exits_nonzero(
         self, tmp_path, make_png_path
@@ -335,7 +338,7 @@ class TestUncertaintyCommand:
         mcd_dir.mkdir()
         build_mcd_onnx(mcd_dir, filename="mcd.onnx")
         image_path = make_png_path(tmp_path)
-        mock_wandb, resolved_art = _make_registry_wandb_mock()
+        mock_wandb, resolved_art, api_instance = _make_registry_wandb_mock()
         resolved_art.download.return_value = str(mcd_dir)
 
         import radiologist.registry.resolver as resolver_mod
@@ -359,6 +362,8 @@ class TestUncertaintyCommand:
         record = json.loads(result.output)
         assert record["model_qualified_name"] == "entity/project/model-run1:best"
         assert record["model_version"] == "best"
+        assert resolved_art.download.call_count == 1
+        assert api_instance.artifact.call_count == 1
 
     def test_uncertainty_with_registry_selector_and_no_path_exits_nonzero(
         self, tmp_path, make_png_path
