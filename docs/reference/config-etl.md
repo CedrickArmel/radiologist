@@ -122,7 +122,7 @@ Turns a split manifest into WebDataset tar shards.
 | Key | Default | Description |
 |---|---|---|
 | `split_manifest` | `???` | Manifest produced by `assign-split`. Its content digest is half of the run id. |
-| `shard_root` | `???` | Root under which `{split}/{label}/{split}-{label}-{idx:06d}.tar` are written. |
+| `shard_root` | `???` | Root under which shards are written, at `{shard_root}/{run_id}/{split}/{label}/{split}-{label}-{idx:06d}.tar`. |
 | `shard_size` | `1000` | Max records per tar shard. |
 | `split_ratios` | `[["train", 0.70], ["val", 0.15], ["test", 0.15]]` | **Report only** — never used for assignment here. Splits were fixed by `assign-split` and are read off the manifest. |
 | `workers` | `null` | Worker count; `null` resolves to `default_workers()`. |
@@ -210,37 +210,14 @@ the whole pipeline.
 
 ## Adding your own runner
 
-`runner/` is the one extensible config group in this package. Because the
-configs are packaged (`pkg://radiologist.etl.conf`), add members through an
-extra search path:
+`runner/` is the one extensible config group in this package — every member
+must carry the same `family` / `batch_size` / `task_runner` / `beam` shape
+documented in [Execution runners](#execution-runners) above, plus the
+`# @package runner` header (omitting it lands your keys at `runner.runner`
+and the stage silently falls back to the default plan).
 
-```yaml
-# myconfigs/runner/my_dask.yaml
-# @package runner
-family: dask
-batch_size: 128
-task_runner:
-  _target_: prefect_dask.DaskTaskRunner
-  cluster_class: dask_kubernetes.operator.KubeCluster
-  cluster_kwargs: {name: radiologist-etl}
-  adapt_kwargs: {minimum: 2, maximum: 40}
-```
-
-```bash
-radiologist etl build \
-    hydra.searchpath=[file:///abs/path/to/myconfigs] \
-    runner=my_dask \
-    split_manifest=gs://bucket/pipelines/manifests/manifest-<run_id>.jsonl \
-    shard_root=gs://bucket/shards
-```
-
-`--config-dir /abs/path/to/myconfigs` is the equivalent flag. The
-`# @package runner` header is required — without it your keys land at
-`runner.runner` and the stage silently falls back to the default plan.
-
-Since `runner.beam.pipeline_options` is handed to Beam verbatim, supporting a
-further Beam runner (Flink, Spark, …) is this same pattern with a different
-`pipeline_options` mapping and no code change.
-
-See [radiologist-etl/README.md](../pkg/etl.md) for the pipeline-stage narrative,
-the manifest schema, and programmatic usage.
+For the full worked example (`hydra.searchpath` vs. `--config-dir`, a sample
+`myconfigs/runner/my_dask.yaml`, and the Beam-family variant) see
+[radiologist-etl/README.md § Adding an execution runner](../pkg/etl.md#adding-an-execution-runner),
+which also covers the pipeline-stage narrative, the manifest schema, and
+programmatic usage.

@@ -188,7 +188,7 @@ the full command reference and examples (`radiologist infer predict ...`,
 `radiologist infer explain ...`, `radiologist infer uncertainty ...`,
 `radiologist infer serve ...`).
 
-## Public API reference
+## Using the public API
 
 ### `BasePredictor`
 

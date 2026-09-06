@@ -348,13 +348,16 @@ there.
 
 ### Loss and callbacks standalone
 
-`FocalLoss` is an ordinary `nn.Module` and the four callbacks are ordinary
-Lightning callbacks; both are usable in any training loop:
+`FocalLoss` (see [above](#focalloss)) is an ordinary `nn.Module` and the four
+callbacks are ordinary Lightning callbacks; both are usable in any training
+loop, wired in directly without going through `train(cfg)`:
 
 ```python
 from radiologist.core import FocalLoss
+from lightning.pytorch import Trainer
 
 loss = FocalLoss(gamma=2.0, alpha=1.0, use_softmax=True, reduction="mean")
+trainer = Trainer(callbacks=[...])  # any subset of the four, hand-instantiated
 ```
 
 ## Configuration reference
