@@ -148,8 +148,40 @@ jobs:
           name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
           path: dist/
 
-  publish:
+  publish-testpypi:
     needs: [resolve, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-${{ needs.resolve.outputs.package }}
+      url: https://test.pypi.org/project/${{ needs.resolve.outputs.package }}/
+    permissions:
+      id-token: write # a TestPyPI-only identity — never the PyPI one
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
+          path: dist/
+      # Only the composite action itself is needed here — a sparse checkout
+      # keeps the privileged job from materialising the whole tree.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          sparse-checkout: .github
+      - uses: ./.github/actions/setup-uv
+        with:
+          setup-python: "false" # this job only shells out to uv
+          locked: "false" # removed by issue #228
+      - name: Rehearse the upload on TestPyPI
+        # `--check-url` makes a re-run of an already-uploaded version a no-op
+        # instead of a 400, so retrying the workflow after a *later* job
+        # failed does not require burning a version number.
+        run: |
+          uv publish --index testpypi --trusted-publishing always \
+            --check-url https://test.pypi.org/simple/ dist/*
+
+  publish:
+    needs: [resolve, build, publish-testpypi]
     runs-on: ubuntu-latest
     environment:
       name: ${{ needs.resolve.outputs.environment }}
