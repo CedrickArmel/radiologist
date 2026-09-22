@@ -622,3 +622,61 @@ def test_no_no_sync_step_lacks_a_preceding_explicit_sync_in_the_same_job() -> No
             assert (
                 "uv sync" in preceding
             ), f"{path}: UV_NO_SYNC used without a preceding explicit uv sync"
+
+
+def test_release_only_group_sync_never_installs_the_full_workspace() -> None:
+    """`--group release` *adds* to the default (project) sync; only
+    `--only-group release` skips installing torch/lightning/etc. for a job
+    that just needs commitizen/tomli."""
+    for path in _workflow_paths():
+        text = _read(path)
+        assert (
+            "uv sync --group release" not in text
+        ), f"{path.name} still uses --group release"
+
+
+def _step_blocks(job_lines: List[str]) -> List[List[str]]:
+    """Split a job's lines into per-step blocks on 6-space-indented `- `."""
+    step_re = re.compile(r"^      - ")
+    blocks: List[List[str]] = []
+    for line in job_lines:
+        if step_re.match(line):
+            blocks.append([line])
+        elif blocks:
+            blocks[-1].append(line)
+    return blocks
+
+
+@pytest.mark.parametrize(
+    "workflow,job",
+    [
+        ("publish.yml", "resolve"),
+        ("publish.yml", "resolution-guard"),
+        ("publish.yml", "tag"),
+        ("release.yml", "bump"),
+    ],
+)
+def test_uv_run_steps_after_the_only_group_sync_skip_the_redundant_sync(
+    workflow: str, job: str
+) -> None:
+    """Every `uv run` step in these jobs only needs what the preceding
+    `--only-group release` sync already installed. The one documented
+    exception is release.yml's cz-bump step, which legitimately rewrites
+    `uv.lock` and is exempted from the drift gate by its own `UV_LOCKED:
+    "false"` -- covered by test_the_opt_out_is_on_release_yml_cz_bump_step_
+    and_is_documented, not here.
+    """
+    no_sync_re = re.compile(r'^\s*UV_NO_SYNC:\s*"true"\s*$')
+    job_lines = _job_lines(_read_workflow(workflow), job)
+    for block in _step_blocks(job_lines):
+        code_lines = [line for line in block if not line.strip().startswith("#")]
+        code_text = "\n".join(code_lines)
+        if "uv run" not in code_text:
+            continue
+        if "cz bump" in code_text:
+            continue
+        assert any(no_sync_re.match(line) for line in code_lines), (
+            f'{workflow}:{job}: a uv run step lacks a real UV_NO_SYNC: "true" '
+            f"env line and will re-materialise the full default project:\n"
+            f"{code_text}"
+        )

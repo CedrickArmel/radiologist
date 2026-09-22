@@ -61,11 +61,15 @@ jobs:
           setup-python: "false"
 
       - name: Install commitizen (only needed for its tomli dependency)
-        run: uv sync --group release
+        run: uv sync --only-group release
 
       - name: Resolve package, version, environment and sha
         id: resolve
         env:
+          # The preceding step already installed exactly what this one
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
           EVENT_NAME: ${{ github.event_name }}
           # Untrusted input (a fork could open a same-named branch) — passed
           # through an env var rather than interpolated into the script, per
@@ -174,9 +178,13 @@ jobs:
           ref: ${{ needs.resolve.outputs.sha }}
       - uses: ./.github/actions/setup-uv
       - name: Install the release tooling
-        run: uv sync --group release
+        run: uv sync --only-group release
       - name: Resolve the declared requirements against the public index
         env:
+          # The preceding step already installed exactly what this one
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
           PACKAGE: ${{ needs.resolve.outputs.package }}
         run: |
           set -euo pipefail
@@ -202,16 +210,19 @@ jobs:
       id-token: write # a TestPyPI-only identity — never the PyPI one
       contents: read
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
-          path: dist/
+      # Checkout runs first: actions/checkout's default `clean: true` runs
+      # `git clean -ffdx` in the workspace before fetching, which would
+      # delete an already-downloaded dist/ if download-artifact ran first.
       # Only the composite action itself is needed here — a sparse checkout
       # keeps the privileged job from materialising the whole tree.
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           sparse-checkout: .github
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
+          path: dist/
       - uses: ./.github/actions/setup-uv
         with:
           setup-python: "false" # this job only shells out to uv
@@ -233,16 +244,19 @@ jobs:
       id-token: write # the OIDC identity PyPI trusts — this job only
       contents: read
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
-          path: dist/
+      # Checkout runs first: actions/checkout's default `clean: true` runs
+      # `git clean -ffdx` in the workspace before fetching, which would
+      # delete an already-downloaded dist/ if download-artifact ran first.
       # Only the composite action itself is needed here — a sparse checkout
       # keeps the privileged job from materialising the whole tree.
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           sparse-checkout: .github
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
+          path: dist/
       - uses: ./.github/actions/setup-uv
         with:
           setup-python: "false" # this job only shells out to uv
@@ -265,9 +279,14 @@ jobs:
         with:
           setup-python: "false"
       - name: Install commitizen (only needed for its tomli dependency)
-        run: uv sync --group release
+        run: uv sync --only-group release
       - name: Compute the release tag
         id: tag
+        env:
+          # The preceding step already installed exactly what this one
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
         run: |
           set -euo pipefail
           NAME="$(uv run python scripts/release_bump.py release-tag \

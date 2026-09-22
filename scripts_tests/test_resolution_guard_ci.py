@@ -111,8 +111,12 @@ def test_resolution_guard_uses_local_setup_uv_action() -> None:
 
 
 def test_resolution_guard_installs_the_release_tooling() -> None:
+    """`--only-group` (not `--group`): this job only needs
+    workspace_manifests' tomli dependency, not the full default project
+    (torch et al.) that a bare `--group release` would additionally pull in.
+    """
     block = "\n".join(_job_lines(_publish_text(), "resolution-guard"))
-    assert "uv sync --group release" in block
+    assert "uv sync --only-group release" in block
 
 
 def test_resolution_guard_derives_requirements_from_workspace_manifests_cli() -> None:

@@ -48,10 +48,15 @@ jobs:
           setup-python: "false"
 
       - name: Install commitizen
-        run: uv sync --group release # commitizen only, no torch here
+        run: uv sync --only-group release # commitizen only, no torch here
 
       - name: Resolve package directory
         id: dir
+        env:
+          # The preceding step already installed exactly what this job
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
         run: |
           DIR="$(uv run python scripts/release_bump.py package-dir '${{ inputs.package }}')"
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
@@ -72,6 +77,8 @@ jobs:
 
       - name: Record current version
         id: old_version
+        env:
+          UV_NO_SYNC: "true"
         run: |
           VERSION="$(cd "${{ steps.dir.outputs.dir }}" && uv run cz version --project)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -114,12 +121,16 @@ jobs:
 
       - name: Record new version
         id: new_version
+        env:
+          UV_NO_SYNC: "true"
         run: |
           VERSION="$(cd "${{ steps.dir.outputs.dir }}" && uv run cz version --project)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Compute release branch name
         id: branch
+        env:
+          UV_NO_SYNC: "true"
         run: |
           NAME="$(uv run python scripts/release_bump.py branch-name \
             '${{ inputs.package }}' '${{ steps.new_version.outputs.version }}')"
@@ -127,6 +138,8 @@ jobs:
 
       - name: Compute commit headline
         id: headline
+        env:
+          UV_NO_SYNC: "true"
         run: |
           TEXT="$(uv run python scripts/release_bump.py commit-headline \
             '${{ inputs.package }}' \
@@ -155,6 +168,7 @@ jobs:
         # through its own API.
         env:
           GH_TOKEN: ${{ github.token }}
+          UV_NO_SYNC: "true"
         run: |
           set -euo pipefail
           VARIABLES="$(uv run python scripts/release_bump.py mutation-variables \
@@ -198,6 +212,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          UV_NO_SYNC: "true"
         run: |
           set -euo pipefail
           BODY="$(uv run python scripts/workspace_manifests.py stale-pins \

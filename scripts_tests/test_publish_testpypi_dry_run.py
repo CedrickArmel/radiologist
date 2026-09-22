@@ -141,6 +141,28 @@ def test_publish_testpypi_checks_out_before_the_local_composite_action() -> None
     assert "uses: actions/checkout" in preceding
 
 
+def test_checkout_precedes_download_artifact_so_dist_survives() -> None:
+    """actions/checkout's default clean:true runs `git clean -ffdx` before
+    fetching, which deletes an already-downloaded dist/ if download-artifact
+    ran first. checkout must always come before download-artifact."""
+    for job_name in ["publish-testpypi", "publish"]:
+        lines = _job_lines(_publish_text(), job_name)
+        checkout_index = next(
+            index
+            for index, line in enumerate(lines)
+            if "uses: actions/checkout" in line
+        )
+        download_index = next(
+            index
+            for index, line in enumerate(lines)
+            if "uses: actions/download-artifact" in line
+        )
+        assert checkout_index < download_index, (
+            f"{job_name}: download-artifact must run after checkout, or "
+            "checkout's default clean:true wipes the downloaded dist/"
+        )
+
+
 def test_publish_testpypi_uploads_to_testpypi_index_with_trusted_publishing_always() -> (
     None
 ):
