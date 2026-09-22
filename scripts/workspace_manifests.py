@@ -228,6 +228,9 @@ def publishable_requirement_lines(repo_root: Path, package: str) -> List[str]:
     return sorted(lines)
 
 
+_PIN_CASCADE_MARKER = "<!-- radiologist:pin-cascade-advisory -->"
+
+
 def render_stale_pin_markdown(
     findings: List[IntraWorkspaceRequirement],
     target_versions: Dict[str, str],
@@ -239,7 +242,35 @@ def render_stale_pin_markdown(
     its own prior comment in place. Returns a short "nothing stale" body
     (still marker-prefixed) for an empty list.
     """
-    raise NotImplementedError
+    if not findings:
+        return (
+            f"{_PIN_CASCADE_MARKER}\n"
+            "### Pin cascade — advisory\n"
+            "\n"
+            "No dependent declares a stale floor. Nothing to do.\n"
+        )
+
+    rows = []
+    for finding in findings:
+        floor = _floor_version(finding.specifier) or finding.specifier
+        target_version = target_versions[finding.target]
+        rows.append(
+            f"| `{finding.consumer}` | `{finding.origin}` | `{finding.raw}` "
+            f"| {floor} | {target_version} |"
+        )
+
+    return (
+        f"{_PIN_CASCADE_MARKER}\n"
+        "### Pin cascade — advisory\n"
+        "\n"
+        "These dependents declare a floor below their target's current version:\n"
+        "\n"
+        "| Consumer | Declared in | Requirement | Floor | Target version |\n"
+        "|---|---|---|---|---|\n" + "\n".join(rows) + "\n"
+        "\n"
+        "This does not block the release. Raise a floor only if the dependent "
+        "needs the new version.\n"
+    )
 
 
 def _main(argv: List[str]) -> int:
@@ -250,11 +281,23 @@ def _main(argv: List[str]) -> int:
     requirement_lines_parser.add_argument("--repo-root", required=True)
     requirement_lines_parser.add_argument("--package", required=True)
 
+    stale_pins_parser = subparsers.add_parser("stale-pins")
+    stale_pins_parser.add_argument("--repo-root", required=True)
+    stale_pins_parser.add_argument("--format", default="markdown", choices=["markdown"])
+
     args = parser.parse_args(argv)
 
     if args.command == "requirement-lines":
         for line in publishable_requirement_lines(Path(args.repo_root), args.package):
             print(line)
+    elif args.command == "stale-pins":
+        repo_root = Path(args.repo_root)
+        findings = stale_pin_floors(repo_root)
+        target_versions = {
+            finding.target: declared_version(repo_root, finding.target)
+            for finding in findings
+        }
+        print(render_stale_pin_markdown(findings, target_versions), end="")
     return 0
 
 

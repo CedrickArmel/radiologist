@@ -190,3 +190,18 @@ jobs:
             --label release \
             --title "${{ steps.headline.outputs.text }}" \
             --body "Automated version bump for \`${{ inputs.package }}\`: ${{ steps.old_version.outputs.version }} → ${{ steps.new_version.outputs.version }}."
+
+      - name: Post the advisory pin-cascade report
+        id: pin-advisory
+        # Advisory only, by design: a stale floor is legal packaging. This step
+        # must never fail the release.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BODY="$(uv run python scripts/workspace_manifests.py stale-pins \
+            --repo-root "$GITHUB_WORKSPACE" --format markdown)"
+          gh pr comment "${{ steps.branch.outputs.name }}" \
+            --repo "$GITHUB_REPOSITORY" --body "$BODY" \
+            --edit-last --create-if-none

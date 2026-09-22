@@ -40,8 +40,9 @@ manifest instead of hand-maintained. Issue #229 has since implemented
 ``stale_pin_floors`` and ``publishable_requirement_lines`` (see
 ``test_workspace_manifests.py`` and
 ``test_workspace_manifest_consistency.py`` for their behavioral coverage).
-Only ``render_stale_pin_markdown`` -- issue #233's scope -- stays
-unimplemented here.
+Issue #233 has since implemented ``render_stale_pin_markdown`` (see
+``test_workspace_manifests.py`` for its behavioral coverage); this file only
+still pins its frozen signature.
 
 ``.github/actions/setup-uv/action.yml`` is a plain composite action file, no
 Python involved, so its own shape is asserted with the workflow-as-text
@@ -51,8 +52,6 @@ pattern already used by ``test_ci_workflows_exclude_ray.py`` -- no
 
 import inspect
 from pathlib import Path
-
-import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SETUP_UV_ACTION = _REPO_ROOT / ".github" / "actions" / "setup-uv" / "action.yml"
@@ -102,23 +101,6 @@ class TestWorkspaceManifestsModuleShape:
         for name, params in expected_params.items():
             func = getattr(workspace_manifests, name)
             assert list(inspect.signature(func).parameters) == params, name
-
-    def test_every_still_unimplemented_public_function_raises_not_implemented_error(
-        self,
-    ) -> None:
-        """``workspace_packages``/``package_dir``/``package_manifest_path``/
-        ``declared_version`` are implemented (issue #227), and
-        ``intra_workspace_requirements``/``unpinned_requirements``/
-        ``stale_pin_floors``/``publishable_requirement_lines`` are implemented
-        (issue #229) -- all covered behaviorally in
-        ``test_workspace_manifests.py`` and
-        ``test_workspace_manifest_consistency.py`` instead. Only
-        ``render_stale_pin_markdown`` (issue #233) remains a stub.
-        """
-        import workspace_manifests
-
-        with pytest.raises(NotImplementedError):
-            workspace_manifests.render_stale_pin_markdown([], {})
 
     def test_main_entrypoint_exists(self) -> None:
         import workspace_manifests

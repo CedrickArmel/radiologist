@@ -32,8 +32,10 @@ tuple. These tests cover the four reader functions that make that possible:
 Issue #229 completes the module with the requirement-parsing functions:
 ``intra_workspace_requirements``, ``unpinned_requirements``,
 ``stale_pin_floors`` and ``publishable_requirement_lines``.
-``render_stale_pin_markdown`` stays unimplemented -- issue #233's scope --
-and is still covered by ``test_workspace_manifests_skeleton.py``.
+
+Issue #233 implements ``render_stale_pin_markdown`` (advisory pin-cascade
+report rendering) and the ``stale-pins`` CLI subcommand that ``release.yml``
+pipes into ``gh pr comment``.
 """
 
 from pathlib import Path
@@ -356,6 +358,107 @@ class TestStalePinFloors:
         assert stale_pin_floors(tmp_path) == []
 
 
+_MARKER = "<!-- radiologist:pin-cascade-advisory -->"
+
+
+class TestRenderStalePinMarkdown:
+    """`render_stale_pin_markdown` renders findings as a pure markdown string."""
+
+    def test_empty_findings_render_a_nothing_stale_body(self):
+        from workspace_manifests import render_stale_pin_markdown
+
+        body = render_stale_pin_markdown([], {})
+
+        assert body.startswith(_MARKER)
+        assert "No dependent declares a stale floor. Nothing to do." in body
+        assert "|" not in body
+
+    def test_findings_render_as_a_markdown_table_with_one_row_per_finding(self):
+        from workspace_manifests import (
+            IntraWorkspaceRequirement,
+            render_stale_pin_markdown,
+        )
+
+        findings = [
+            IntraWorkspaceRequirement(
+                consumer="radiologist",
+                target="radiologist-core",
+                extras=("all",),
+                specifier=">=0.1.0",
+                origin="dependencies",
+                raw="radiologist-core[all]>=0.1.0",
+            ),
+            IntraWorkspaceRequirement(
+                consumer="radiologist-cli",
+                target="radiologist-core",
+                extras=("all",),
+                specifier=">=0.1.0",
+                origin="dependencies",
+                raw="radiologist-core[all]>=0.1.0",
+            ),
+        ]
+
+        body = render_stale_pin_markdown(findings, {"radiologist-core": "0.2.0"})
+
+        assert body.startswith(_MARKER)
+        assert (
+            "| Consumer | Declared in | Requirement | Floor | Target version |" in body
+        )
+        assert (
+            "| `radiologist` | `dependencies` | `radiologist-core[all]>=0.1.0` "
+            "| 0.1.0 | 0.2.0 |" in body
+        )
+        assert (
+            "| `radiologist-cli` | `dependencies` | `radiologist-core[all]>=0.1.0` "
+            "| 0.1.0 | 0.2.0 |" in body
+        )
+
+    def test_requirement_extras_are_preserved_intact_in_the_rendered_requirement(self):
+        from workspace_manifests import (
+            IntraWorkspaceRequirement,
+            render_stale_pin_markdown,
+        )
+
+        findings = [
+            IntraWorkspaceRequirement(
+                consumer="radiologist",
+                target="radiologist-core",
+                extras=("all", "extra-b"),
+                specifier=">=0.1.0",
+                origin="dependencies",
+                raw="radiologist-core[all,extra-b]>=0.1.0",
+            ),
+        ]
+
+        body = render_stale_pin_markdown(findings, {"radiologist-core": "0.2.0"})
+
+        assert "`radiologist-core[all,extra-b]>=0.1.0`" in body
+
+    def test_rendering_requires_no_network_access_and_is_pure(self):
+        """Calling twice with the same inputs returns byte-identical output."""
+        from workspace_manifests import (
+            IntraWorkspaceRequirement,
+            render_stale_pin_markdown,
+        )
+
+        findings = [
+            IntraWorkspaceRequirement(
+                consumer="radiologist",
+                target="radiologist-core",
+                extras=(),
+                specifier=">=0.1.0",
+                origin="dependencies",
+                raw="radiologist-core>=0.1.0",
+            ),
+        ]
+        target_versions = {"radiologist-core": "0.2.0"}
+
+        first = render_stale_pin_markdown(findings, target_versions)
+        second = render_stale_pin_markdown(findings, target_versions)
+
+        assert first == second
+
+
 class TestPublishableRequirementLines:
     """`publishable_requirement_lines` mirrors what a public index would see."""
 
@@ -512,3 +615,57 @@ class TestRequirementLinesCli:
             "radiologist-core[all]>=0.1.0",
             "requests>=2.0.0",
         ]
+
+
+class TestStalePinsCli:
+    """The ``stale-pins`` CLI subcommand (issue #233's release-PR advisory)."""
+
+    def test_prints_markdown_report_for_a_stale_floor(self, tmp_path, capsys):
+        from workspace_manifests import _main
+
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\n"
+            'name = "radiologist"\n'
+            'version = "0.1.0"\n'
+            'dependencies = ["radiologist-core>=0.1.0"]\n'
+            "\n"
+            "[tool.uv.workspace]\n"
+            'members = ["radiologist-core"]\n'
+        )
+        core_dir = tmp_path / "radiologist-core"
+        core_dir.mkdir()
+        (core_dir / "pyproject.toml").write_text(
+            '[project]\nname = "radiologist-core"\nversion = "0.2.0"\n'
+        )
+
+        exit_code = _main(
+            ["stale-pins", "--repo-root", str(tmp_path), "--format", "markdown"]
+        )
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "<!-- radiologist:pin-cascade-advisory -->" in captured.out
+        assert "| `radiologist` | `dependencies` | `radiologist-core>=0.1.0` " in (
+            captured.out
+        )
+        assert "0.1.0" in captured.out
+        assert "0.2.0" in captured.out
+
+    def test_prints_nothing_stale_body_when_every_floor_is_current(
+        self, tmp_path, capsys
+    ):
+        from workspace_manifests import _main
+
+        _write_workspace(
+            tmp_path,
+            ["radiologist-core"],
+            root_extra_body=('dependencies = ["radiologist-core>=0.1.0"]\n'),
+        )
+
+        exit_code = _main(
+            ["stale-pins", "--repo-root", str(tmp_path), "--format", "markdown"]
+        )
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "No dependent declares a stale floor. Nothing to do." in captured.out
