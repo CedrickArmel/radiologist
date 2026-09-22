@@ -40,14 +40,13 @@ don't import each other -- the `_job_lines` helper is copied, not shared).
 
 import re
 from pathlib import Path
-from typing import List
+
+from _workflow_test_helpers import _job_lines
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 _MIN_VERSIONS_WORKFLOW = _WORKFLOWS_DIR / "min-versions.yml"
 _PUBLISH_WORKFLOW = _WORKFLOWS_DIR / "publish.yml"
-
-_JOB_HEADER_RE = re.compile(r"^  (\S+):\s*$")
 
 
 def _min_versions_text() -> str:
@@ -56,25 +55,6 @@ def _min_versions_text() -> str:
 
 def _publish_text() -> str:
     return _PUBLISH_WORKFLOW.read_text()
-
-
-def _job_lines(workflow_text: str, job_name: str) -> List[str]:
-    """Return the raw lines belonging to a single top-level job block."""
-    lines = workflow_text.splitlines()
-    start = None
-    for index, line in enumerate(lines):
-        match = _JOB_HEADER_RE.match(line)
-        if match and match.group(1) == job_name:
-            start = index + 1
-            break
-    if start is None:
-        raise AssertionError(f"job {job_name!r} not found")
-    end = len(lines)
-    for index in range(start, len(lines)):
-        if _JOB_HEADER_RE.match(lines[index]):
-            end = index
-            break
-    return lines[start:end]
 
 
 def test_min_versions_workflow_file_exists() -> None:

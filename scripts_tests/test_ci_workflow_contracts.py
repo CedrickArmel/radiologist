@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import pytest
+from _workflow_test_helpers import _JOB_HEADER_RE, _job_lines
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
@@ -63,7 +64,6 @@ _SETUP_UV_ACTION = _ACTIONS_DIR / "setup-uv" / "action.yml"
 # which named the same path differently.
 _COMPOSITE_ACTION = _SETUP_AND_TEST_ACTION
 
-_JOB_HEADER_RE = re.compile(r"^  (\S+):\s*$")
 _TOP_LEVEL_KEY_RE = re.compile(r"^(\S+):\s*$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -111,25 +111,6 @@ def _workflow_paths() -> List[Path]:
 
 def _all_yaml_paths() -> List[Path]:
     return _workflow_paths() + [path for path in _ACTIONS_DIR.rglob("action.yml")]
-
-
-def _job_lines(workflow_text: str, job_name: str) -> List[str]:
-    """Return the raw lines belonging to a single top-level job block."""
-    lines = workflow_text.splitlines()
-    start = None
-    for index, line in enumerate(lines):
-        match = _JOB_HEADER_RE.match(line)
-        if match and match.group(1) == job_name:
-            start = index + 1
-            break
-    if start is None:
-        raise AssertionError(f"job {job_name!r} not found")
-    end = len(lines)
-    for index in range(start, len(lines)):
-        if _JOB_HEADER_RE.match(lines[index]):
-            end = index
-            break
-    return lines[start:end]
 
 
 def _top_level_block(workflow_text: str, key: str) -> List[str]:
