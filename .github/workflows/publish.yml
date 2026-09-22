@@ -16,6 +16,7 @@ on:
           - radiologist-core
           - radiologist-inference
           - radiologist-registry
+          - radiologist-cli
       version:
         description: Version to publish (X.Y.Z) — must already be on main
         required: true
@@ -55,14 +56,20 @@ jobs:
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v3
+        uses: ./.github/actions/setup-uv
+        with:
+          setup-python: "false"
 
       - name: Install commitizen (only needed for its tomli dependency)
-        run: uv sync --group release
+        run: uv sync --only-group release
 
       - name: Resolve package, version, environment and sha
         id: resolve
         env:
+          # The preceding step already installed exactly what this one
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
           EVENT_NAME: ${{ github.event_name }}
           # Untrusted input (a fork could open a same-named branch) — passed
           # through an env var rather than interpolated into the script, per
@@ -83,8 +90,8 @@ jobs:
             VERSION="$(echo "$PARSED" | jq -r .version)"
           fi
 
-          # `parse-branch` already restricts PACKAGE to the six known
-          # distributions and VERSION to X.Y.Z on the pull_request path;
+          # `parse-branch` already restricts PACKAGE to the workspace's
+          # declared distributions and VERSION to X.Y.Z on the pull_request path;
           # workflow_dispatch's `version` input is free text, so validate it
           # explicitly here too.
           if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -126,28 +133,109 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
 
+  min-versions:
+    needs: resolve
+    uses: ./.github/workflows/min-versions.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+
   build:
-    needs: [resolve, test]
+    needs: [resolve, test, min-versions]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # attestation signing — this job only
+      attestations: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve.outputs.sha }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - run: make build PKG=${{ needs.resolve.outputs.package }}
-      - run: uv run --with twine twine check dist/*
+      # `uvx` runs twine from an isolated, ephemeral environment. `uv run
+      # --with` layers twine on top of this job's *project* environment,
+      # which uv would first have to materialise -- the entire workspace,
+      # torch included -- just to lint distribution metadata.
+      - run: uvx twine check dist/*
+      # Emits a signed SLSA-style provenance statement naming this repo,
+      # workflow and commit for the exact bytes about to be uploaded — run
+      # before the artifact upload so no downstream job can consume an
+      # unattested artifact.
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
           path: dist/
 
-  publish:
+  resolution-guard:
     needs: [resolve, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: ./.github/actions/setup-uv
+      - name: Install the release tooling
+        run: uv sync --only-group release
+      - name: Resolve the declared requirements against the public index
+        env:
+          # The preceding step already installed exactly what this one
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
+          PACKAGE: ${{ needs.resolve.outputs.package }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/workspace_manifests.py requirement-lines \
+            --repo-root . --package "$PACKAGE" > requirements.in
+          if [ ! -s requirements.in ]; then
+            echo "::notice::${PACKAGE} declares no dependencies — nothing to resolve."
+            exit 0
+          fi
+          echo "Resolving:"; cat requirements.in
+          # --no-sources disables [tool.uv.sources], so an intra-workspace
+          # requirement must be satisfiable from PyPI like any other.
+          uv pip compile --no-sources --python-version 3.10 \
+            requirements.in --output-file /dev/null
+
+  publish-testpypi:
+    needs: [resolve, build, resolution-guard]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-${{ needs.resolve.outputs.package }}
+      url: https://test.pypi.org/project/${{ needs.resolve.outputs.package }}/
+    permissions:
+      id-token: write # a TestPyPI-only identity — never the PyPI one
+      contents: read
+    steps:
+      # Checkout runs first: actions/checkout's default `clean: true` runs
+      # `git clean -ffdx` in the workspace before fetching, which would
+      # delete an already-downloaded dist/ if download-artifact ran first.
+      # Only the composite action itself is needed here — a sparse checkout
+      # keeps the privileged job from materialising the whole tree.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          sparse-checkout: .github
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
+          path: dist/
+      - uses: ./.github/actions/setup-uv
+        with:
+          setup-python: "false" # this job only shells out to uv
+      - name: Rehearse the upload on TestPyPI
+        # `--check-url` makes a re-run of an already-uploaded version a no-op
+        # instead of a 400, so retrying the workflow after a *later* job
+        # failed does not require burning a version number.
+        run: |
+          uv publish --index testpypi --trusted-publishing always \
+            --check-url https://test.pypi.org/simple/ dist/*
+
+  publish:
+    needs: [resolve, build, publish-testpypi]
     runs-on: ubuntu-latest
     environment:
       name: ${{ needs.resolve.outputs.environment }}
@@ -156,11 +244,22 @@ jobs:
       id-token: write # the OIDC identity PyPI trusts — this job only
       contents: read
     steps:
+      # Checkout runs first: actions/checkout's default `clean: true` runs
+      # `git clean -ffdx` in the workspace before fetching, which would
+      # delete an already-downloaded dist/ if download-artifact ran first.
+      # Only the composite action itself is needed here — a sparse checkout
+      # keeps the privileged job from materialising the whole tree.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          sparse-checkout: .github
       - uses: actions/download-artifact@v4
         with:
           name: dist-${{ needs.resolve.outputs.package }}-${{ needs.resolve.outputs.version }}
           path: dist/
-      - uses: astral-sh/setup-uv@v3
+      - uses: ./.github/actions/setup-uv
+        with:
+          setup-python: "false" # this job only shells out to uv
       - name: Publish to PyPI over OIDC trusted publishing
         # `always` (rather than the default `automatic`) fails loudly if the
         # OIDC token cannot be minted, instead of silently falling back to a
@@ -176,11 +275,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve.outputs.sha }}
-      - uses: astral-sh/setup-uv@v3
+      - uses: ./.github/actions/setup-uv
+        with:
+          setup-python: "false"
       - name: Install commitizen (only needed for its tomli dependency)
-        run: uv sync --group release
+        run: uv sync --only-group release
       - name: Compute the release tag
         id: tag
+        env:
+          # The preceding step already installed exactly what this one
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
         run: |
           set -euo pipefail
           NAME="$(uv run python scripts/release_bump.py release-tag \

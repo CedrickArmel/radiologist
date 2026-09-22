@@ -1,0 +1,60 @@
+name: Set up Python and uv
+description: >-
+  Install the pinned Python toolchain and uv (with cache) and export this
+  repository's lockfile policy. Deliberately does NOT check out the repository,
+  does NOT sync the workspace and does NOT run tests: `setup-and-test` already
+  owns the checkout + sync + `make test` path for the two `test` jobs. This
+  action is for every other job, which needs only a uv binary.
+
+inputs:
+  python-version:
+    description: >-
+      Python version handed to actions/setup-python and exported as UV_PYTHON.
+    required: false
+    default: "3.10"
+  setup-python:
+    description: >-
+      Run actions/setup-python ("true"/"false"). Set "false" for jobs that only
+      shell out to uv and never need a system interpreter — notably the
+      `id-token: write` publish job, where every additional third-party action
+      widens the blast radius around a mintable PyPI credential.
+    required: false
+    default: "true"
+  enable-cache:
+    description: Enable astral-sh/setup-uv's dependency cache ("true"/"false").
+    required: false
+    default: "true"
+  locked:
+    description: >-
+      Export UV_LOCKED with this value ("true"/"false"). "true" asserts uv.lock
+      is up to date and makes uv exit with an error if it is not, instead of
+      re-resolving it on the runner. Set "false" only for a job that must
+      legitimately rewrite the lockfile, or that resolves away from it on
+      purpose. NOTE: UV_FROZEN is deliberately NOT used — it merely skips the
+      up-to-date check and uses a stale lock silently.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # The versions of the two third-party actions duplicated across this
+    # repository's jobs are pinned here, by commit SHA rather than a mutable
+    # tag -- this is the one file a privileged job (publish.yml's `publish`
+    # job holds `id-token: write`) transitively depends on, so its actions
+    # must not be swappable by a tag re-push. Each SHA's trailing comment
+    # names the release tag it was resolved from.
+    - if: inputs.setup-python == 'true'
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      with:
+        python-version: ${{ inputs.python-version }}
+    - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
+      with:
+        enable-cache: ${{ inputs.enable-cache }}
+    - shell: bash
+      run: |
+        set -euo pipefail
+        {
+          echo "UV_PYTHON=${{ inputs.python-version }}"
+          echo "UV_LOCKED=${{ inputs.locked }}"
+        } >> "$GITHUB_ENV"

@@ -14,6 +14,7 @@ on:
           - radiologist-core
           - radiologist-inference
           - radiologist-registry
+          - radiologist-cli
       increment:
         description: Force an increment (leave as `auto` to let commitizen decide)
         required: false
@@ -42,13 +43,20 @@ jobs:
           fetch-depth: 0 # cz needs tags to compute the increment
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v3
+        uses: ./.github/actions/setup-uv
+        with:
+          setup-python: "false"
 
       - name: Install commitizen
-        run: uv sync --group release # commitizen only, no torch here
+        run: uv sync --only-group release # commitizen only, no torch here
 
       - name: Resolve package directory
         id: dir
+        env:
+          # The preceding step already installed exactly what this job
+          # needs (--only-group release); UV_NO_SYNC stops uv run's
+          # implicit sync from re-materialising the full default project.
+          UV_NO_SYNC: "true"
         run: |
           DIR="$(uv run python scripts/release_bump.py package-dir '${{ inputs.package }}')"
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
@@ -69,6 +77,8 @@ jobs:
 
       - name: Record current version
         id: old_version
+        env:
+          UV_NO_SYNC: "true"
         run: |
           VERSION="$(cd "${{ steps.dir.outputs.dir }}" && uv run cz version --project)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -89,6 +99,14 @@ jobs:
         # Non-zero exit (e.g. NO_COMMITS_FOUND) must propagate: that is the
         # mechanism behind "no releasable commits creates nothing" — the
         # release branch is only created after this step succeeds.
+        #
+        # The ONLY place in this repository where uv may rewrite uv.lock.
+        # The `uv` commitizen version provider refreshes the lockfile as
+        # part of the bump, and that refreshed lockfile is one of the three
+        # files landed in the release commit. Everywhere else UV_LOCKED is
+        # enforced (setup-uv's "true" default).
+        env:
+          UV_LOCKED: "false"
         run: |
           cd "${{ steps.dir.outputs.dir }}"
           if [ "${{ inputs.increment }}" = "auto" ]; then
@@ -103,12 +121,16 @@ jobs:
 
       - name: Record new version
         id: new_version
+        env:
+          UV_NO_SYNC: "true"
         run: |
           VERSION="$(cd "${{ steps.dir.outputs.dir }}" && uv run cz version --project)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Compute release branch name
         id: branch
+        env:
+          UV_NO_SYNC: "true"
         run: |
           NAME="$(uv run python scripts/release_bump.py branch-name \
             '${{ inputs.package }}' '${{ steps.new_version.outputs.version }}')"
@@ -116,6 +138,8 @@ jobs:
 
       - name: Compute commit headline
         id: headline
+        env:
+          UV_NO_SYNC: "true"
         run: |
           TEXT="$(uv run python scripts/release_bump.py commit-headline \
             '${{ inputs.package }}' \
@@ -144,6 +168,7 @@ jobs:
         # through its own API.
         env:
           GH_TOKEN: ${{ github.token }}
+          UV_NO_SYNC: "true"
         run: |
           set -euo pipefail
           VARIABLES="$(uv run python scripts/release_bump.py mutation-variables \
@@ -179,3 +204,19 @@ jobs:
             --label release \
             --title "${{ steps.headline.outputs.text }}" \
             --body "Automated version bump for \`${{ inputs.package }}\`: ${{ steps.old_version.outputs.version }} → ${{ steps.new_version.outputs.version }}."
+
+      - name: Post the advisory pin-cascade report
+        id: pin-advisory
+        # Advisory only, by design: a stale floor is legal packaging. This step
+        # must never fail the release.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UV_NO_SYNC: "true"
+        run: |
+          set -euo pipefail
+          BODY="$(uv run python scripts/workspace_manifests.py stale-pins \
+            --repo-root "$GITHUB_WORKSPACE" --format markdown)"
+          gh pr comment "${{ steps.branch.outputs.name }}" \
+            --repo "$GITHUB_REPOSITORY" --body "$BODY" \
+            --edit-last --create-if-none

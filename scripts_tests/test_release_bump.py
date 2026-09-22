@@ -35,6 +35,23 @@ import json
 import pytest
 
 
+class TestPackages:
+    """`PACKAGES` is derived from the workspace manifest, not hand-maintained."""
+
+    def test_packages_includes_every_declared_workspace_member(self):
+        from release_bump import PACKAGES
+
+        assert "radiologist-cli" in PACKAGES
+
+    def test_packages_matches_workspace_manifests_workspace_packages(self):
+        import workspace_manifests
+        from release_bump import PACKAGES
+
+        assert PACKAGES == workspace_manifests.workspace_packages(
+            workspace_manifests.REPO_ROOT
+        )
+
+
 class TestPackageDir:
     """`package_dir` maps a distribution name to its `cz` working directory."""
 
@@ -47,6 +64,11 @@ class TestPackageDir:
         from release_bump import package_dir
 
         assert package_dir("radiologist-core") == "radiologist-core"
+
+    def test_cli_distribution_maps_to_its_own_directory(self):
+        from release_bump import package_dir
+
+        assert package_dir("radiologist-cli") == "radiologist-cli"
 
     def test_unknown_distribution_raises_value_error(self):
         from release_bump import package_dir
@@ -73,6 +95,14 @@ class TestReleaseBranchName:
             release_branch_name("radiologist", "0.3.1") == "release/radiologist-v0.3.1"
         )
 
+    def test_formats_cli_distribution_branch_name(self):
+        from release_bump import release_branch_name
+
+        assert (
+            release_branch_name("radiologist-cli", "0.2.0")
+            == "release/radiologist-cli-v0.2.0"
+        )
+
 
 class TestChangedRelativePaths:
     """`changed_relative_paths` lists the files a bump touches, repo-root-relative."""
@@ -96,6 +126,17 @@ class TestChangedRelativePaths:
         paths = changed_relative_paths("radiologist")
 
         assert paths == ["pyproject.toml", "CHANGELOG.md", "uv.lock"]
+
+    def test_cli_distribution_includes_its_own_pyproject_and_changelog_and_lock(self):
+        from release_bump import changed_relative_paths
+
+        paths = changed_relative_paths("radiologist-cli")
+
+        assert paths == [
+            "radiologist-cli/pyproject.toml",
+            "radiologist-cli/CHANGELOG.md",
+            "uv.lock",
+        ]
 
 
 class TestEncodeFileChanges:
@@ -183,6 +224,14 @@ class TestParseReleaseBranchName:
             "1.10.2",
         )
 
+    def test_parses_cli_distribution_branch_name(self):
+        from release_bump import parse_release_branch_name
+
+        assert parse_release_branch_name("release/radiologist-cli-v0.2.0") == (
+            "radiologist-cli",
+            "0.2.0",
+        )
+
     def test_missing_release_prefix_raises_value_error(self):
         from release_bump import parse_release_branch_name
 
@@ -221,11 +270,25 @@ class TestEnvironmentName:
 
         assert environment_name("radiologist") == "pypi-radiologist"
 
+    def test_cli_distribution_environment_name(self):
+        from release_bump import environment_name
+
+        assert environment_name("radiologist-cli") == "pypi-radiologist-cli"
+
     def test_unknown_distribution_raises_value_error(self):
         from release_bump import environment_name
 
         with pytest.raises(ValueError):
             environment_name("not-a-real-package")
+
+    def test_unknown_distribution_error_enumerates_every_declared_distribution(self):
+        from release_bump import PACKAGES, environment_name
+
+        with pytest.raises(ValueError) as excinfo:
+            environment_name("not-a-real-package")
+
+        for package in PACKAGES:
+            assert package in str(excinfo.value)
 
 
 class TestReleaseTag:
@@ -240,6 +303,11 @@ class TestReleaseTag:
         from release_bump import release_tag
 
         assert release_tag("radiologist-core", "0.2.0") == "0.2.0-radiologist-core"
+
+    def test_cli_distribution_tag_is_suffixed_with_its_name(self):
+        from release_bump import release_tag
+
+        assert release_tag("radiologist-cli", "0.2.0") == "0.2.0-radiologist-cli"
 
     def test_unknown_distribution_raises_value_error(self):
         from release_bump import release_tag
