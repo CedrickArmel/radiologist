@@ -75,12 +75,12 @@ def _validate_package(package: str) -> None:
 def package_dir(package: str) -> str:
     """Return the ``cz`` working directory for ``package``.
 
-    The root meta-package versions at the repository root (``.``); each of
-    the five workspace members versions inside its own directory, which
-    shares its name.
+    The root meta-package versions at the repository root (``.``); every
+    other workspace-declared distribution versions inside its own directory,
+    which shares its name. Delegates to :func:`workspace_manifests.package_dir`
+    against this module's own ``_REPO_ROOT`` so the two stay in lockstep.
     """
-    _validate_package(package)
-    return "." if package == _ROOT_PACKAGE else package
+    return workspace_manifests.package_dir(_REPO_ROOT, package)
 
 
 def release_branch_name(package: str, version: str) -> str:
@@ -149,6 +149,15 @@ def manifest_version(repo_root: Path, package: str) -> str:
     Used by ``publish.yml``'s ``resolve`` job to cross-check that a release
     pull request's stated version actually matches what is on disk at the
     merged commit, before anything is built or uploaded.
+
+    Deliberately does *not* delegate to
+    :func:`workspace_manifests.declared_version`: that function re-derives
+    the package roster from ``repo_root``'s own ``[tool.uv.workspace]
+    members`` (so it works against an arbitrary checkout), whereas this
+    function validates ``package`` against this module's real, global
+    ``PACKAGES`` and only reads the *contents* from ``repo_root`` — the
+    contract this workflow needs when checking out an untrusted commit that
+    might not declare a full workspace manifest at all.
     """
     pyproject_path = Path(repo_root) / package_dir(package) / "pyproject.toml"
     with pyproject_path.open("rb") as handle:
