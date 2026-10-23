@@ -9,4 +9,5 @@
 - [ETL three-stage redesign](project_etl_three_stage_redesign.md) — fixed decisions: extract/assign-split/build stages, split stability as an ML-correctness invariant, Beam must stay a peer of Dask/Ray
 - [Deferred issues stay additive](feedback_deferred_issues_stay_additive.md) — a deferred phase must never reopen an earlier issue's files; the generic dispatch branch belongs to the file's owner
 - [Prefect-native runner selection](feedback_prefect_native_runner_selection.md) — multi-backend execution rides Prefect's TaskRunner + Hydra `_target_`; never invent an ExecutionBackend interface
+- [CI/release hardening epic](project_ci_release_hardening_epic.md) — confirmed scope: UV_FROZEN, composite action, TestPyPI + pin guards; modular CI deferred until >~10 packages
 - [PyPI publishing constraints](project_pypi_publishing_constraints.md) — uv_build rejects `../LICENSE`; metapackage needs src/radiologist/; trusted publishing breaks in reusable workflows; GITHUB_TOKEN refs fire no triggers
